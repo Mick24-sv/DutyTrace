@@ -2,7 +2,7 @@
   "name": "dutytrace",
   "version": "0.1.0",
   "private": true,
-  "description": "DutyTrace: QR-enabled Student Assistant duty verification and compliance tracking (ADNU capstone)",
+  "description": "DutyTrace: QR-enabled Student Assistant duty verification and compliance tracking",
   "workspaces": [
     "frontend",
     "backend"

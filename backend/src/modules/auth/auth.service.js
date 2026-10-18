@@ -27,14 +27,18 @@ export const toPublicUser = (row) => ({
   role: row.role,
   status: row.status,
   requiredHours: row.required_hours != null ? Number(row.required_hours) : null,
+  institutionId: row.institution_id,
+  institution: row.institution_id ? { id: row.institution_id, name: row.institution_name, timezone: row.institution_timezone } : null,
   office: row.office_id ? { id: row.office_id, code: row.office_code, name: row.office_name } : null,
 });
 
 // Shared SELECT: a user plus their current office (if any).
 export const USER_WITH_OFFICE_SQL = `
   SELECT u.id, u.email, u.full_name, u.role, u.status, u.required_hours,
+         i.id AS institution_id, i.name AS institution_name, i.timezone AS institution_timezone,
          o.id AS office_id, o.code AS office_code, o.name AS office_name
   FROM users u
+  JOIN institutions i ON i.id = u.institution_id
   LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
   LEFT JOIN offices o ON o.id = d.office_id`;
 
@@ -95,9 +99,11 @@ export async function getUserForToken(token) {
   if (!token || typeof token !== 'string') return null;
   const { rows } = await query(
     `SELECT u.id, u.email, u.full_name, u.role, u.status,
+            i.id AS institution_id, i.name AS institution_name, i.timezone AS institution_timezone,
             o.id AS office_id, o.code AS office_code, o.name AS office_name
      FROM sessions s
      JOIN users u ON u.id = s.user_id
+     JOIN institutions i ON i.id = u.institution_id
      LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
      LEFT JOIN offices o ON o.id = d.office_id
      WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.status = 'active'`,

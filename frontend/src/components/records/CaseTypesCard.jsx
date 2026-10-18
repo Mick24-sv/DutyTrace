@@ -7,7 +7,7 @@ import { apiPatch, apiPost } from '../../services/api.js';
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
 const lines = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean);
 
-// Case types are configured here, not hard-coded: no ADNU case categories or required documents are assumed.
+// Case types are configured here, not hard-coded: no institution-specific case categories are assumed.
 // Changing a type only affects cases opened afterwards; each case keeps the requirements it was opened with.
 export default function CaseTypesCard({ types, onChanged }) {
   const [code, setCode] = useState('');
@@ -34,8 +34,7 @@ export default function CaseTypesCard({ types, onChanged }) {
   return (
     <Card title="Case types">
       <p className="mb-4 text-sm text-muted">
-        Define the kinds of cases your office handles and which documents each one asks for. Nothing here is preset: ADNU has not
-        defined case types, so you decide what to configure.
+        Define the kinds of cases your office handles and which documents each one asks for. Nothing here is preset; configure them to match your institution's policies.
       </p>
       <ul className="mb-6 divide-y divide-line">
         {types.map((t) => (

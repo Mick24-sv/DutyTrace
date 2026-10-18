@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, QrCode, Clock, CalendarDays, FileText, CalendarOff,
   FolderCheck, Users, ClipboardCheck, Building2, BarChart3, ScrollText,
-  Settings, ShieldCheck,
+  Settings, ShieldCheck, CalendarRange,
 } from 'lucide-react';
 
 // One source of truth for role-specific navigation.
@@ -40,6 +40,7 @@ export const ROLE_CONFIG = {
     nav: [
       { to: '', label: 'Dashboard', icon: LayoutDashboard },
       { to: 'users', label: 'Users & Roles', icon: Users },
+      { to: 'semesters', label: 'Academic Terms', icon: CalendarRange },
       { to: 'offices', label: 'Offices', icon: Building2 },
       { to: 'qr-codes', label: 'Office QR Codes', icon: QrCode },
       { to: 'dtrs', label: 'DTR Overview', icon: FileText },

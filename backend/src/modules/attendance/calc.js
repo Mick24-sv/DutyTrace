@@ -4,7 +4,7 @@
 // SOURCE OF TRUTH: attendance_events. Hours are always derived from events,
 // never stored.
 //
-// RULES (assumptions to confirm with ADNU; see docs/open-questions.md):
+// RULES (institution-configurable assumptions; see docs/open-questions.md):
 //  1. A time_in followed by the next time_out is one COMPLETE session.
 //  2. Only complete sessions that are not over the length limit count as
 //     recorded hours. Everything else is shown, flagged, and NOT counted:

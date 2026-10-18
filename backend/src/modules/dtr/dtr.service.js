@@ -13,17 +13,19 @@ async function dbNow(db = { query }) {
 }
 
 // ---------------------------------------------------------------- policy
-export async function getPolicy() {
+export async function getPolicy(institutionId) {
   const { rows } = await query(
     `SELECT p.required_monthly_hours, p.updated_at, u.full_name AS updated_by_name
-     FROM policy_settings p LEFT JOIN users u ON u.id = p.updated_by`,
+     FROM institution_dtr_policies p LEFT JOIN users u ON u.id = p.updated_by
+     WHERE p.institution_id = $1`,
+    [institutionId],
   );
+  if (!rows[0]) throw new AppError(404, 'NOT_FOUND', 'Institution policy not found.');
   return {
     requiredMonthlyHours: Number(rows[0].required_monthly_hours),
     updatedAt: rows[0].updated_at,
     updatedBy: rows[0].updated_by_name,
     timezone: env.timezone,
-    // Honest labels: none of this has been confirmed by ADNU yet.
     requiredHoursConfirmed: false,
     officialTemplate: false,
   };
@@ -31,14 +33,22 @@ export async function getPolicy() {
 
 export async function setRequiredHours({ actor, hours, ip }) {
   await withTransaction(async (db) => {
-    const { rows } = await db.query('SELECT required_monthly_hours FROM policy_settings FOR UPDATE');
-    await db.query('UPDATE policy_settings SET required_monthly_hours = $1, updated_by = $2, updated_at = now()', [hours, actor.id]);
+    const { rows } = await db.query(
+      'SELECT required_monthly_hours FROM institution_dtr_policies WHERE institution_id = $1 FOR UPDATE',
+      [actor.institutionId],
+    );
+    await db.query(
+      `UPDATE institution_dtr_policies SET required_monthly_hours = $2, updated_by = $3, updated_at = now()
+       WHERE institution_id = $1`,
+      [actor.institutionId, hours, actor.id],
+    );
     await recordAudit({
-      actorId: actor.id, action: 'policy.required_hours_changed', targetType: 'policy_settings',
+      actorId: actor.id, action: 'policy.required_hours_changed', targetType: 'institution_dtr_policy',
+      targetId: actor.institutionId,
       before: { requiredMonthlyHours: Number(rows[0].required_monthly_hours) }, after: { requiredMonthlyHours: hours }, ip,
     }, db);
   });
-  return getPolicy(); // after commit, so the new value is visible
+  return getPolicy(actor.institutionId);
 }
 
 // --------------------------------------------------------------- mapping
@@ -74,7 +84,7 @@ const DTR_SELECT = `
 // Unknown ids and other people's ids give the same answer, so ids can't be probed.
 function assertCanView(user, dtr) {
   if (!dtr) throw forbidden();
-  if (user.role === 'admin') return;
+  if (user.role === 'admin' && dtr.institution_id === user.institutionId) return;
   if (user.role === 'student' && dtr.user_id === user.id) return;
   // Drafts are the student's private work: supervisors only see DTRs that were submitted.
   if (user.role === 'supervisor' && user.office && dtr.office_id === user.office.id && dtr.user_id !== user.id && dtr.status !== 'draft') return;
@@ -82,7 +92,11 @@ function assertCanView(user, dtr) {
 }
 
 async function loadRow(id, db = { query }, lock = false) {
-  const { rows } = await db.query(`SELECT * FROM monthly_dtrs WHERE id = $1${lock ? ' FOR UPDATE' : ''}`, [id]);
+  const { rows } = await db.query(
+    `SELECT d.*, u.institution_id FROM monthly_dtrs d JOIN users u ON u.id = d.user_id
+     WHERE d.id = $1${lock ? ' FOR UPDATE OF d' : ''}`,
+    [id],
+  );
   return rows[0];
 }
 
@@ -97,7 +111,7 @@ async function requireMonthEnded(month, now) {
 async function liveSnapshot(user, month, now) {
   await requireMonthEnded(month, now);
   if (!user.office) throw new AppError(403, 'NOT_ASSIGNED', 'You are not assigned to an office. Ask an administrator.');
-  const [history, policy] = await Promise.all([monthHistory(user.id, month), getPolicy()]);
+  const [history, policy] = await Promise.all([monthHistory(user.id, month), getPolicy(user.institutionId)]);
   const effectiveRequiredHours = user.requiredHours != null ? Number(user.requiredHours) : policy.requiredMonthlyHours;
   return buildSnapshot({
     history, student: user, office: user.office, requiredHours: effectiveRequiredHours, generatedAt: now,
@@ -115,7 +129,7 @@ export async function myOverview(user) {
   const { rows } = await query(`${DTR_SELECT} WHERE d.user_id = $1`, [user.id]);
   const byMonth = new Map(rows.map((r) => [r.month, mapDtr(r)]));
   const verified = rows.filter((r) => r.status === 'approved').reduce((sum, r) => sum + r.verified_seconds, 0);
-  const policy = await getPolicy();
+  const policy = await getPolicy(user.institutionId);
   const effectivePolicy = {
     ...policy,
     requiredMonthlyHours: user.requiredHours != null ? Number(user.requiredHours) : policy.requiredMonthlyHours,
@@ -179,6 +193,7 @@ export async function generate({ user, month, ip }) {
 // ------------------------------------------------------------------ read
 export async function list({ user, status, month }) {
   const where = []; const params = [];
+  if (user.role === 'admin') { params.push(user.institutionId); where.push(`s.institution_id = $${params.length}`); }
   if (user.role === 'student') { params.push(user.id); where.push(`d.user_id = $${params.length}`); }
   if (user.role === 'supervisor') {
     if (!user.office) return [];

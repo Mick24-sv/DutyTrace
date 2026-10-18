@@ -20,6 +20,7 @@ import MyDtrPage from './pages/student/MyDtrPage.jsx';
 import DtrReviewPage from './pages/supervisor/DtrReviewPage.jsx';
 import DtrOverviewPage from './pages/admin/DtrOverviewPage.jsx';
 import PolicySettingsPage from './pages/admin/PolicySettingsPage.jsx';
+import AcademicTermsPage from './pages/admin/AcademicTermsPage.jsx';
 import DtrDetailPage from './pages/shared/DtrDetailPage.jsx';
 import MyAbsencesPage from './pages/student/MyAbsencesPage.jsx';
 import AbsenceQueuePage from './pages/supervisor/AbsenceQueuePage.jsx';
@@ -41,7 +42,7 @@ const DASHBOARDS = {
 const BUILT_PAGES = {
   student: { scan: ScanPage, attendance: MyAttendancePage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
   supervisor: { scan: ScanPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
-  admin: { users: UsersPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, settings: PolicySettingsPage, reports: ReportsPage },
+  admin: { users: UsersPage, semesters: AcademicTermsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, settings: PolicySettingsPage, reports: ReportsPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).

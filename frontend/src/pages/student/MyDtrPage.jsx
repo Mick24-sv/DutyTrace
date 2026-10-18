@@ -58,7 +58,7 @@ export default function MyDtrPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <StatCard label="Supervisor-verified hours" value={formatHours(data.verifiedHoursTotal)} hint={`From ${data.approvedCount} approved DTR(s) only`} icon={ShieldCheck} />
-            <StatCard label="Required hours per month" value={formatHours(data.policy.requiredMonthlyHours)} hint="Placeholder, not confirmed by ADNU" icon={Target} />
+            <StatCard label="Monthly DTR target" value={formatHours(data.policy.requiredMonthlyHours)} hint="Separate from semester duty-hour completion" icon={Target} />
             <StatCard label="DTRs created" value={data.months.filter((m) => m.dtr).length} hint="Last 12 ended months" icon={FileText} />
           </div>
 

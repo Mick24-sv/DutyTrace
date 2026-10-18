@@ -40,8 +40,11 @@ const auditView = (u) => ({
   officeId: u.office?.id ?? null,
 });
 
-const fetchUser = async (id, db = { query }) => {
-  const { rows } = await db.query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1`, [id]);
+const fetchUser = async (id, db = { query }, institutionId = null) => {
+  const { rows } = await db.query(
+    `${USER_WITH_OFFICE_SQL} WHERE u.id = $1 AND ($2::uuid IS NULL OR u.institution_id = $2)`,
+    [id, institutionId],
+  );
   return rows[0] ? toPublicUser(rows[0]) : null;
 };
 
@@ -50,7 +53,7 @@ usersRouter.use(requireAuth);
 
 // List users: admin only.
 usersRouter.get('/', requireRole('admin'), asyncHandler(async (_req, res) => {
-  const { rows } = await query(`${USER_WITH_OFFICE_SQL} ORDER BY u.role, u.full_name`);
+  const { rows } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.institution_id = $1 ORDER BY u.role, u.full_name`, [_req.user.institutionId]);
   ok(res, { users: rows.map(toPublicUser) });
 }));
 
@@ -67,11 +70,11 @@ usersRouter.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
     if (dup.rowCount) throw new AppError(409, 'EMAIL_TAKEN', 'An account with that email already exists.');
 
     const { rows } = await db.query(
-      'INSERT INTO users (email, password_hash, full_name, role, required_hours) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [input.email, passwordHash, input.fullName, input.role, input.role === 'student' ? (input.requiredHours ?? null) : null],
+      'INSERT INTO users (email, password_hash, full_name, role, required_hours, institution_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [input.email, passwordHash, input.fullName, input.role, input.role === 'student' ? (input.requiredHours ?? null) : null, req.user.institutionId],
     );
     if (input.officeId) {
-      const office = await db.query('SELECT 1 FROM offices WHERE id = $1 AND is_active', [input.officeId]);
+      const office = await db.query('SELECT 1 FROM offices WHERE id = $1 AND is_active AND institution_id = $2', [input.officeId, req.user.institutionId]);
       if (!office.rowCount) throw new AppError(400, 'VALIDATION_ERROR', 'Office not found.', { officeId: 'Office not found.' });
       await db.query('INSERT INTO duty_assignments (user_id, office_id) VALUES ($1, $2)', [rows[0].id, input.officeId]);
     }
@@ -89,7 +92,7 @@ usersRouter.get('/:id', asyncHandler(async (req, res) => {
   if (req.user.role !== 'admin' && req.user.id !== id) {
     throw new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
   }
-  const user = await fetchUser(id);
+  const user = await fetchUser(id, { query }, req.user.role === 'admin' ? req.user.institutionId : null);
   if (!user) throw new AppError(404, 'NOT_FOUND', 'User not found.');
   ok(res, { user });
 }));
@@ -105,7 +108,7 @@ usersRouter.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) =>
   }
 
   const updated = await withTransaction(async (db) => {
-    const before = await fetchUser(id, db);
+    const before = await fetchUser(id, db, req.user.institutionId);
     if (!before) throw new AppError(404, 'NOT_FOUND', 'User not found.');
 
     if (changes.role === 'admin' && before.office) {
@@ -142,11 +145,15 @@ usersRouter.put('/:id/assignment', requireRole('admin'), asyncHandler(async (req
   const { officeId } = parse(assignmentSchema, req.body ?? {});
 
   const updated = await withTransaction(async (db) => {
-    const before = await fetchUser(id, db);
+    const before = await fetchUser(id, db, req.user.institutionId);
     if (!before) throw new AppError(404, 'NOT_FOUND', 'User not found.');
     if (before.role === 'admin') throw new AppError(400, 'VALIDATION_ERROR', 'Administrators are not assigned to an office.');
     if (officeId) {
-      const office = await db.query('SELECT 1 FROM offices WHERE id = $1 AND is_active', [officeId]);
+      const office = await db.query(
+        `SELECT 1 FROM offices WHERE id = $1 AND is_active
+         AND institution_id = (SELECT institution_id FROM users WHERE id = $2)`,
+        [officeId, id],
+      );
       if (!office.rowCount) throw new AppError(404, 'NOT_FOUND', 'Office not found.');
     }
     await db.query('UPDATE duty_assignments SET ends_on = CURRENT_DATE WHERE user_id = $1 AND ends_on IS NULL', [id]);

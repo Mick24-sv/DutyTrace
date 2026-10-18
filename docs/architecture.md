@@ -90,11 +90,11 @@ Every transition runs in one transaction that locks the DTR row (`SELECT ... FOR
 
 **Access** is decided in one function (`assertCanView`): students their own, supervisors only DTRs whose office is their own current office (never their own DTR, never drafts), administrators read-only. Unknown and forbidden ids look the same (`403`). Self-review is blocked in the API (`SELF_REVIEW`/`FORBIDDEN`) and by a CHECK constraint.
 
-**PDF** is rendered server-side with `pdfkit` (`dtr.pdf.js`): A4, mostly white, navy headings, teal rule, repeating table header, page numbers, DTR id and revision in the footer. It is labeled *provisional template, not the official ADNU form* on every page and states "not verified" unless the rendered revision is the approved one. It was checked visually (rendered to images) and by tests for headers, `%PDF` signature, access control and pagination.
+**PDF** is rendered server-side with `pdfkit` (`dtr.pdf.js`): A4, mostly white, navy headings, teal rule, repeating table header, page numbers, DTR id and revision in the footer. It is labeled *provisional template, not the institution's official form* on every page and states "not verified" unless the rendered revision is the approved one. It was checked visually (rendered to images) and by tests for headers, `%PDF` signature, access control and pagination.
 
 ## Decision: absences, documents and cases (Phase 5)
 
-- **A notice is a record plus a conversation, nothing more.** There is no "excused" flag and nothing reads absence notices when computing hours, DTRs or cases. ADNU has not told us what excuses an absence, so the software cannot decide it.
+- **A notice is a record plus a conversation, nothing more.** There is no "excused" flag and nothing reads absence notices when computing hours, DTRs or cases. Each institution must configure its own absence policy; the software does not decide whether an absence is excused.
 - **Cases are opened only by an administrator** and never from hours or notices. Case types and their requested documents are configuration; each case copies the type's list when opened so later edits do not rewrite a case in progress.
 - **Rules live in two places on purpose.** Pure functions (`absences.rules.js`, `cases.rules.js`) define the allowed status moves and are unit-tested; database triggers enforce the same moves so SQL run outside the API cannot break them.
 - **One access function.** `modules/common/access.js` (`assertCanView`) decides who may see a notice, case or document (owner, supervisor of the record's office, administrator). Unknown and forbidden ids both return `403` so ids cannot be probed.

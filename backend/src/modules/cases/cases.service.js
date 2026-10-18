@@ -21,8 +21,10 @@ const mapType = (r) => ({
   requiredDocuments: r.required_documents, isActive: r.is_active,
 });
 
-export async function listTypes() {
-  const { rows } = await query('SELECT * FROM case_types ORDER BY is_active DESC, name');
+export async function listTypes(institutionId) {
+  const { rows } = await query(
+    'SELECT * FROM case_types WHERE institution_id = $1 ORDER BY is_active DESC, name', [institutionId],
+  );
   return rows.map(mapType);
 }
 
@@ -30,8 +32,9 @@ export async function createType({ actor, code, name, description, requiredDocum
   try {
     return await withTransaction(async (db) => {
       const { rows } = await db.query(
-        `INSERT INTO case_types (code, name, description, required_documents, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [code, name, description ?? null, JSON.stringify(requiredDocuments), actor.id],
+        `INSERT INTO case_types (institution_id, code, name, description, required_documents, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [actor.institutionId, code, name, description ?? null, JSON.stringify(requiredDocuments), actor.id],
       );
       await recordAudit({ actorId: actor.id, action: 'case_type.created', targetType: 'case_type', targetId: rows[0].id, after: { code, name }, ip }, db);
       return mapType(rows[0]);
@@ -44,7 +47,9 @@ export async function createType({ actor, code, name, description, requiredDocum
 
 export async function updateType({ actor, id, patch, ip }) {
   return withTransaction(async (db) => {
-    const { rows: found } = await db.query('SELECT * FROM case_types WHERE id = $1 FOR UPDATE', [id]);
+    const { rows: found } = await db.query(
+      'SELECT * FROM case_types WHERE id = $1 AND institution_id = $2 FOR UPDATE', [id, actor.institutionId],
+    );
     if (!found[0]) throw new AppError(404, 'NOT_FOUND', 'Case type not found.');
     const next = {
       name: patch.name ?? found[0].name,
@@ -105,7 +110,10 @@ const mapCase = (r) => ({
 });
 
 const loadRow = async (id, db = { query }, lock = false) =>
-  (await db.query(`SELECT * FROM compliance_cases WHERE id = $1${lock ? ' FOR UPDATE' : ''}`, [id])).rows[0];
+  (await db.query(
+    `SELECT c.*, u.institution_id FROM compliance_cases c JOIN users u ON u.id = c.user_id
+     WHERE c.id = $1${lock ? ' FOR UPDATE OF c' : ''}`, [id],
+  )).rows[0];
 
 async function loadRequirements(db, caseId) {
   const { rows } = await db.query(
@@ -161,10 +169,13 @@ export async function createCase({ actor, userId, caseTypeId, description, perio
     const { rows: stu } = await db.query(
       `SELECT u.id, u.full_name, d.office_id FROM users u
        LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
-       WHERE u.id = $1 AND u.role = 'student' AND u.status = 'active'`, [userId]);
+       WHERE u.id = $1 AND u.institution_id = $2 AND u.role = 'student' AND u.status = 'active'`,
+      [userId, actor.institutionId]);
     if (!stu[0]) throw validation({ userId: 'Choose an active Student Assistant.' });
     if (!stu[0].office_id) throw validation({ userId: 'That student is not assigned to an office yet.' });
-    const { rows: types } = await db.query('SELECT * FROM case_types WHERE id = $1', [caseTypeId]);
+    const { rows: types } = await db.query(
+      'SELECT * FROM case_types WHERE id = $1 AND institution_id = $2', [caseTypeId, actor.institutionId],
+    );
     if (!types[0] || !types[0].is_active) throw validation({ caseTypeId: 'Choose an active case type.' });
 
     const { rows: ref } = await db.query(
@@ -197,9 +208,15 @@ export async function list({ user, status, userId }) {
     params.push(user.office.id); where.push(`c.office_id = $${params.length}`);
     params.push(user.id); where.push(`c.user_id <> $${params.length}`);
   }
+  if (user.role === 'admin') {
+    if (!user.institutionId) return [];
+    params.push(user.institutionId); where.push(`s.institution_id = $${params.length}`);
+  }
   if (status) { params.push(status); where.push(`c.status = $${params.length}`); }
   if (userId && user.role !== 'student') { params.push(userId); where.push(`c.user_id = $${params.length}`); }
-  const { rows } = await query(`${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY c.created_at DESC`, params);
+  const { rows } = await query(
+    `${SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY c.created_at DESC`, params,
+  );
   return rows.map(mapCase);
 }
 
@@ -402,7 +419,7 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
     if (!isAdmin(user) && !isOfficeSupervisor(user, row)) throw forbidden();
     if (row.status === 'closed') throw new AppError(409, 'CASE_LOCKED', 'This case is closed.');
     if (receivedDate > (await today(db))) throw validation({ receivedDate: 'The received date cannot be in the future.' });
-    const receiver = await validateReceiver(db, receivedById ?? user.id);
+    const receiver = await validateReceiver(db, receivedById ?? user.id, user.institutionId);
     await checkRequirement(db, id, requirementId);
     assertRoomForDocument(await countDocuments(db, 'case_id', id));
     const docId = await insertManualReceipt(db, {
@@ -423,13 +440,19 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
 // -------------------------------------------------------------------- summary
 export async function summary(user) {
   const where = []; const params = [];
-  if (user.role === 'student') { params.push(user.id); where.push('user_id = $1'); }
+  if (user.role === 'student') { params.push(user.id); where.push('c.user_id = $1'); }
   if (user.role === 'supervisor') {
     if (!user.office) return {};
-    params.push(user.office.id, user.id); where.push('office_id = $1 AND user_id <> $2');
+    params.push(user.office.id, user.id); where.push('c.office_id = $1 AND c.user_id <> $2');
+  }
+  if (user.role === 'admin') {
+    if (!user.institutionId) return {};
+    params.push(user.institutionId); where.push('u.institution_id = $1');
   }
   const { rows } = await query(
-    `SELECT status, count(*)::int AS n FROM compliance_cases ${where.length ? `WHERE ${where.join(' AND ')}` : ''} GROUP BY status`, params);
+    `SELECT c.status, count(*)::int AS n FROM compliance_cases c
+     JOIN users u ON u.id = c.user_id
+     ${where.length ? `WHERE ${where.join(' AND ')}` : ''} GROUP BY c.status`, params);
   const n = (s) => rows.find((r) => r.status === s)?.n ?? 0;
   return {
     open: n('open'), documentsPending: n('documents_pending'), underReview: n('under_review'),

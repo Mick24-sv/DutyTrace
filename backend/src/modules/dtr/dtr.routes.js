@@ -19,7 +19,7 @@ const revisionSchema = z.coerce.number().int().min(1).max(10000).optional();
 
 // ---------------------------------------------------------------- policy
 // Everyone signed in may read the policy values; only an administrator changes them.
-dtrRouter.get('/policy', asyncHandler(async (_req, res) => ok(res, await dtr.getPolicy())));
+dtrRouter.get('/policy', asyncHandler(async (req, res) => ok(res, await dtr.getPolicy(req.user.institutionId))));
 
 dtrRouter.put('/policy', requireRole('admin'), asyncHandler(async (req, res) => {
   const { requiredMonthlyHours } = parse(

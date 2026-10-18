@@ -24,7 +24,9 @@ const typeBody = {
   description: z.string().trim().max(1000).optional(),
   requiredDocuments: z.array(label).max(20, 'At most 20 documents.'),
 };
-casesRouter.get('/types', requireRole('admin'), asyncHandler(async (_req, res) => ok(res, { types: await cases.listTypes() })));
+casesRouter.get('/types', requireRole('admin'), asyncHandler(async (req, res) => ok(res, {
+  types: await cases.listTypes(req.user.institutionId),
+})));
 casesRouter.post('/types', requireRole('admin'), asyncHandler(async (req, res) => {
   const b = parse(z.object({
     code: z.string().trim().regex(/^[A-Za-z0-9_-]{2,30}$/, '2-30 letters, numbers, - or _.'),

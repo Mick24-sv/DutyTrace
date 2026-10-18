@@ -2,13 +2,13 @@ import { AppError } from '../../utils/response.js';
 
 export const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 
-// `rec` is any record row with user_id (the student it is about) and office_id (the office on the record).
+// `rec` has user_id, office_id and institution_id (the student, office and tenant on the record).
 //   student    : only their own records
 //   supervisor : only records whose office is THEIR current office, and never their own
-//   admin      : any record (what an admin may DO with it is decided by each action)
+//   admin      : records in their own institution (what they may DO is decided by each action)
 export function canView(user, rec) {
   if (!rec) return false;
-  if (user.role === 'admin') return true;
+  if (user.role === 'admin') return Boolean(user.institutionId) && rec.institution_id === user.institutionId;
   if (user.role === 'student') return rec.user_id === user.id;
   return user.role === 'supervisor' && Boolean(user.office) && rec.office_id === user.office.id && rec.user_id !== user.id;
 }

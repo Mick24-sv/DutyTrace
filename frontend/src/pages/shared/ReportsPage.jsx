@@ -13,6 +13,7 @@ import {
   Hourglass,
   TrendingDown,
   RefreshCw,
+  CalendarRange,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -27,6 +28,7 @@ import { formatHours, formatTime } from '../../utils/format.js';
 const REPORT_TABS = [
   { id: 'attendance', label: 'Attendance Sessions', icon: Clock },
   { id: 'hours', label: 'Recorded vs. Verified Hours', icon: Hourglass },
+  { id: 'semester-hours', label: 'Semester Duty-Hour Progress', icon: CalendarRange },
   { id: 'dtr', label: 'Monthly DTR Status', icon: FileText },
   { id: 'outstanding', label: 'Outstanding Requirements', icon: TrendingDown },
   { id: 'absences', label: 'Absence Notifications', icon: CalendarOff },
@@ -47,12 +49,22 @@ export default function ReportsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('');
+  const [termId, setTermId] = useState('');
   const [page, setPage] = useState(1);
   const limit = 20;
 
   // Offce list for admin filter dropdown
   const officesQuery = useApiData(user?.role === 'admin' ? '/offices' : null);
   const officesList = officesQuery.data?.offices ?? [];
+  const semesterList = useApiData(user?.role === 'admin' ? '/semesters' : null);
+  const currentTermQuery = useApiData('/semesters/current');
+  const availableTerms = user?.role === 'admin'
+    ? (semesterList.data?.terms ?? [])
+    : (currentTermQuery.data?.term ? [currentTermQuery.data.term] : []);
+
+  useEffect(() => {
+    if (!termId && currentTermQuery.data?.term?.id) setTermId(currentTermQuery.data.term.id);
+  }, [termId, currentTermQuery.data]);
 
   // Report Data State
   const [reportData, setReportData] = useState(null);
@@ -74,9 +86,11 @@ export default function ReportsPage() {
       if (from) params.set('from', from);
       if (to) params.set('to', to);
       if (status) params.set('status', status);
+      if (activeTab === 'semester-hours' && termId) params.set('termId', termId);
 
       let endpoint = `/reports/${activeTab}`;
       if (activeTab === 'outstanding') endpoint = '/reports/outstanding-requirements';
+      if (activeTab === 'semester-hours') endpoint = '/reports/semester-hours';
 
       const data = await apiGet(`${endpoint}?${params.toString()}`);
       setReportData(data);
@@ -89,11 +103,11 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, officeId, month, from, to, status]);
+  }, [activeTab, officeId, month, from, to, status, termId]);
 
   useEffect(() => {
     fetchReport();
-  }, [activeTab, officeId, month, from, to, status, page]);
+  }, [activeTab, officeId, month, from, to, status, termId, page]);
 
   // Generate CSV download URL
   const getCsvExportUrl = () => {
@@ -104,9 +118,11 @@ export default function ReportsPage() {
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (status) params.set('status', status);
+    if (activeTab === 'semester-hours' && termId) params.set('termId', termId);
 
     let endpoint = `/reports/${activeTab}`;
     if (activeTab === 'outstanding') endpoint = '/reports/outstanding-requirements';
+    if (activeTab === 'semester-hours') endpoint = '/reports/semester-hours';
     return apiUrl(`${endpoint}?${params.toString()}`);
   };
 
@@ -116,12 +132,24 @@ export default function ReportsPage() {
     setFrom('');
     setTo('');
     setStatus('');
+    setTermId(currentTermQuery.data?.term?.id ?? '');
     setPage(1);
   };
 
   // Define Columns by Report Type
   const renderColumns = () => {
     switch (activeTab) {
+      case 'semester-hours':
+        return [
+          { key: 'fullName', header: 'Student Assistant' },
+          { key: 'officeName', header: 'Assigned Office' },
+          { key: 'requiredHours', header: 'Required', render: (r) => r.requirementAssigned ? `${formatHours(r.requiredHours)} h` : 'No requirement assigned' },
+          { key: 'recordedHours', header: 'Recorded', render: (r) => formatHours(r.recordedHours) },
+          { key: 'verifiedHours', header: 'Verified', render: (r) => formatHours(r.verifiedHours) },
+          { key: 'remainingHours', header: 'Remaining', render: (r) => r.requirementAssigned ? formatHours(r.remainingHours) : '—' },
+          { key: 'completionPercentage', header: 'Complete', render: (r) => r.requirementAssigned ? `${r.completionPercentage}%` : '—' },
+          { key: 'completionDeadline', header: 'Deadline', render: (r) => r.completionDeadline ?? '—' },
+        ];
       case 'attendance':
         return [
           { key: 'date', header: 'Date' },
@@ -327,6 +355,29 @@ export default function ReportsPage() {
     if (!s) return null;
 
     switch (activeTab) {
+      case 'semester-hours':
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div className="rounded-lg border border-line bg-surface p-3">
+              <div className="text-xs text-muted">Academic Term</div>
+              <div className="text-lg font-bold text-navy mt-1">
+                {reportData?.term ? `${reportData.term.academicYear} · ${reportData.term.semester}` : 'No active term'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-line bg-surface p-3">
+              <div className="text-xs text-muted">Recorded Hours</div>
+              <div className="text-lg font-bold text-teal mt-1">{formatHours(s.totalRecordedHours)}</div>
+            </div>
+            <div className="rounded-lg border border-line bg-surface p-3">
+              <div className="text-xs text-muted">Verified Hours</div>
+              <div className="text-lg font-bold text-ok-fg mt-1">{formatHours(s.totalVerifiedHours)}</div>
+            </div>
+            <div className="rounded-lg border border-line bg-surface p-3">
+              <div className="text-xs text-muted">Students Below Requirement</div>
+              <div className="text-lg font-bold text-bad-fg mt-1">{s.studentsBelowRequirement}</div>
+            </div>
+          </div>
+        );
       case 'attendance':
         return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -460,8 +511,8 @@ export default function ReportsPage() {
     }
   };
 
-  const pagination = reportData?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 };
   const items = reportData?.items ?? [];
+  const pagination = reportData?.pagination ?? { page: 1, limit: 20, total: items.length, totalPages: 1 };
 
   return (
     <>
@@ -537,6 +588,24 @@ export default function ReportsPage() {
                   </option>
                 ))}
               </select>
+            )}
+
+            {activeTab === 'semester-hours' && (
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">Academic term</label>
+                <select
+                  value={termId}
+                  onChange={(event) => setTermId(event.target.value)}
+                  className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                >
+                  <option value="">Current term</option>
+                  {availableTerms.map((term) => (
+                    <option key={term.id} value={term.id}>
+                      {term.academicYear} · {term.semester}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
 
@@ -711,4 +780,3 @@ export default function ReportsPage() {
     </>
   );
 }
-

@@ -22,7 +22,7 @@ export const DEMO_USERS = [
   { email: 'student3@demo.dutytrace.test', fullName: 'Demo Student Three', role: 'student', office: 'DEMO-B' },
 ];
 
-// FICTIONAL sample case types so the case screens work out of the box. They are NOT ADNU policy:
+// FICTIONAL sample case types so the case screens work out of the box. They are not institutional policy:
 // real case types and their required documents are configured by an administrator (docs/open-questions.md).
 export const DEMO_CASE_TYPES = [
   { code: 'DEMO-HOURS', name: 'Unmet duty hours (sample)', description: 'Sample type for a student whose recorded duty hours are below the configured requirement.', docs: ['Explanation letter'] },
@@ -36,11 +36,22 @@ export async function seed({ log = console.log } = {}) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   await withTransaction(async (db) => {
+    const { rows: [institution] } = await db.query(
+      `INSERT INTO institutions (name, timezone) VALUES ('DutyTrace Test Institution', $1)
+       ON CONFLICT (lower(name)) DO UPDATE SET timezone = EXCLUDED.timezone RETURNING id`,
+      [process.env.APP_TIMEZONE ?? 'UTC'],
+    );
+    await db.query(
+      `INSERT INTO institution_dtr_policies (institution_id, required_monthly_hours, updated_by, updated_at)
+       SELECT $1, required_monthly_hours, updated_by, updated_at FROM policy_settings
+       ON CONFLICT (institution_id) DO NOTHING`,
+      [institution.id],
+    );
     for (const o of DEMO_OFFICES) {
       await db.query(
-        `INSERT INTO offices (code, name) VALUES ($1, $2)
-         ON CONFLICT (lower(code)) DO UPDATE SET name = EXCLUDED.name`,
-        [o.code, o.name],
+        `INSERT INTO offices (code, name, institution_id) VALUES ($1, $2, $3)
+         ON CONFLICT (institution_id, lower(code)) DO UPDATE SET name = EXCLUDED.name`,
+        [o.code, o.name, institution.id],
       );
     }
     // Each demo office gets a valid QR code (only if it has none), so scanning works out of the box.
@@ -53,21 +64,22 @@ export async function seed({ log = console.log } = {}) {
     );
     for (const t of DEMO_CASE_TYPES) {
       await db.query(
-        `INSERT INTO case_types (code, name, description, required_documents) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (lower(code)) DO NOTHING`,
-        [t.code, t.name, t.description, JSON.stringify(t.docs)],
+        `INSERT INTO case_types (institution_id, code, name, description, required_documents)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (institution_id, lower(code)) DO NOTHING`,
+        [institution.id, t.code, t.name, t.description, JSON.stringify(t.docs)],
       );
     }
     for (const u of DEMO_USERS) {
       const { rows } = await db.query(
-        `INSERT INTO users (email, password_hash, full_name, role)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO users (email, password_hash, full_name, role, institution_id)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (email) DO UPDATE
            SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name,
-               role = EXCLUDED.role, status = 'active',
+               role = EXCLUDED.role, status = 'active', institution_id = EXCLUDED.institution_id,
                failed_login_count = 0, locked_until = NULL
          RETURNING id`,
-        [u.email, passwordHash, u.fullName, u.role],
+        [u.email, passwordHash, u.fullName, u.role, institution.id],
       );
       if (u.office) {
         // Only create the assignment if the user has no current one.
@@ -83,4 +95,3 @@ export async function seed({ log = console.log } = {}) {
   });
   log(`seeded ${DEMO_OFFICES.length} offices, ${DEMO_USERS.length} fictional users and ${DEMO_CASE_TYPES.length} sample case types`);
 }
-

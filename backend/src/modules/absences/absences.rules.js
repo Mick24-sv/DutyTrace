@@ -21,7 +21,7 @@ export const canMoveAbsence = (from, to) => (ABSENCE_TRANSITIONS[from] ?? []).in
 export const ABSENCE_ACCEPTS_DOCUMENTS = new Set(['pending', 'acknowledged', 'needs_follow_up']);
 
 const dayNumber = (key) => Math.round(new Date(`${key}T00:00:00Z`).getTime() / 86400000);
-export const MAX_SPAN_DAYS = 31; // technical sanity limit, NOT an ADNU policy
+export const MAX_SPAN_DAYS = 31; // technical sanity limit, not an institutional policy
 const MAX_DISTANCE_DAYS = 366;   // how far from today a date may be, also a sanity limit
 
 /**

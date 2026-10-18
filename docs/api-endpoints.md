@@ -7,6 +7,8 @@ Authentication is a cookie (`dt_session`, httpOnly). Status codes: `401` = not s
 | Method & path | Who | Description |
 | --- | --- | --- |
 | `GET /health` | public | Liveness check |
+| `GET /institutions/me` | signed in | Current user's institution settings |
+| `PUT /institutions/me` | admin | Update only the administrator's institution name and IANA timezone |
 | `POST /auth/login` | public (rate limited) | `{ email, password }` → sets session cookie, returns `{ user }` |
 | `POST /auth/logout` | anyone | Revokes the session on the server and clears the cookie |
 | `GET /auth/me` | signed in | Current user (role, office) |
@@ -15,17 +17,17 @@ Authentication is a cookie (`dt_session`, httpOnly). Status codes: `401` = not s
 | `GET /users/:id` | admin, or the user themself | One user |
 | `PATCH /users/:id` | admin | Change `fullName`, `role`, `status`. Cannot demote/disable yourself. Disabling signs the user out. |
 | `PUT /users/:id/assignment` | admin | `{ officeId }` (or `null` to unassign). Ends the old assignment, keeps history. |
-| `GET /offices` | admin (all), supervisor (own office only) | List offices |
+| `GET /offices` | admin (own institution), supervisor (own office only) | List offices |
 | `POST /offices` | admin | Create office `{ code, name }` |
 | `GET /offices/:id/assistants` | admin, or the supervisor assigned to that office | Student assistants currently assigned |
 
-`User` shape: `{ id, email, fullName, role, status, office: { id, code, name } | null }`. Password hashes are never returned.
+`User` shape: `{ id, email, fullName, role, status, institutionId, institution: { id, name, timezone } | null, office: { id, code, name } | null }`. Password hashes are never returned.
 
 ### QR codes (administrator only)
 
 | Method & path | Description |
 | --- | --- |
-| `GET /offices/:id/qr` | Active code (with its printable `payload`) and a history of revoked codes |
+| `GET /offices/:id/qr` | Active code (with its printable `payload`) and a history of revoked codes; office must belong to the admin's institution |
 | `POST /offices/:id/qr` | Generate the first code. `409 QR_EXISTS` if one is already active |
 | `POST /offices/:id/qr/regenerate` | Revoke the active code and issue a new one |
 | `POST /offices/:id/qr/revoke` | Revoke without replacement. `409 NO_ACTIVE_QR` if none |
@@ -37,7 +39,7 @@ Authentication is a cookie (`dt_session`, httpOnly). Status codes: `401` = not s
 | `GET /attendance/status` | student, supervisor | `{ state: 'timed_in'\|'timed_out', since, office, timezone }` |
 | `POST /attendance/scan` | student, supervisor | `{ action: 'time_in'\|'time_out', qrPayload }`. Records the **signed-in user's own** event. Any other field (user id, timestamp) is ignored. `201` with `{ event, state, office, timezone, session }` |
 | `GET /attendance/me?month=YYYY-MM` | student, supervisor | Own history: `days[]` (sessions with `status`, `counted`, `seconds`, `flags`), `totals` (recorded hours, counts, `verifiedHours: 0`) |
-| `GET /attendance/users/:userId?month=` | supervisor (students in own office), admin (read-only, any student/supervisor) | Someone else's history. Students get `403` |
+| `GET /attendance/users/:userId?month=` | supervisor (students in own office), admin (read-only, same institution) | Someone else's history. Students get `403` |
 | `GET /attendance/office/:officeId/summary?month=` | supervisor (own office), admin | Per-assistant monthly totals and current state |
 
 Scan error codes: `400 INVALID_QR` (not ours, tampered, unknown), `400 QR_REVOKED`, `403 WRONG_OFFICE`, `403 NOT_ASSIGNED`, `403 OFFICE_INACTIVE`, `409 ALREADY_TIMED_IN`, `409 NO_ACTIVE_SESSION`. Session `status` values: `complete`, `in_progress`, `missing_time_out`, `orphan_time_out`, `needs_review`.
@@ -51,7 +53,7 @@ Scan error codes: `400 INVALID_QR` (not ours, tampered, unknown), `400 QR_REVOKE
 | `GET /dtrs/mine` | student | The last 12 **ended** months with the DTR (if any) of each, plus `verifiedHoursTotal` (approved DTRs only) |
 | `GET /dtrs/preview?month=YYYY-MM` | student | Computed snapshot of an ended month; **nothing is stored**. `409 MONTH_NOT_ENDED` for current/future months |
 | `POST /dtrs` | student | `{ month }`. Creates the draft (revision 1), or adds a new revision while the DTR is `draft` / `needs_correction`. `409 DTR_LOCKED` otherwise; `403 NOT_ASSIGNED` without an office |
-| `GET /dtrs?status=&month=` | student (own), supervisor (own office, submitted and later, never their own), admin (all) | List with `recordedHours`, `verifiedHours` (null unless approved), `incompleteCount` |
+| `GET /dtrs?status=&month=` | student (own), supervisor (own office, submitted and later, never their own), admin (same institution) | List with `recordedHours`, `verifiedHours` (null unless approved), `incompleteCount` |
 | `GET /dtrs/:id?revision=n` | owner, office supervisor (not drafts), admin | Detail: the chosen revision's snapshot, all `revisions`, full `history` (actor, role, time, reason), `latestReturnReason`. Unknown ids and other people's ids both give `403` |
 | `GET /dtrs/:id/pdf?revision=n` | same as above | `application/pdf` attachment (provisional template) |
 | `POST /dtrs/:id/submit` | the owning student | `draft` or `needs_correction` -> `submitted` |
@@ -99,11 +101,28 @@ Dates are `YYYY-MM-DD`. A student's own id, their office and all timestamps come
 | `POST /cases/:id/receipts` | admin, office supervisor | `{ method, receivedDate, receivedById?, notes?, requirementId? }` |
 | `GET /documents/:id/download` | owner, office supervisor of the record, admin | The file as an attachment. Access is checked on every request and audited; `404 NO_FILE` for manual receipts |
 
+Case types, cases, absences, documents, reports, offices, users and academic terms are scoped to the signed-in administrator's institution. Cross-institution resource ids are denied.
+
+### Institution academic terms and semester requirements
+
+| Method & path | Who | Description |
+| --- | --- | --- |
+| `GET /semesters/current` | admin, supervisor | Current term for the user's institution |
+| `GET /semesters/current/office` | supervisor | Current term progress for the supervisor's own office |
+| `GET /semesters/mine` | student | Current and historical terms with recorded hours, approved-DTR verified hours, individual requirement and progress |
+| `GET /semesters` | admin | This institution's configured terms |
+| `POST /semesters` / `PUT /semesters/:termId` | admin | Create/update an institution-specific academic year, semester, dates, deadline and timezone; dates cannot overlap |
+| `POST /semesters/:termId/finalize` | admin | Permanently lock the term calendar and requirements |
+| `GET /semesters/:termId/requirements` | admin | Students, office and current individual requirement assignments |
+| `PUT /semesters/:termId/requirements/:studentId` | admin | Assign/update `{ officeId, requiredHours }`; updates append audit/history rows; `requiredHours: null` removes the requirement |
+| `GET /semesters/:termId/office/:officeId` | admin, supervisor (own office) | Semester progress; administrators see only their institution |
+| `GET /reports/semester-hours?termId=&officeId=&format=` | admin, supervisor (own office) | Recorded/verified semester totals, individual targets, remaining hours and capped completion percentage; supports CSV |
+
 Error codes added: `400 VALIDATION_ERROR` (including unsupported or mismatched file type), `413 FILE_TOO_LARGE`, `409 TOO_MANY_DOCUMENTS`, `409 DOCUMENTS_MISSING`, `409 INVALID_TRANSITION`, `404 FILE_MISSING`.
 
 ### Reports & Dashboards (Phase 6)
 
-Authorized roles: `admin` (all offices or filtered), `supervisor` (scoped strictly to own assigned office; other office requests return `403`). All endpoints support JSON (default) and CSV download (`format=csv`).
+Authorized roles: `admin` (all offices in their institution or filtered), `supervisor` (scoped strictly to own assigned office; other office requests return `403`). All endpoints support JSON (default) and CSV download (`format=csv`).
 
 | Method & path | Who | Description |
 | --- | --- | --- |
@@ -114,4 +133,3 @@ Authorized roles: `admin` (all offices or filtered), `supervisor` (scoped strict
 | `GET /reports/outstanding-requirements?officeId=&month=&page=&limit=&format=` | admin, supervisor | Students below duty-hour requirement with shortfall deficit hours and completion status |
 | `GET /reports/absences?officeId=&status=&type=&from=&to=&page=&limit=&format=` | admin, supervisor | Absence notifications with review status, responses, dates, and attached document counts |
 | `GET /reports/cases?officeId=&status=&caseTypeId=&from=&to=&page=&limit=&format=` | admin, supervisor | Compliance cases with reference, type, review status, missing requirements, and decisions |
-

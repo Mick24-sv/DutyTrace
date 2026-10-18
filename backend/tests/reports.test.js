@@ -1,6 +1,8 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateCsv } from '../src/modules/reports/csv.js';
+import { canView } from '../src/modules/common/access.js';
+import { calculateSemesterProgress, currentTermForDate, verifiedSecondsForTerm } from '../src/modules/semesters/semester.rules.js';
 import {
   enforceOfficeScope,
   paginateArray,
@@ -154,6 +156,13 @@ describe('Report Role-Based Access Scoping', () => {
     const officeId = enforceOfficeScope(adminUser, null);
     assert.equal(officeId, null);
   });
+
+  test('administrator record access is limited to their institution', () => {
+    const scopedAdmin = { ...adminUser, institutionId: 'institution-a' };
+    assert.equal(canView(scopedAdmin, { institution_id: 'institution-a' }), true);
+    assert.equal(canView(scopedAdmin, { institution_id: 'institution-b' }), false);
+    assert.equal(canView({ ...adminUser, institutionId: undefined }, { institution_id: 'institution-a' }), false);
+  });
 });
 
 describe('Recorded vs. Verified Hours and Outstanding Deficit Rules', () => {
@@ -169,6 +178,49 @@ describe('Recorded vs. Verified Hours and Outstanding Deficit Rules', () => {
     // Unverified variance
     const variance = recordedHours - approvedDtrVerifiedHours;
     assert.equal(variance, 5.0, '5 hours remain unverified until next approval');
+  });
+
+  describe('semester duty-hour calculations', () => {
+    test('calculates per-student targets independently and caps completion at 100%', () => {
+      assert.deepEqual(calculateSemesterProgress({ requiredHours: 120, verifiedHours: 60 }), {
+        requiredHours: 120, verifiedHours: 60, remainingHours: 60, completionPercentage: 50, requirementAssigned: true,
+      });
+      assert.deepEqual(calculateSemesterProgress({ requiredHours: 240, verifiedHours: 300 }), {
+        requiredHours: 240, verifiedHours: 300, remainingHours: 0, completionPercentage: 100, requirementAssigned: true,
+      });
+    });
+
+    test('does not invent a target or progress for an unassigned student', () => {
+      assert.deepEqual(calculateSemesterProgress({ requiredHours: null, verifiedHours: 8 }), {
+        requiredHours: null, verifiedHours: 8, remainingHours: null, completionPercentage: null, requirementAssigned: false,
+      });
+    });
+
+    test('includes approved counted sessions only, within local term date boundaries', () => {
+      const snapshot = (timeIn, counted = true) => ({
+        days: [{ sessions: [{ timeIn, seconds: 3600, counted }] }],
+      });
+      const rows = [
+        { status: 'approved', snapshot: snapshot('2026-08-31T17:00:00.000Z') },
+        { status: 'approved', snapshot: snapshot('2026-12-31T16:00:00.000Z') },
+        { status: 'approved', snapshot: snapshot('2026-09-01T00:00:00.000Z', false) },
+        { status: 'submitted', snapshot: snapshot('2026-10-01T00:00:00.000Z') },
+        { status: 'approved', snapshot: snapshot('2026-08-31T15:59:59.000Z') },
+      ];
+      assert.equal(verifiedSecondsForTerm(rows, '2026-09-01', '2027-01-01', 'Asia/Manila'), 7200);
+    });
+
+    test('selects first, second, and summer terms by timezone-aware inclusive boundaries', () => {
+      const terms = [
+        { semester: 'first', startsOn: '2026-06-01', endsOn: '2026-10-31' },
+        { semester: 'second', startsOn: '2026-11-01', endsOn: '2027-03-31' },
+        { semester: 'summer', startsOn: '2027-04-01', endsOn: '2027-05-31' },
+      ];
+      assert.equal(currentTermForDate(terms, new Date('2026-10-31T15:59:59Z'), 'Asia/Manila').semester, 'first');
+      assert.equal(currentTermForDate(terms, new Date('2026-10-31T16:00:01Z'), 'Asia/Manila').semester, 'second');
+      assert.equal(currentTermForDate(terms, new Date('2027-04-01T00:00:00Z'), 'UTC').semester, 'summer');
+      assert.equal(currentTermForDate(terms, new Date('2027-06-01T00:00:00Z'), 'UTC'), null);
+    });
   });
 
   test('deficit calculation when recorded hours are below requirement', () => {
@@ -189,4 +241,3 @@ describe('Recorded vs. Verified Hours and Outstanding Deficit Rules', () => {
     assert.equal(remainingHours, 40.0);
   });
 });
-

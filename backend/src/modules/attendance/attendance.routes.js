@@ -56,7 +56,9 @@ attendanceRouter.get('/users/:userId', requireRole('supervisor', 'admin'), async
   const userId = parseId(req.params.userId);
   const month = parse(monthSchema, req.query.month);
 
-  const { rows } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1`, [userId]);
+  const { rows } = req.user.role === 'admin'
+    ? await query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1 AND u.institution_id = $2`, [userId, req.user.institutionId])
+    : await query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1`, [userId]);
   const target = rows[0] && toPublicUser(rows[0]);
 
   if (req.user.role === 'supervisor') {
@@ -79,7 +81,9 @@ attendanceRouter.get('/office/:officeId/summary', requireRole('supervisor', 'adm
   const month = parse(monthSchema, req.query.month);
   if (req.user.role === 'supervisor' && req.user.office?.id !== officeId) throw forbidden();
 
-  const office = await query('SELECT id, code, name FROM offices WHERE id = $1', [officeId]);
+  const office = req.user.role === 'admin'
+    ? await query('SELECT id, code, name FROM offices WHERE id = $1 AND institution_id = $2', [officeId, req.user.institutionId])
+    : await query('SELECT id, code, name FROM offices WHERE id = $1', [officeId]);
   if (!office.rowCount) throw new AppError(404, 'NOT_FOUND', 'Office not found.');
   ok(res, { office: office.rows[0], ...(await attendance.officeSummary(officeId, month)) });
 }));

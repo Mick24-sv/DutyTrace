@@ -62,25 +62,32 @@ export default function SupervisorDashboard() {
     { key: 'studentName', header: 'Student Assistant' },
     {
       key: 'progress',
-      header: 'Monthly Progress',
+      header: 'Semester Progress',
       render: (s) => (
         <div className="w-36">
-          <ProgressBar value={s.recordedHours} max={s.requiredHours} label={`${s.recordedHours}h`} />
+          {s.semesterRequirementAssigned
+            ? <ProgressBar value={s.semesterVerifiedHours} max={s.semesterRequiredHours} label={`${s.semesterVerifiedHours}h`} />
+            : <span className="text-xs text-muted">No semester target</span>}
         </div>
       ),
     },
     {
       key: 'recorded',
-      header: 'Recorded',
+      header: 'Recorded (Month)',
       render: (s) => <span className="font-mono text-sm">{formatHours(s.recordedHours)}</span>,
     },
     {
-      key: 'deficit',
-      header: 'Shortfall / Deficit',
+      key: 'semesterVerifiedHours',
+      header: 'Verified (Semester)',
+      render: (s) => <span className="font-mono text-sm">{formatHours(s.semesterVerifiedHours)}</span>,
+    },
+    {
+      key: 'semesterRemainingHours',
+      header: 'Semester Remaining',
       render: (s) => (
-        <span className="font-mono text-sm text-bad-fg font-semibold">
-          -{formatHours(s.remainingHours)}
-        </span>
+        s.semesterRequirementAssigned
+          ? <span className="font-mono text-sm text-bad-fg font-semibold">{formatHours(s.semesterRemainingHours)}</span>
+          : <span className="text-xs text-muted">No requirement assigned</span>
       ),
     },
     {
@@ -106,13 +113,20 @@ export default function SupervisorDashboard() {
     },
     {
       key: 'recordedHours',
-      header: 'Recorded Hours',
+      header: 'Recorded (Month)',
       render: (s) => <span className="font-mono">{formatHours(s.recordedHours)}</span>,
     },
     {
       key: 'verifiedHours',
-      header: 'Verified Hours',
-      render: (s) => <span className="font-mono">{formatHours(s.verifiedHours)}</span>,
+      header: 'Verified (Semester)',
+      render: (s) => <span className="font-mono">{formatHours(s.semesterVerifiedHours)}</span>,
+    },
+    {
+      key: 'semesterRequirement',
+      header: 'Requirement / Remaining',
+      render: (s) => s.semesterRequirementAssigned
+        ? <span className="font-mono">{formatHours(s.semesterRequiredHours)} / {formatHours(s.semesterRemainingHours)} h</span>
+        : <span className="text-xs text-muted">No requirement assigned</span>,
     },
     {
       key: 'incompleteSessions',
@@ -128,8 +142,8 @@ export default function SupervisorDashboard() {
       key: 'status',
       header: 'Requirement',
       render: (s) => (
-        <Badge tone={s.meetsRequirement ? 'approved' : 'pending'}>
-          {s.meetsRequirement ? 'Target Met' : 'Below Target'}
+        <Badge tone={s.meetsRequirement == null ? 'neutral' : s.meetsRequirement ? 'approved' : 'pending'}>
+          {s.meetsRequirement == null ? 'No Target' : s.meetsRequirement ? 'Target Met' : 'Below Target'}
         </Badge>
       ),
     },
@@ -205,7 +219,7 @@ export default function SupervisorDashboard() {
         <StatCard
           label="Below Duty Requirement"
           value={loading ? '…' : stats.studentsBelowRequirement}
-          hint="Students behind monthly required hours"
+          hint={data?.semesterSummary?.term ? `${data.semesterSummary.term.academicYear} · ${data.semesterSummary.term.semester} requirements not met` : 'No active academic term'}
           icon={TrendingDown}
         />
         <StatCard
@@ -251,11 +265,11 @@ export default function SupervisorDashboard() {
           <DataTable
             columns={belowColumns}
             rows={studentsBelow}
-            caption="Students who have not yet reached monthly required hours"
+            caption="Students who have not yet reached their assigned semester hours"
             empty={
               loading
                 ? 'Checking hours…'
-                : 'All assigned assistants have met their monthly duty requirements!'
+                : 'No assigned semester requirements are currently below target.'
             }
           />
         </Card>
@@ -278,7 +292,7 @@ export default function SupervisorDashboard() {
           empty={loading ? 'Loading assistants…' : 'No assistants assigned to your office.'}
         />
         <p className="mt-3 text-xs text-muted">
-          Only approved monthly DTRs establish official verified hours. Unapproved recorded hours are pending review.
+          Semester completion uses only verified hours from approved DTRs. Recorded monthly hours are shown separately.
         </p>
       </Card>
     </>

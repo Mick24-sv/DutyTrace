@@ -38,6 +38,14 @@ export default function AdminDashboard() {
   const cases = data?.cases ?? { activeTotal: 0, open: 0, documentsPending: 0, underReview: 0, needsCorrection: 0, resolved: 0, closed: 0 };
   const absences = data?.absences ?? { pendingReview: 0, pending: 0, acknowledged: 0, reviewed: 0, needsFollowUp: 0 };
   const docs = data?.documents ?? { total: 0, online: 0, manual: 0 };
+  const semester = data?.semesterSummary ?? {
+    term: null,
+    totalRecordedHours: 0,
+    totalVerifiedHours: 0,
+    totalRequiredHours: 0,
+    studentsMetRequirement: 0,
+    studentsBelowRequirement: 0,
+  };
 
   const dtrStatusRows = [
     { id: 'submitted', label: 'Submitted (Awaiting Review)', current: dtrs.currentMonth?.submitted ?? 0, total: dtrs.allTime?.submitted ?? 0, tone: 'pending' },
@@ -78,6 +86,12 @@ export default function AdminDashboard() {
           >
             <Settings className="h-4 w-4 text-muted" />
             Policy Settings
+          </Link>
+          <Link
+            to="/admin/semesters"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas transition"
+          >
+            Academic Terms
           </Link>
         </div>
       </PageHeader>
@@ -135,9 +149,9 @@ export default function AdminDashboard() {
           icon={FileText}
         />
         <StatCard
-          label="Students Below Target"
-          value={loading ? '…' : hours.studentsBelowRequirement}
-          hint={loading ? '…' : `${hours.studentsMetRequirement} have met ${hours.requiredMonthlyHours}h target`}
+          label="Students Below Semester Requirement"
+          value={loading ? '…' : semester.studentsBelowRequirement}
+          hint={loading ? '…' : semester.term ? `${semester.term.academicYear} · ${semester.term.semester}` : 'No active academic term'}
           icon={TrendingDown}
         />
         <StatCard
@@ -169,7 +183,7 @@ export default function AdminDashboard() {
 
         {/* Recorded vs. Verified Hours Summary */}
         <Card
-          title="Hours & Requirements"
+          title="Monthly DTR Hours & Semester Requirements"
           action={
             <Link to="/admin/reports" className="text-sm font-medium text-teal hover:underline">
               Detailed Report
@@ -179,11 +193,11 @@ export default function AdminDashboard() {
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-muted">Recorded Hours:</span>
+                <span className="text-muted">Recorded this month (DTR):</span>
                 <span className="font-semibold">{formatHours(hours.totalRecordedHours)}</span>
               </div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-muted">Verified Hours:</span>
+                <span className="text-muted">Verified this month (DTR):</span>
                 <span className="font-semibold text-ok-fg">{formatHours(hours.totalVerifiedHours)}</span>
               </div>
               <div className="flex justify-between text-sm border-t border-line pt-1">
@@ -195,19 +209,21 @@ export default function AdminDashboard() {
             </div>
 
             <div className="rounded-lg bg-canvas p-3">
-              <p className="text-xs font-semibold text-navy uppercase tracking-wider mb-2">Requirement Progress</p>
+              <p className="text-xs font-semibold text-navy uppercase tracking-wider mb-2">
+                Semester Progress{semester.term ? ` · ${semester.term.academicYear} ${semester.term.semester}` : ''}
+              </p>
               <div className="flex justify-between text-xs text-muted mb-1">
                 <span>Students Met Requirement:</span>
-                <span className="font-bold text-ok-fg">{hours.studentsMetRequirement}</span>
+                <span className="font-bold text-ok-fg">{semester.studentsMetRequirement}</span>
               </div>
               <div className="flex justify-between text-xs text-muted">
                 <span>Students Below Requirement:</span>
-                <span className="font-bold text-bad-fg">{hours.studentsBelowRequirement}</span>
+                <span className="font-bold text-bad-fg">{semester.studentsBelowRequirement}</span>
               </div>
             </div>
 
             <p className="text-xs text-muted">
-              Policy target: <strong>{hours.requiredMonthlyHours} hours/month</strong>. Approved DTRs convert recorded hours into official verified hours.
+              Monthly DTRs remain separate. Semester requirement targets are individually assigned under Academic Terms.
             </p>
           </div>
         </Card>

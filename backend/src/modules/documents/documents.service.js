@@ -77,9 +77,10 @@ export async function insertManualReceipt(db, { ownerId, absenceId = null, caseI
 //   student: only their own   supervisor: only their office's records   admin: any
 export async function openForDownload({ user, id, ip }) {
   const { rows } = await query(
-    `SELECT d.id, d.owner_id AS user_id, d.stored_name, d.original_name, d.mime_type, d.size_bytes,
+    `SELECT d.id, d.owner_id AS user_id, owner.institution_id, d.stored_name, d.original_name, d.mime_type, d.size_bytes,
             COALESCE(a.office_id, c.office_id) AS office_id
      FROM documents d
+     JOIN users owner ON owner.id = d.owner_id
      LEFT JOIN absence_notices a ON a.id = d.absence_id
      LEFT JOIN compliance_cases c ON c.id = d.case_id
      WHERE d.id = $1`,

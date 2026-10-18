@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CalendarClock,
+  CalendarRange,
   CheckCircle2,
   Hourglass,
   QrCode,
@@ -24,20 +25,27 @@ import { formatDuration, formatHours, formatMonth, formatTime } from '../../util
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const [selectedTermId, setSelectedTermId] = useState('');
   const status = useApiData('/attendance/status');
   const month = useApiData('/attendance/me');
   const dtrs = useApiData('/dtrs/mine');
+  const semesterTerms = useApiData('/semesters/mine');
   const absences = useApiData('/absences/summary');
   const cases = useApiData('/cases/summary');
 
+  const terms = semesterTerms.data?.terms ?? [];
+  const currentTerm = terms.find((term) => term.isCurrent);
+  useEffect(() => {
+    if (!selectedTermId && terms.length > 0) setSelectedTermId((currentTerm ?? terms[0]).id);
+  }, [currentTerm, selectedTermId, terms]);
+  const selectedTerm = terms.find((term) => term.id === selectedTermId) ?? null;
   const tz = status.data?.timezone;
   const timedIn = status.data?.state === 'timed_in';
-  const totals = month.data?.totals;
-  const required = user?.requiredHours ?? dtrs.data?.policy?.requiredMonthlyHours ?? 40;
-  const recorded = totals?.recordedHours ?? 0;
-  const verifiedTotal = dtrs.data?.verifiedHoursTotal ?? 0;
-  const remaining = Math.max(0, Math.round((required - recorded) * 100) / 100);
-  const progressPercent = required > 0 ? Math.min(100, Math.round((recorded / required) * 100)) : 0;
+  const recordedSemesterHours = selectedTerm?.recordedHours ?? 0;
+  const verifiedSemesterHours = selectedTerm?.verifiedHours ?? 0;
+  const requiredSemesterHours = selectedTerm?.requiredHours;
+  const remainingSemesterHours = selectedTerm?.remainingHours;
+  const progressPercent = selectedTerm?.completionPercentage;
 
   const recent = month.data
     ? [...month.data.days]
@@ -54,8 +62,8 @@ export default function StudentDashboard() {
 
   const lastMonth = dtrs.data?.months?.[0];
 
-  const anyLoading = status.loading || month.loading || dtrs.loading;
-  const anyError = status.error || month.error || dtrs.error;
+  const anyLoading = status.loading || month.loading || dtrs.loading || semesterTerms.loading;
+  const anyError = status.error || month.error || dtrs.error || semesterTerms.error;
 
   return (
     <>
@@ -63,7 +71,7 @@ export default function StudentDashboard() {
         title={`Welcome, ${user?.fullName || 'Student Assistant'}`}
         description={
           user?.office
-            ? `Assigned to ${user.office.name}. Here is your current attendance, duty-hour progress, and monthly status.`
+            ? `Assigned to ${user.office.name}. Here is your attendance, semester duty-hour progress, and monthly DTR status.`
             : 'No office assigned yet. Contact your supervisor or administrator.'
         }
       >
@@ -99,55 +107,104 @@ export default function StudentDashboard() {
           icon={Timer}
         />
         <StatCard
-          label="Recorded this month"
-          value={totals ? formatHours(recorded) : anyLoading ? '…' : '0.00 h'}
-          hint="Unverified until DTR approval"
+          label="Recorded hours"
+          value={selectedTerm ? formatHours(recordedSemesterHours) : semesterTerms.loading ? '…' : '—'}
+          hint={selectedTerm ? `${selectedTerm.academicYear} · ${selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}` : 'Semester attendance hours'}
           icon={Hourglass}
         />
         <StatCard
           label="Verified hours"
-          value={dtrs.data ? formatHours(verifiedTotal) : anyLoading ? '…' : '0.00 h'}
+          value={selectedTerm ? formatHours(verifiedSemesterHours) : semesterTerms.loading ? '…' : '—'}
           hint={
-            dtrs.data
-              ? `From ${dtrs.data.approvedCount || 0} approved DTR(s)`
-              : 'Official verified duty time'
+            selectedTerm
+              ? 'Approved DTR sessions within this semester'
+              : 'Only approved attendance counts as verified'
           }
           icon={CheckCircle2}
         />
         <StatCard
-          label="Remaining this month"
-          value={totals ? formatHours(remaining) : anyLoading ? '…' : formatHours(required)}
-          hint={`Target: ${formatHours(required)} monthly required`}
-          icon={CalendarClock}
+          label="Remaining semester hours"
+          value={
+            !selectedTerm && semesterTerms.loading
+              ? '…'
+              : !selectedTerm || !selectedTerm.requirementAssigned
+                ? 'No duty-hour requirement assigned'
+                : formatHours(remainingSemesterHours)
+          }
+          hint={
+            selectedTerm?.requirementAssigned
+              ? `${formatHours(requiredSemesterHours)} assigned for this semester`
+              : selectedTerm
+                ? 'Contact your administrator if a requirement is expected.'
+                : 'No active academic term configured'
+          }
+          icon={CalendarRange}
         />
       </div>
 
-      {/* Monthly Duty-Hour Progress Card */}
-      <Card className="mt-6" title="Monthly duty-hour progress">
-        <div className="space-y-3">
+      <Card
+        className="mt-6"
+        title="Semester progress"
+        action={terms.length > 0 && (
+          <select
+            aria-label="Academic term"
+            value={selectedTermId}
+            onChange={(event) => setSelectedTermId(event.target.value)}
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+          >
+            <option value="">Select academic term</option>
+            {terms.map((term) => (
+              <option key={term.id} value={term.id}>
+                {term.academicYear} · {term.semester === 'first' ? '1st Semester' : term.semester === 'second' ? '2nd Semester' : 'Summer Term'}{term.isCurrent ? ' (Current)' : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      >
+        {!selectedTerm && (
+          <p className="text-sm text-muted">
+            {semesterTerms.loading ? 'Loading academic term…' : 'No current term or assigned semester requirement is available. Monthly DTR targets do not set semester hours. Contact your administrator to configure the term and assign your requirement.'}
+          </p>
+        )}
+        {selectedTerm && !selectedTerm.requirementAssigned && (
+          <div className="space-y-2">
+            <p className="font-medium text-ink">
+              {selectedTerm.academicYear} · {selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}
+            </p>
+            <p className="text-sm text-muted">No duty-hour requirement assigned</p>
+            <p className="text-xs text-muted">Recorded hours are not treated as verified hours. Only approved DTR sessions count toward semester completion.</p>
+          </div>
+        )}
+        {selectedTerm?.requirementAssigned && (
+          <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-teal" />
               <span className="font-medium text-ink">
-                {formatHours(recorded)} recorded of {formatHours(required)} required
+                {selectedTerm.academicYear} · {selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Badge tone={progressPercent >= 100 ? 'approved' : progressPercent >= 50 ? 'info' : 'pending'}>
                 {progressPercent}% Complete
               </Badge>
-              {remaining > 0 ? (
-                <span className="text-muted text-xs font-medium">({formatHours(remaining)} remaining)</span>
+              {remainingSemesterHours > 0 ? (
+                <span className="text-muted text-xs font-medium">({formatHours(remainingSemesterHours)} remaining)</span>
               ) : (
                 <span className="text-ok-fg text-xs font-semibold">Requirement met!</span>
               )}
             </div>
           </div>
-          <ProgressBar value={recorded} max={required} label="Duty hours progress" />
-          <p className="text-xs text-muted">
-            Progress is calculated from complete attendance sessions recorded this month. Approval of your monthly DTR converts recorded hours into officially verified hours.
+          <p className="text-sm text-ink">
+            {formatHours(verifiedSemesterHours)} verified of {formatHours(requiredSemesterHours)} required
           </p>
-        </div>
+          <ProgressBar value={verifiedSemesterHours} max={requiredSemesterHours} label="Semester duty-hour progress" />
+          <p className="text-xs text-muted">
+            {formatHours(recordedSemesterHours)} hours recorded during {selectedTerm.startsOn} to {selectedTerm.endsOn}. Only approved DTR sessions count toward completion.
+          </p>
+          {selectedTerm.completionDeadline && <p className="text-xs text-muted">Completion deadline: {selectedTerm.completionDeadline}</p>}
+          </div>
+        )}
       </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

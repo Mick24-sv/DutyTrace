@@ -28,8 +28,8 @@ export const env = {
   nodeEnv,
   port: toInt(process.env.PORT, 4000, { max: 65535 }),
   clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
-  // Placeholder until ADNU confirms the official timezone for DTR cutoffs.
-  timezone: process.env.APP_TIMEZONE ?? 'Asia/Manila',
+  // Fallback timezone for month-based records. Each academic term stores its institution timezone.
+  timezone: process.env.APP_TIMEZONE ?? 'UTC',
 
   databaseUrl: process.env.DATABASE_URL,
   testDatabaseUrl: process.env.TEST_DATABASE_URL,
@@ -43,7 +43,7 @@ export const env = {
 
   qrSecret: process.env.QR_SIGNING_SECRET || 'test-only-qr-secret-not-for-real-use-0000000000',
   // A completed session longer than this is NOT counted as hours and is flagged
-  // for review (likely a forgotten time-out). Placeholder until ADNU confirms.
+  // for review (likely a forgotten time-out).
   maxSessionHours: toInt(process.env.MAX_SESSION_HOURS, 12, { max: 24 }),
 
   // Private document storage (Phase 5). Never served statically; files are only reachable through

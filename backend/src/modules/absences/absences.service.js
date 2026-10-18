@@ -38,7 +38,10 @@ const today = async (db = { query }) =>
   (await db.query(`SELECT to_char(now() AT TIME ZONE $1, 'YYYY-MM-DD') AS d`, [env.timezone])).rows[0].d;
 
 const loadRow = async (id, db = { query }, lock = false) =>
-  (await db.query(`SELECT * FROM absence_notices WHERE id = $1${lock ? ' FOR UPDATE' : ''}`, [id])).rows[0];
+  (await db.query(
+    `SELECT a.*, u.institution_id FROM absence_notices a JOIN users u ON u.id = a.user_id
+     WHERE a.id = $1${lock ? ' FOR UPDATE OF a' : ''}`, [id],
+  )).rows[0];
 
 const addEvent = (db, { id, action, from, to, actor, note = null }) =>
   db.query(
@@ -77,6 +80,10 @@ export async function list({ user, status }) {
     if (!user.office) return [];
     params.push(user.office.id); where.push(`a.office_id = $${params.length}`);
     params.push(user.id); where.push(`a.user_id <> $${params.length}`);
+  }
+  if (user.role === 'admin') {
+    if (!user.institutionId) return [];
+    params.push(user.institutionId); where.push(`s.institution_id = $${params.length}`);
   }
   if (status) { params.push(status); where.push(`a.status = $${params.length}`); }
   const { rows } = await query(
@@ -194,7 +201,7 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
     if (!isOfficeSupervisor(user, row)) throw forbidden();
     const nowDay = await today(db);
     if (receivedDate > nowDay) throw new AppError(400, 'VALIDATION_ERROR', 'Please check the highlighted fields.', { receivedDate: 'The received date cannot be in the future.' });
-    const receiver = await validateReceiver(db, receivedById ?? user.id);
+    const receiver = await validateReceiver(db, receivedById ?? user.id, user.institutionId);
     assertRoomForDocument(await countDocuments(db, 'absence_id', id));
     const docId = await insertManualReceipt(db, {
       ownerId: row.user_id, absenceId: id, method, receivedDate, receivedBy: receiver.id, notes, actor: user,
@@ -212,9 +219,11 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
 }
 
 // "Receiving staff member" must be an active supervisor or administrator.
-export async function validateReceiver(db, userId) {
+export async function validateReceiver(db, userId, institutionId) {
   const { rows } = await db.query(
-    `SELECT id, full_name FROM users WHERE id = $1 AND status = 'active' AND role IN ('supervisor', 'admin')`, [userId]);
+    `SELECT id, full_name FROM users
+     WHERE id = $1 AND institution_id = $2 AND status = 'active' AND role IN ('supervisor', 'admin')`,
+    [userId, institutionId]);
   if (!rows[0]) throw new AppError(400, 'VALIDATION_ERROR', 'Please check the highlighted fields.', { receivedById: 'Choose an active supervisor or administrator.' });
   return rows[0];
 }
@@ -230,8 +239,15 @@ export async function summary(user) {
     if (!user.office) return { pending: 0, acknowledged: 0, reviewed: 0, needsFollowUp: 0 };
     where = 'WHERE office_id = $1 AND user_id <> $2';
     params.push(user.office.id, user.id);
+  } else if (user.role === 'admin') {
+    if (!user.institutionId) return { pending: 0, acknowledged: 0, reviewed: 0, needsFollowUp: 0 };
+    where = 'WHERE u.institution_id = $1';
+    params.push(user.institutionId);
   }
-  const { rows } = await query(`SELECT status, count(*)::int AS n FROM absence_notices ${where} GROUP BY status`, params);
+  const { rows } = await query(
+    `SELECT a.status, count(*)::int AS n FROM absence_notices a
+     JOIN users u ON u.id = a.user_id ${where} GROUP BY a.status`, params,
+  );
   const n = (s) => rows.find((r) => r.status === s)?.n ?? 0;
   return { pending: n('pending'), acknowledged: n('acknowledged'), reviewed: n('reviewed'), needsFollowUp: n('needs_follow_up') };
 }

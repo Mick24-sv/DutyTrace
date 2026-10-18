@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
@@ -33,7 +34,7 @@ function StudentHoursInput({ user, onUpdate }) {
         type="button"
         onClick={() => { setVal(user.requiredHours != null ? String(user.requiredHours) : ''); setEditing(true); }}
         className="group flex items-center gap-1.5 text-left text-sm text-ink hover:text-teal focus:outline-none"
-        title="Click to edit required duty hours for this student"
+        title="Monthly DTR requirement override; semester requirements are assigned under Academic Terms"
       >
         {user.requiredHours != null ? (
           <span className="font-semibold text-ink">{user.requiredHours} hrs</span>
@@ -127,7 +128,7 @@ export default function UsersPage() {
     },
     {
       key: 'requiredHours',
-      header: 'Duty Hours / Mo',
+      header: 'Monthly DTR target',
       render: (u) => {
         if (u.role !== 'student') return <span className="text-muted">—</span>;
         return (
@@ -154,7 +155,10 @@ export default function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users & Roles" description="Create accounts, assign people to offices, customize student duty hours, and enable or disable access." />
+      <PageHeader title="Users & Roles" description="Manage accounts and office assignments. Set term-specific duty-hour requirements under Academic Terms." />
+      <div role="note" className="mb-4 rounded-lg bg-info-bg p-3 text-sm text-info-fg">
+        The Monthly DTR target below is used for monthly DTR requirements. It does not set a student's semester-hour requirement; assign semester hours under <Link to="/admin/semesters" className="font-medium underline">Academic Terms</Link>.
+      </div>
       <Card title="Create an account" className="mb-6">
         <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -181,7 +185,7 @@ export default function UsersPage() {
           {form.role === 'student' && (
             <div className="sm:col-span-2">
               <label htmlFor="u-req-hours" className="mb-1 block text-xs font-medium text-muted">
-                Required monthly duty hours (optional)
+                Monthly DTR target override (optional)
               </label>
               <input
                 id="u-req-hours"
@@ -189,13 +193,13 @@ export default function UsersPage() {
                 step="0.5"
                 min="0.5"
                 max="744"
-                placeholder="Leave blank to use institutional default (Policy Settings)"
+                placeholder="Use institutional monthly DTR policy"
                 value={form.requiredHours}
                 onChange={set('requiredHours')}
                 className={field}
               />
               <p className="mt-1 text-[11px] text-muted">
-                Assign a custom monthly duty-hour requirement for this student, or leave blank to follow the institutional default.
+                This value is only saved in monthly DTR snapshots. Assign semester completion targets under Academic Terms.
               </p>
             </div>
           )}

@@ -1,10 +1,10 @@
 # DutyTrace
 
-**A QR-Enabled Student Assistant Duty Verification and Compliance Tracking Platform for Ateneo de Naga University**
+**A QR-enabled Student Assistant duty verification and compliance platform for universities and colleges**
 
 An academic capstone project. DutyTrace aims to digitize Student Assistant (SA) attendance, duty-hour compliance, monthly DTRs, supervisor verification, absence notices, and compliance-case tracking.
 
-> **Status: Phase 6 (complete dashboards and reports).** Real sign-in, role-based access, PostgreSQL schema, QR time-in/time-out, attendance history, recorded-hour calculation, monthly DTR generation, PDF export, supervisor review/approval, absence notices, private document uploads, administrator compliance cases, and real-data role dashboards (Student Assistant, Office Supervisor, Administrator) with comprehensive institutional reports, date/month/office/status filtering, pagination, and RFC 4180 CSV export. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. *Verified* hours exist only for **approved** DTRs. ADNU has not approved any workflow or policy; the DTR template is **provisional** and the required-hours value is a **placeholder**. See [docs/open-questions.md](docs/open-questions.md).
+> **Status: existing Phase 1–6 features plus semester-based duty-hour requirements.** Academic terms and individually assigned semester-hour targets are configurable per institution. Student semester completion uses approved DTR hours, while monthly DTR generation and review continue on their existing month-end workflow. No school calendar or semester-hour target is assumed. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
 
 ## Tech stack
 
@@ -24,7 +24,7 @@ PostgreSQL · Express.js · React (Vite) · Node.js · Tailwind CSS v4 · `pg` (
 dutytrace/
   frontend/   React + Vite app (components/, pages/, routes/, hooks/, services/, styles/)
   backend/    Express API (src/{config,db,middleware,utils,routes,modules}, tests/)
-  database/   SQL migrations (database/migrations/0001..0005), the single source of truth for the schema
+  database/   SQL migrations, the single source of truth for the schema
   docs/       architecture, database schema, API endpoints, development plan, open questions
 ```
 
@@ -37,15 +37,15 @@ There is **no demo data and no hardcoded account** in the app. Everything on scr
 3. **Configure the backend:** `cp backend/.env.example backend/.env`, then set at least:
    - `DATABASE_URL=<your Supabase connection string>` and `DATABASE_SSL=true`
    - `QR_SIGNING_SECRET=<long random string>` (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`). Changing it invalidates printed QR codes.
-   - `CLIENT_ORIGIN`, `APP_TIMEZONE` (a placeholder until ADNU confirms it)
+   - `CLIENT_ORIGIN`, `APP_TIMEZONE` (fallback timezone for the existing monthly DTR workflow)
 4. **Create the tables:** `npm run db:migrate`. This applies `database/migrations/*.sql` in order and is safe to re-run (a checksum stops edited migrations).
 5. **Create your first administrator** (nothing is preloaded):
 
    ```bash
-   ADMIN_EMAIL=you@school.edu ADMIN_NAME="Your Name" ADMIN_PASSWORD='a-long-password-10+' npm run db:create-admin
+   ADMIN_EMAIL=you@school.edu ADMIN_NAME="Your Name" ADMIN_PASSWORD='a-long-password-10+' ADMIN_INSTITUTION_NAME="Your Institution" ADMIN_INSTITUTION_TIMEZONE="America/New_York" npm run db:create-admin
    ```
 
-   Sign in as that administrator, then create offices, supervisors and Student Assistants in the app (*Offices* -> add offices; *Users & Roles* -> create accounts and assign each person to an office) and generate each office's QR code under *Office QR Codes*.
+   Set the institution name and IANA timezone for this administrator's tenant. Each institution is managed by its own administrator account. To bootstrap a separate institution, run this command with that institution's unique admin email, name and institution name. Sign in, add offices under *Offices*, create accounts under *Users & Roles*, configure academic years and semester dates under *Academic Terms*, assign individual hour requirements, and generate office QR codes.
 6. **Run:** `npm run dev` (API on http://localhost:4000, app on http://localhost:5173).
 
 Notes for Supabase:
@@ -64,11 +64,11 @@ npm run dev          # backend on :4000 and frontend on :5173
 
 | Command | What it does |
 | --- | --- |
-| `npm test` | Backend tests (auth, permissions, QR, attendance, hour calculations, DTR workflow, PDF, absences, documents, cases) against `TEST_DATABASE_URL`. Test fixtures with fictional users live in `backend/tests/fixtures/` and are never used by the app |
+| `npm test` | Backend tests (auth, institution permissions, QR, attendance, hour calculations, DTR workflow, semester requirements, PDF, absences, documents, cases) against `TEST_DATABASE_URL`. Test fixtures with fictional users live in `backend/tests/fixtures/` and are never used by the app |
 | `npm run build` | Production build of the frontend into `frontend/dist/` |
 | `npm start` | Runs the API without file watching |
 | `npm run db:migrate` | Apply pending migrations |
-| `npm run db:create-admin` | Create/reset the first administrator from `ADMIN_EMAIL`, `ADMIN_NAME`, `ADMIN_PASSWORD` |
+| `npm run db:create-admin` | Create/reset an administrator and institution from `ADMIN_EMAIL`, `ADMIN_NAME`, `ADMIN_PASSWORD`, and optionally `ADMIN_INSTITUTION_NAME` / `ADMIN_INSTITUTION_TIMEZONE` |
 
 ## QR attendance: how to use it
 
@@ -83,7 +83,7 @@ Things worth knowing:
 - The server uses its **own clock** for every time-in/out; the API accepts no timestamp and no user id.
 - Set a real `QR_SIGNING_SECRET` in production (the app refuses to start without one). Changing it invalidates every printed code.
 
-### Recorded hours: the rules (confirm with ADNU)
+### Recorded hours: the rules (confirm with your institution)
 
 Hours come only from events; nothing is stored as a total. See `backend/src/modules/attendance/calc.js`.
 
@@ -99,7 +99,7 @@ A session belongs to the local day it started (in `APP_TIMEZONE`). **Recorded is
 
 ### Limits of QR attendance (be honest in your capstone defense)
 
-A printed QR code is static: a photo of it could be scanned from somewhere else. This build reduces the risk (sign-in required, the code must match the user's *assigned* office, server-side timestamps, revocable and regenerable codes, every accepted and refused scan audited with IP/device) but does **not** prove physical presence. Stronger options for later: a rotating code shown on a screen at the office, or office Wi-Fi/location checks. Both need ADNU's agreement.
+A printed QR code is static: a photo of it could be scanned from somewhere else. This build reduces the risk (sign-in required, the code must match the user's *assigned* office, server-side timestamps, revocable and regenerable codes, every accepted and refused scan audited with IP/device) but does **not** prove physical presence. Stronger options for later: a rotating code shown on a screen at the office, or office Wi-Fi/location checks. Both need institutional approval.
 
 ## Monthly DTR: how to use it
 
@@ -125,14 +125,14 @@ Rules worth knowing:
 - **Nothing is silently counted.** Missing time-outs, orphan time-outs, over-length sessions and sessions still open when the DTR was made are listed as *flagged* and are not counted. (There is no separate "disputed" mechanism yet; the way to dispute is to return the DTR with a reason.)
 - **Revisions are immutable.** Every generation adds a revision; revisions and the event history (who generated/submitted/started review/approved/returned, when, and the reason) are append-only, enforced by database triggers (UPDATE, DELETE and TRUNCATE are refused). Approved DTRs cannot be updated or deleted, even with SQL. A change to the required hours affects only later revisions.
 - **Access.** Students: own DTRs only. Supervisors: DTRs of the office on the DTR (their own office), never their own, never drafts. Administrators: read-only. Nobody can review their own DTR (checked in the API and by a database constraint).
-- **The PDF is a provisional template** and says so on every page. It is *not* the official ADNU DTR form; replace it when ADNU supplies one. The required-hours value (default 40) is a placeholder, not ADNU policy.
+- **The PDF is a provisional template** and says so on every page. It is not any institution's official DTR form; replace it when the institution supplies one. The monthly DTR target is separate from semester completion requirements.
 - A DTR belongs to the office the student is assigned to **when it is generated**. A student who worked in two offices in one month still gets one DTR (documented limitation).
 
 ## Absence notices, documents and compliance cases: how to use them
 
 **Absence notices** (Student Assistant -> supervisor of their office)
 
-1. The student opens *Absence Notices* -> *New absence notice*: type (*planned*: starts today or later; *unexpected*: starts today or earlier), first and last day, and a reason. Dates are checked on the server clock (`APP_TIMEZONE`). A notice can be up to 31 days long; these are technical limits, not ADNU rules.
+1. The student opens *Absence Notices* -> *New absence notice*: type (*planned*: starts today or later; *unexpected*: starts today or earlier), first and last day, and a reason. Dates are checked on the server clock (`APP_TIMEZONE`). A notice can be up to 31 days long; these are technical limits, not institutional rules.
 2. The student can attach PDF/PNG/JPEG supporting documents to the notice.
 3. The supervisor of that office sees it under *Absence Notices* and can **acknowledge**, **mark reviewed** (response required) or **request follow-up** (response required). The student answers a follow-up and the notice returns to *Awaiting review*. Supervisors can also record something received **by email or in person** (a note with a date; no file).
 4. The student follows the status and every response on the notice page.
@@ -144,7 +144,7 @@ Rules worth knowing:
 **Compliance cases** (administrator-run)
 
 1. Only an **administrator** opens a case (*Compliance Cases* -> *Open a case*): student, a **case type**, period, description. Cases are never opened automatically from hours or absence notices.
-2. *Case types* are configured by the administrator on the same page (name, code, list of requested documents). The two types in the demo seed are fictional placeholders, not ADNU policy. A case copies its type's requested documents when it is opened; changing the type later does not change existing cases.
+2. *Case types* are configured by the administrator on the same page (name, code, list of requested documents). The two types in the demo seed are fictional placeholders, not institutional policy. A case copies its type's requested documents when it is opened; changing the type later does not change existing cases.
 3. The student uploads a document for each requested item (or an administrator/supervisor records an email/in-person receipt, or an administrator **waives** it with a reason), then **submits** the case. While documents are missing the case is *Documents pending* and cannot be submitted.
 4. The administrator **starts review**, then **requests a correction** (note required), **resolves** (final decision text and resolution date required) or **closes** (note required). A student answers a correction with **respond** (message required; all required documents must be present). A resolved case can be **reopened** by an administrator (reason required). *Closed* is final.
 5. Supervisors of the case's office can read the case, add notes and record receipts. They cannot decide, correct, resolve or close.
@@ -164,21 +164,30 @@ Limits to know about: no virus scanning of uploads, local-disk file storage (swa
 
 ### Role-specific dashboards
 
-- **Student Assistant Dashboard:** Displays live today's attendance state (`Timed in` with since timestamp or `Not timed in`), recorded hours this month, verified hours (from approved DTRs), required hours, remaining hours with an interactive progress bar, recent attendance history with flagged incomplete sessions, latest monthly DTR status, and active notices/compliance cases requiring attention.
-- **Office Supervisor Dashboard:** Displays assigned student assistants, today's live office attendance overview, incomplete records requiring review, pending DTR reviews waiting for action, absence notices awaiting review or follow-up, students below configured duty-hour requirements (showing deficit and percentage), and active compliance cases in the office. Strictly scoped to the supervisor's authorized office.
-- **Administrator Dashboard:** Institutional metrics showing total and active users (students, supervisors), office counts, active live duty attendance across all offices, monthly DTR status breakdown (current month and all-time), system-wide recorded vs. verified hours, students with outstanding duty-hour requirements, open compliance cases, absence notices breakdown, and document submissions audit.
+- **Student Assistant Dashboard:** Displays today's clock-in state, selected semester's recorded and approved-DTR verified hours, assigned remaining semester hours and completion progress (or "No duty-hour requirement assigned"), recent attendance, monthly DTR status, and active notices/compliance cases.
+- **Office Supervisor Dashboard:** Displays assigned student assistants, today's live office attendance overview, incomplete records requiring review, pending DTR reviews, semester requirement progress, absence notices awaiting review or follow-up, and active compliance cases in the office. Strictly scoped to the supervisor's authorized office.
+- **Administrator Dashboard:** Institution-scoped metrics showing total and active users, office counts, live duty attendance, monthly DTR status, recorded vs. verified hours, semester completion progress, compliance cases, absence notices, and document submissions.
 
 ### Institutional reports and CSV export
 
-Available to **Administrators** (all offices or filtered) and **Office Supervisors** (strictly scoped to their office) under *Reports*:
+Available to **Administrators** (all offices in their institution or filtered) and **Office Supervisors** (strictly scoped to their office) under *Reports*:
 1. **Attendance Sessions:** Filter by office, student, date range (`from`/`to`), and month. Shows session time-in, time-out, duration, counted status, and flags (such as midnight crossings or over-length sessions).
 2. **Recorded vs. Verified Hours:** Filter by month and office. Displays student recorded duty time, approved verified time, remaining deficit, unverified variance, and DTR status.
 3. **Monthly DTR Status:** Filter by month, office, and review status (`draft`, `submitted`, `under_review`, `approved`, `needs_correction`).
 4. **Outstanding Requirements:** Highlights students who have not met their monthly duty requirements, with the exact deficit and progress.
 5. **Absence Notifications:** Filter by office, absence type (`planned`, `unexpected`), date range, and review status.
 6. **Compliance Cases:** Filter by office, case type, date range, and status (`open`, `documents_pending`, `under_review`, `needs_correction`, `resolved`, `closed`).
+7. **Semester Hours:** Filter by academic term and office. Shows each student's assigned requirement, recorded and approved verified totals, remaining hours, and completion percentage.
 
 Every report includes pagination controls and a one-click **Export CSV** button adhering to RFC 4180.
+
+All administrator views and actions are restricted to the administrator's institution. Reports for administrators can include all offices within that institution or a selected office.
+
+## Semester duty-hour completion
+
+Administrators configure their institution name and timezone, academic year, semester dates, optional deadline, and individual Student Assistant hour requirements under *Academic Terms*. Requirements are not inferred or defaulted: students without an assignment see **No duty-hour requirement assigned**. Semester reports keep each term separate; only counted sessions from approved DTR revisions contribute to verified hours. Requirement changes are audited and append a history row. Finalizing a term locks its dates and assignments so later changes cannot silently alter its historical report.
+
+Semester totals are separate from monthly DTR generation and monthly DTR policy. Monthly DTRs continue to follow the existing month-end generation and supervisor review workflow.
 
 ## How authentication works (short version)
 
@@ -196,7 +205,7 @@ All colors are defined once in `frontend/src/styles/index.css` (`@theme` block) 
 - Secrets belong in `.env` files, which are git-ignored. Only `.env.example` files are committed.
 - Anything prefixed `VITE_` is public in the browser bundle.
 - **Production:** set `NODE_ENV=production` (enables `Secure` cookies; requires HTTPS), set `CLIENT_ORIGIN` to the real site, and set `TRUST_PROXY=1` behind a reverse proxy. If the client and API are on *different sites*, cookie settings (`SameSite`) and CORS must be revisited; the simplest deployment serves both from one origin.
-- **Uploaded documents are sensitive.** They are private and access-checked, but there is no virus scanning, no encryption at rest beyond what the disk provides, and no retention/deletion policy yet. ADNU's data-privacy review (open question 8 and 11) must happen before real student documents are stored.
+- **Uploaded documents are sensitive.** They are private and access-checked, but there is no virus scanning, no encryption at rest beyond what the disk provides, and no retention/deletion policy yet. Institutional data-privacy review (open question 8 and 11) must happen before real student documents are stored.
 - Not yet implemented: attendance corrections (a returned DTR cannot fix attendance by itself; corrections need their own auditable records), partial approval, DTR notifications/emails, password change/reset, email verification, multi-factor authentication, CSRF tokens (we rely on SameSite + Origin checks), admin forms for creating users in the UI (the API supports it).
 - This is a development build. It has not had a security review and must not be called production-ready.
 

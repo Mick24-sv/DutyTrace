@@ -3,6 +3,7 @@ import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { buildSessions, summarizeMonth, localDateKey, STATUS } from '../attendance/calc.js';
 import { isMonth } from '../attendance/attendance.service.js';
+import { allInstitutionProgress, currentTerm, officeProgress } from '../semesters/semesters.service.js';
 
 const maxSessionSeconds = () => env.maxSessionHours * 3600;
 
@@ -19,8 +20,11 @@ export async function resolveMonthRange(requested) {
 }
 
 // Fetch active required monthly hours from policy settings
-export async function getRequiredHours() {
-  const { rows } = await query('SELECT required_monthly_hours FROM policy_settings WHERE id = true');
+export async function getRequiredHours(institutionId) {
+  const { rows } = await query(
+    'SELECT required_monthly_hours FROM institution_dtr_policies WHERE institution_id = $1',
+    [institutionId],
+  );
   return Number(rows[0]?.required_monthly_hours ?? 40);
 }
 
@@ -79,7 +83,8 @@ export async function attendanceReport({ user, officeId, userId, from, to, month
 
   // Find target students
   const userParams = [];
-  const userWhere = [`u.role = 'student'`];
+  const userWhere = [`u.role = 'student'`, `u.institution_id = $1`];
+  userParams.push(user.institutionId);
 
   if (effectiveOfficeId) {
     userParams.push(effectiveOfficeId);
@@ -221,11 +226,12 @@ export const attendanceCsvColumns = [
 export async function hoursReport({ user, officeId, month, page, limit }) {
   const effectiveOfficeId = enforceOfficeScope(user, officeId);
   const monthRange = await resolveMonthRange(month);
-  const requiredHours = await getRequiredHours();
+  const requiredHours = await getRequiredHours(user.institutionId);
 
   // Find active student assistants
   const params = [];
-  let where = `u.role = 'student' AND u.status = 'active'`;
+  let where = `u.role = 'student' AND u.status = 'active' AND u.institution_id = $1`;
+  params.push(user.institutionId);
   if (effectiveOfficeId) {
     params.push(effectiveOfficeId);
     where += ` AND d.office_id = $${params.length} AND d.ends_on IS NULL`;
@@ -353,6 +359,66 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   };
 }
 
+export async function semesterHoursReport({ user, termId, officeId }) {
+  let term;
+  let students;
+  if (!termId) {
+    term = await currentTerm(user.institutionId);
+    if (!term) return { term: null, items: [], summary: emptySemesterSummary() };
+    termId = term.id;
+  }
+  if (user.role === 'supervisor') {
+    const scopedOfficeId = enforceOfficeScope(user, officeId);
+    const result = await officeProgress({ actor: user, termId, officeId: scopedOfficeId });
+    term = result.term;
+    students = result.students;
+  } else {
+    const result = await allInstitutionProgress({ actor: user, termId });
+    term = result.term;
+    students = officeId ? result.students.filter((student) => student.officeId === officeId) : result.students;
+  }
+
+  const items = students.map((student) => ({
+    ...student,
+    termId: term.id,
+    academicYear: term.academicYear,
+    semester: term.semester,
+    startsOn: term.startsOn,
+    endsOn: term.endsOn,
+    completionDeadline: term.completionDeadline,
+    meetsRequirement: student.requirementAssigned && student.remainingHours === 0,
+  }));
+  const assigned = items.filter((student) => student.requirementAssigned);
+  return {
+    term,
+    items,
+    summary: {
+      ...emptySemesterSummary(),
+      totalStudents: items.length,
+      assignedRequirements: assigned.length,
+      totalRecordedHours: hoursSum(items, 'recordedHours'),
+      totalVerifiedHours: hoursSum(items, 'verifiedHours'),
+      totalRequiredHours: hoursSum(assigned, 'requiredHours'),
+      studentsMetRequirement: assigned.filter((student) => student.meetsRequirement).length,
+      studentsBelowRequirement: assigned.filter((student) => !student.meetsRequirement).length,
+    },
+  };
+}
+
+function hoursSum(items, field) {
+  return Math.round(items.reduce((sum, student) => sum + (student[field] ?? 0), 0) * 100) / 100;
+}
+
+const emptySemesterSummary = () => ({
+  totalStudents: 0,
+  assignedRequirements: 0,
+  totalRecordedHours: 0,
+  totalVerifiedHours: 0,
+  totalRequiredHours: 0,
+  studentsMetRequirement: 0,
+  studentsBelowRequirement: 0,
+});
+
 export const hoursCsvColumns = [
   { header: 'Student Assistant', key: 'studentName' },
   { header: 'Email', key: 'studentEmail' },
@@ -372,8 +438,8 @@ export const hoursCsvColumns = [
 // -----------------------------------------------------------------------------------------
 export async function dtrReport({ user, officeId, month, status, page, limit }) {
   const effectiveOfficeId = enforceOfficeScope(user, officeId);
-  const params = [];
-  const where = [];
+  const params = [user.institutionId];
+  const where = ['u.institution_id = $1'];
 
   if (effectiveOfficeId) {
     params.push(effectiveOfficeId);
@@ -489,8 +555,8 @@ export const outstandingCsvColumns = [
 // -----------------------------------------------------------------------------------------
 export async function absencesReport({ user, officeId, status, type, from, to, page, limit }) {
   const effectiveOfficeId = enforceOfficeScope(user, officeId);
-  const params = [];
-  const where = [];
+  const params = [user.institutionId];
+  const where = ['u.institution_id = $1'];
 
   if (effectiveOfficeId) {
     params.push(effectiveOfficeId);
@@ -587,8 +653,8 @@ export const absencesCsvColumns = [
 // -----------------------------------------------------------------------------------------
 export async function casesReport({ user, officeId, status, caseTypeId, from, to, page, limit }) {
   const effectiveOfficeId = enforceOfficeScope(user, officeId);
-  const params = [];
-  const where = [];
+  const params = [user.institutionId];
+  const where = ['u.institution_id = $1'];
 
   if (effectiveOfficeId) {
     params.push(effectiveOfficeId);
@@ -688,12 +754,30 @@ export const casesCsvColumns = [
 // -----------------------------------------------------------------------------------------
 export async function getDashboardStats(user) {
   const monthRange = await resolveMonthRange();
-  const requiredHours = await getRequiredHours();
+  const requiredHours = await getRequiredHours(user.institutionId);
+  const term = await currentTerm(user.institutionId);
+  const semesterProgress = !term
+    ? { term: null, students: [] }
+    : user.role === 'admin'
+      ? await allInstitutionProgress({ actor: user, termId: term.id })
+      : user.office?.id
+        ? await officeProgress({ actor: user, termId: term.id, officeId: user.office.id })
+        : { term, students: [] };
+  const assignedTermStudents = semesterProgress.students.filter((student) => student.requirementAssigned);
+  const termSummary = {
+    term: semesterProgress.term,
+    totalRecordedHours: hoursSum(semesterProgress.students, 'recordedHours'),
+    totalVerifiedHours: hoursSum(semesterProgress.students, 'verifiedHours'),
+    totalRequiredHours: hoursSum(assignedTermStudents, 'requiredHours'),
+    studentsMetRequirement: assignedTermStudents.filter((student) => student.remainingHours === 0).length,
+    studentsBelowRequirement: assignedTermStudents.filter((student) => student.remainingHours > 0).length,
+  };
 
   if (user.role === 'admin') {
     // 1. Users count by role & status
     const { rows: userStats } = await query(
-      `SELECT role, status, count(*)::int AS count FROM users GROUP BY role, status`,
+      `SELECT role, status, count(*)::int AS count FROM users WHERE institution_id = $1 GROUP BY role, status`,
+      [user.institutionId],
     );
     const totalUsers = userStats.reduce((sum, r) => sum + r.count, 0);
     const activeUsers = userStats.filter((r) => r.status === 'active').reduce((sum, r) => sum + r.count, 0);
@@ -702,24 +786,29 @@ export async function getDashboardStats(user) {
 
     // 2. Offices count
     const { rows: officeStats } = await query(
-      `SELECT count(*)::int AS total, count(*) FILTER (WHERE is_active)::int AS active FROM offices`,
+      `SELECT count(*)::int AS total, count(*) FILTER (WHERE is_active)::int AS active FROM offices WHERE institution_id = $1`,
+      [user.institutionId],
     );
 
     // 3. Attendance today & active timed-in
     const { rows: timedInRows } = await query(
       `SELECT count(*)::int AS timed_in FROM (
-         SELECT DISTINCT ON (user_id) event_type FROM attendance_events
-         ORDER BY user_id, recorded_at DESC, seq DESC
+         SELECT DISTINCT ON (e.user_id) e.event_type FROM attendance_events e
+         JOIN users u ON u.id = e.user_id
+         WHERE u.institution_id = $1
+         ORDER BY e.user_id, e.recorded_at DESC, e.seq DESC
        ) last WHERE last.event_type = 'time_in'`,
+      [user.institutionId],
     );
 
     // 4. Monthly DTR stats for all-time and current month
     const { rows: dtrRows } = await query(
-      `SELECT status, count(*)::int AS count,
-              count(*) FILTER (WHERE month = $1)::int AS count_current_month,
-              coalesce(sum(verified_seconds) FILTER (WHERE month = $1 AND status = 'approved'), 0)::bigint AS verified_seconds_current_month
-       FROM monthly_dtrs GROUP BY status`,
-      [monthRange.month],
+      `SELECT d.status, count(*)::int AS count,
+              count(*) FILTER (WHERE d.month = $1)::int AS count_current_month,
+              coalesce(sum(d.verified_seconds) FILTER (WHERE d.month = $1 AND d.status = 'approved'), 0)::bigint AS verified_seconds_current_month
+       FROM monthly_dtrs d JOIN users u ON u.id = d.user_id
+       WHERE u.institution_id = $2 GROUP BY d.status`,
+      [monthRange.month, user.institutionId],
     );
     const dtrCounts = { draft: 0, submitted: 0, under_review: 0, approved: 0, needs_correction: 0 };
     const dtrCurrentMonthCounts = { draft: 0, submitted: 0, under_review: 0, approved: 0, needs_correction: 0 };
@@ -736,7 +825,9 @@ export async function getDashboardStats(user) {
 
     // 6. Compliance cases
     const { rows: caseRows } = await query(
-      `SELECT status, count(*)::int AS count FROM compliance_cases GROUP BY status`,
+      `SELECT c.status, count(*)::int AS count FROM compliance_cases c
+       JOIN offices o ON o.id = c.office_id WHERE o.institution_id = $1 GROUP BY c.status`,
+      [user.institutionId],
     );
     const caseCounts = { open: 0, documents_pending: 0, under_review: 0, needs_correction: 0, resolved: 0, closed: 0 };
     for (const r of caseRows) {
@@ -746,7 +837,9 @@ export async function getDashboardStats(user) {
 
     // 7. Absences
     const { rows: absenceRows } = await query(
-      `SELECT status, count(*)::int AS count FROM absence_notices GROUP BY status`,
+      `SELECT a.status, count(*)::int AS count FROM absence_notices a
+       JOIN offices o ON o.id = a.office_id WHERE o.institution_id = $1 GROUP BY a.status`,
+      [user.institutionId],
     );
     const absenceCounts = { pending: 0, acknowledged: 0, reviewed: 0, needs_follow_up: 0 };
     for (const r of absenceRows) {
@@ -758,7 +851,11 @@ export async function getDashboardStats(user) {
       `SELECT method, count(*)::int AS count,
               count(*) FILTER (WHERE absence_id IS NOT NULL)::int AS for_absences,
               count(*) FILTER (WHERE case_id IS NOT NULL)::int AS for_cases
-       FROM documents GROUP BY method`,
+       FROM documents d
+       WHERE (d.absence_id IN (SELECT a.id FROM absence_notices a JOIN offices o ON o.id = a.office_id WHERE o.institution_id = $1)
+          OR d.case_id IN (SELECT c.id FROM compliance_cases c JOIN offices o ON o.id = c.office_id WHERE o.institution_id = $1))
+       GROUP BY method`,
+      [user.institutionId],
     );
     const totalDocs = docRows.reduce((sum, r) => sum + r.count, 0);
     const onlineDocs = docRows.find((r) => r.method === 'online')?.count ?? 0;
@@ -794,6 +891,7 @@ export async function getDashboardStats(user) {
         studentsMetRequirement: hoursData.summary.studentsMetRequirement,
         studentsBelowRequirement: hoursData.summary.studentsBelowRequirement,
       },
+      semesterSummary: termSummary,
       cases: {
         ...caseCounts,
         activeTotal: openCases,
@@ -833,7 +931,32 @@ export async function getDashboardStats(user) {
 
     // 1. Hours and assistants
     const hoursData = await hoursReport({ user, officeId, month: monthRange.month, page: 1, limit: 1000 });
-    const studentsBelow = hoursData.items.filter((r) => !r.meetsRequirement);
+    const semesterById = new Map(semesterProgress.students.map((student) => [student.id, student]));
+    const monthlyById = new Map(hoursData.items.map((student) => [student.id, student]));
+    const studentsBelow = semesterProgress.students
+      .filter((student) => student.requirementAssigned && student.remainingHours > 0)
+      .map((student) => ({
+        ...student,
+        studentName: student.fullName,
+        semesterRequirementAssigned: student.requirementAssigned,
+        semesterVerifiedHours: student.verifiedHours,
+        semesterRequiredHours: student.requiredHours,
+        semesterRemainingHours: student.remainingHours,
+        dtrStatus: monthlyById.get(student.id)?.dtrStatus ?? 'none',
+      }));
+    const assistants = hoursData.items.map((student) => {
+      const semester = semesterById.get(student.id);
+      return {
+        ...student,
+        semesterRecordedHours: semester?.recordedHours ?? 0,
+        semesterVerifiedHours: semester?.verifiedHours ?? 0,
+        semesterRequiredHours: semester?.requiredHours ?? null,
+        semesterRemainingHours: semester?.remainingHours ?? null,
+        semesterCompletionPercentage: semester?.completionPercentage ?? null,
+        semesterRequirementAssigned: semester?.requirementAssigned ?? false,
+        meetsRequirement: semester?.requirementAssigned ? semester.remainingHours === 0 : null,
+      };
+    });
 
     // 2. Today's attendance state for students in office
     const { rows: todayStates } = await query(
@@ -891,9 +1014,10 @@ export async function getDashboardStats(user) {
       role: 'supervisor',
       office: user.office,
       month: monthRange.month,
-      assistants: hoursData.items,
+      assistants,
       todayAttendance: todayList,
       studentsBelowRequirement: studentsBelow,
+      semesterSummary: termSummary,
       stats: {
         totalAssistants: hoursData.items.length,
         timedInToday: timedInCount,
@@ -908,4 +1032,3 @@ export async function getDashboardStats(user) {
 
   throw new AppError(403, 'FORBIDDEN', 'Role not supported for dashboard stats.');
 }
-

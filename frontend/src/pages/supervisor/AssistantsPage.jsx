@@ -14,9 +14,14 @@ export default function AssistantsPage() {
   const { user } = useAuth();
   const [month, setMonth] = useState('');
   const officeId = user.office?.id;
-  const { data, loading, error } = useApiData(
+  const monthData = useApiData(
     officeId ? `/attendance/office/${officeId}/summary${month ? `?month=${month}` : ''}` : null,
   );
+  const semesterData = useApiData(officeId ? '/semesters/current/office' : null);
+  const data = monthData.data;
+  const loading = monthData.loading || semesterData.loading;
+  const error = monthData.error || semesterData.error;
+  const semesterStudents = new Map((semesterData.data?.students ?? []).map((student) => [student.id, student]));
 
   const columns = [
     {
@@ -27,7 +32,16 @@ export default function AssistantsPage() {
       key: 'state', header: 'Now',
       render: (a) => <Badge tone={a.state === 'timed_in' ? 'pending' : 'neutral'}>{a.state === 'timed_in' ? 'Timed in' : 'Not timed in'}</Badge>,
     },
-    { key: 'hours', header: 'Recorded hours', render: (a) => formatHours(a.totals.recordedHours) },
+    { key: 'hours', header: 'Recorded hours (month)', render: (a) => formatHours(a.totals.recordedHours) },
+    {
+      key: 'semesterHours', header: 'Semester verified / remaining',
+      render: (a) => {
+        const semester = semesterStudents.get(a.id);
+        if (!semester) return '—';
+        if (!semester.requirementAssigned) return <span className="text-xs text-muted">No requirement assigned</span>;
+        return `${formatHours(semester.verifiedHours)} / ${formatHours(semester.remainingHours)} h remaining`;
+      },
+    },
     {
       key: 'attention', header: 'Need attention',
       render: (a) => (a.totals.incompleteCount > 0 ? <Badge tone="rejected">{a.totals.incompleteCount} to review</Badge> : <span className="text-muted">None</span>),
@@ -40,7 +54,7 @@ export default function AssistantsPage() {
 
   return (
     <>
-      <PageHeader title="Student Assistants" description={user.office ? `${user.office.name}: recorded attendance this month.` : undefined}>
+      <PageHeader title="Student Assistants" description={user.office ? `${user.office.name}: monthly attendance and current semester requirement progress.` : undefined}>
         <div>
           <label htmlFor="month" className="mb-1 block text-xs font-medium text-muted">Month</label>
           <input
@@ -64,7 +78,8 @@ export default function AssistantsPage() {
         )}
       </Card>
       <p className="mt-3 text-xs text-muted">
-        Recorded hours are not verified hours. Verification happens when you approve a monthly DTR (DTR Review).
+        Monthly recorded hours are separate from semester completion. Only hours verified by approved DTRs count toward semester requirements.
+        {semesterData.data?.term && ` Current term: ${semesterData.data.term.academicYear} · ${semesterData.data.term.semester}.`}
       </p>
     </>
   );

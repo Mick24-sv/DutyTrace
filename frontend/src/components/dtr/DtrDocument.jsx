@@ -41,8 +41,8 @@ export default function DtrDocument({ snapshot, verifiedHours = null, isApproved
   return (
     <>
       <p className="mb-4 rounded-lg border border-line bg-canvas px-4 py-3 text-sm text-muted">
-        <strong className="text-navy">Provisional template.</strong> This is not the official ADNU DTR form.
-        Times are shown in {timezone}. The required hours value is a configurable placeholder, not confirmed ADNU policy.
+        <strong className="text-navy">Provisional template.</strong> This is not the institution's official DTR form.
+        Times are shown in {timezone}. Monthly DTR targets are separate from semester duty-hour requirements.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

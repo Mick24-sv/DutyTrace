@@ -134,6 +134,36 @@ const outstandingQuerySchema = paginationSchema.extend({
   month: monthSchema,
 });
 
+const semesterHoursQuerySchema = z.object({
+  termId: z.string().uuid().optional(),
+  officeId: z.string().uuid().optional(),
+  format: z.enum(['json', 'csv']).default('json'),
+});
+
+const semesterHoursCsvColumns = [
+  { header: 'Student Assistant', key: 'fullName' },
+  { header: 'Email', key: 'email' },
+  { header: 'Office', key: 'officeName' },
+  { header: 'Academic Year', key: 'academicYear' },
+  { header: 'Semester', key: 'semester' },
+  { header: 'Required Hours', key: 'requiredHours' },
+  { header: 'Recorded Hours', key: 'recordedHours' },
+  { header: 'Verified Hours', key: 'verifiedHours' },
+  { header: 'Remaining Hours', key: 'remainingHours' },
+  { header: 'Completion Percentage', key: 'completionPercentage' },
+  { header: 'Deadline', key: 'completionDeadline' },
+];
+
+reportsRouter.get('/semester-hours', asyncHandler(async (req, res) => {
+  const q = parse(semesterHoursQuerySchema, req.query ?? {});
+  const data = await reports.semesterHoursReport({ user: req.user, termId: q.termId, officeId: q.officeId });
+  if (q.format === 'csv') {
+    const termSuffix = data.term ? `${data.term.academicYear}-${data.term.semester}` : 'no-active-term';
+    return sendCsv(res, `semester-hours-${termSuffix}.csv`, semesterHoursCsvColumns, data.items);
+  }
+  ok(res, data);
+}));
+
 reportsRouter.get('/outstanding-requirements', asyncHandler(async (req, res) => {
   const q = parse(outstandingQuerySchema, req.query ?? {});
   const data = await reports.outstandingRequirementsReport({
@@ -209,4 +239,3 @@ reportsRouter.get('/cases', asyncHandler(async (req, res) => {
   }
   return ok(res, data);
 }));
-

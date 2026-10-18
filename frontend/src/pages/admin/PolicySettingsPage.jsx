@@ -6,8 +6,8 @@ import { useApiData } from '../../hooks/useApiData.js';
 import { apiPut } from '../../services/api.js';
 import { formatDateTime } from '../../utils/format.js';
 
-// Administrator: policy values that ADNU has not confirmed yet. Changing the required hours
-// affects DTRs generated AFTER the change; existing revisions keep the value they were made with.
+// Institution-specific monthly DTR policy. Changing the target affects only DTRs
+// generated after the change; existing revisions keep their original snapshot.
 export default function PolicySettingsPage() {
   const { data, loading, error } = useApiData('/dtrs/policy');
   const [policy, setPolicy] = useState(null);
@@ -30,7 +30,7 @@ export default function PolicySettingsPage() {
 
   return (
     <>
-      <PageHeader title="Policy Settings" description="System defaults and institutional policies for DutyTrace." />
+      <PageHeader title="Policy Settings" description="Monthly DTR settings for your institution. Semester targets are assigned individually under Academic Terms." />
       {loading && <p role="status" className="text-sm text-muted">Loading…</p>}
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
       {policy && (
@@ -55,7 +55,7 @@ export default function PolicySettingsPage() {
       <Card title="Other settings" className="mt-6 max-w-xl">
         <ul className="space-y-1 text-sm text-muted">
           <li>Time zone: <strong className="text-ink">{policy?.timezone ?? '…'}</strong> (set by APP_TIMEZONE on the server)</li>
-          <li>DTR template: <strong className="text-ink">Provisional</strong>, not the official ADNU form</li>
+          <li>DTR template: <strong className="text-ink">Provisional</strong>, not your institution's official form</li>
         </ul>
       </Card>
     </>
