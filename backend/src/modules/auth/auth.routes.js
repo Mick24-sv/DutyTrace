@@ -24,12 +24,13 @@ const forgotSchema = z.object({
 });
 
 const resetSchema = z.object({
-  token: z.string().min(1, 'Reset token is required.'),
+  token: z.string().min(1, 'Reset token is required.').max(200),
   password: z
     .string()
     .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters.`)
     .max(200),
 });
+const verifyResetSchema = z.object({ token: z.string().min(1, 'Reset token is required.').max(200) });
 
 const cookieOptions = () => ({
   httpOnly: true,
@@ -114,12 +115,13 @@ export function authRoutes({ loginRateLimitMax = env.loginRateLimitMax } = {}) {
   }));
 
   // ─── Verify Token (GET - for preflight check on the reset page) ───────────
-  // GET /api/auth/reset-password?token=<raw>
-  router.get('/reset-password', resetVerifyLimiter, asyncHandler(async (req, res) => {
-    const rawToken = String(req.query.token ?? '');
+  // Verify tokens in the body so URL and proxy logs do not record bearer tokens.
+  router.post('/reset-password/verify', resetVerifyLimiter, asyncHandler(async (req, res) => {
+    const { token: rawToken } = parse(verifyResetSchema, req.body ?? {});
     const result = await verifyResetToken(rawToken);
     // Return the masked email so the UI can show "Resetting for u***@school.edu"
     const masked = result.email.replace(/^(.{2})(.+)(@.+)$/, (_, a, b, c) => a + '*'.repeat(Math.max(1, b.length)) + c);
+    res.set('Cache-Control', 'no-store');
     ok(res, { valid: true, maskedEmail: masked });
   }));
 
@@ -133,6 +135,7 @@ export function authRoutes({ loginRateLimitMax = env.loginRateLimitMax } = {}) {
       ip: req.ip,
       userAgent: req.get('user-agent'),
     });
+    res.set('Cache-Control', 'no-store');
     ok(res, { message: 'Your password has been changed. Please sign in with your new password.' });
   }));
 

@@ -198,7 +198,19 @@ describe('Phase 5 - absence notifications', () => {
       const s = await api.get('/absences/summary', as('studentA2'));
       assert.equal(s.status, 200);
       assert.equal(s.body.data.reviewed, 1);
-      assert.equal((await api.get('/absences/summary', as('admin'))).status, 403);
+      const [adminSummary, adminList] = await Promise.all([
+        api.get('/absences/summary', as('admin')),
+        api.get('/absences', as('admin')),
+      ]);
+      assert.equal(adminSummary.status, 200);
+      assert.equal(adminList.status, 200);
+      for (const status of ['pending', 'acknowledged', 'reviewed', 'needs_follow_up']) {
+        assert.equal(
+          adminSummary.body.data[status === 'needs_follow_up' ? 'needsFollowUp' : status],
+          adminList.body.data.absences.filter((absence) => absence.status === status).length,
+          `administrator ${status} count is scoped to their institution`,
+        );
+      }
     });
   });
 

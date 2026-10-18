@@ -2,6 +2,7 @@ import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { monthHistory } from '../attendance/attendance.service.js';
 import { buildSnapshot, canTransition, endedMonths, isMonthEnded, secondsToHours } from './dtr.rules.js';
 
@@ -15,7 +16,7 @@ async function dbNow(db = { query }) {
 // ---------------------------------------------------------------- policy
 export async function getPolicy(institutionId) {
   const { rows } = await query(
-    `SELECT p.required_monthly_hours, p.updated_at, u.full_name AS updated_by_name
+    `SELECT p.required_monthly_hours, p.review_sla_hours, p.updated_at, u.full_name AS updated_by_name
      FROM institution_dtr_policies p LEFT JOIN users u ON u.id = p.updated_by
      WHERE p.institution_id = $1`,
     [institutionId],
@@ -23,6 +24,7 @@ export async function getPolicy(institutionId) {
   if (!rows[0]) throw new AppError(404, 'NOT_FOUND', 'Institution policy not found.');
   return {
     requiredMonthlyHours: Number(rows[0].required_monthly_hours),
+    reviewSlaHours: rows[0].review_sla_hours,
     updatedAt: rows[0].updated_at,
     updatedBy: rows[0].updated_by_name,
     timezone: env.timezone,
@@ -31,21 +33,27 @@ export async function getPolicy(institutionId) {
   };
 }
 
-export async function setRequiredHours({ actor, hours, ip }) {
+export async function setRequiredHours({ actor, hours, reviewSlaHours, ip }) {
   await withTransaction(async (db) => {
     const { rows } = await db.query(
-      'SELECT required_monthly_hours FROM institution_dtr_policies WHERE institution_id = $1 FOR UPDATE',
+      'SELECT required_monthly_hours, review_sla_hours FROM institution_dtr_policies WHERE institution_id = $1 FOR UPDATE',
       [actor.institutionId],
     );
+    const nextReviewSlaHours = reviewSlaHours === undefined ? rows[0].review_sla_hours : reviewSlaHours;
     await db.query(
-      `UPDATE institution_dtr_policies SET required_monthly_hours = $2, updated_by = $3, updated_at = now()
+      `UPDATE institution_dtr_policies SET required_monthly_hours = $2, review_sla_hours = $3, updated_by = $4, updated_at = now()
        WHERE institution_id = $1`,
-      [actor.institutionId, hours, actor.id],
+      [actor.institutionId, hours, nextReviewSlaHours, actor.id],
     );
     await recordAudit({
-      actorId: actor.id, action: 'policy.required_hours_changed', targetType: 'institution_dtr_policy',
+      actorId: actor.id,
+      action: Number(rows[0].required_monthly_hours) !== hours
+        ? 'policy.required_hours_changed'
+        : rows[0].review_sla_hours !== nextReviewSlaHours ? 'policy.review_sla_changed' : 'policy.settings_saved',
+      targetType: 'institution_dtr_policy',
       targetId: actor.institutionId,
-      before: { requiredMonthlyHours: Number(rows[0].required_monthly_hours) }, after: { requiredMonthlyHours: hours }, ip,
+      before: { requiredMonthlyHours: Number(rows[0].required_monthly_hours), reviewSlaHours: rows[0].review_sla_hours },
+      after: { requiredMonthlyHours: hours, reviewSlaHours: nextReviewSlaHours }, ip,
     }, db);
   });
   return getPolicy(actor.institutionId);
@@ -267,6 +275,24 @@ async function transition({ user, id, to, action, ip, reason = null, check, extr
       actorId: user.id, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: id,
       before: { status: dtr.status }, after: { status: to, revision: dtr.current_revision, ...(reason ? { reason } : {}) }, ip,
     }, db);
+    if (to === 'submitted') {
+      await notifyOfficeSupervisors(db, {
+        officeId: dtr.office_id, institutionId: dtr.institution_id, type: 'dtr_submitted',
+        title: 'DTR awaiting review', message: `A Student Assistant submitted the ${dtr.month} DTR for review.`,
+        relatedType: 'monthly_dtr', relatedId: dtr.id, important: true,
+        dedupeKey: `dtr:${dtr.id}:submitted:${dtr.current_revision}`,
+      });
+    }
+    if (to === 'approved' || to === 'needs_correction') {
+      await createNotification(db, {
+        recipientId: dtr.user_id, institutionId: dtr.institution_id,
+        type: to === 'approved' ? 'dtr_approved' : 'dtr_correction',
+        title: to === 'approved' ? 'DTR approved' : 'DTR returned for correction',
+        message: to === 'approved' ? `Your ${dtr.month} DTR was approved.` : `Your ${dtr.month} DTR needs correction.${reason ? ` ${reason}` : ''}`,
+        relatedType: 'monthly_dtr', relatedId: dtr.id, important: true,
+        dedupeKey: `dtr:${dtr.id}:${to}:${dtr.current_revision}`,
+      });
+    }
     return getDetail({ user, id }, db);
   });
 }
@@ -326,6 +352,14 @@ async function transitionInside(db, { user, dtr, to, action, ip, extra }) {
     actorId: user.id, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: dtr.id,
     before: { status: dtr.status }, after: { status: to, revision: dtr.current_revision, verifiedSeconds: extra.verified_seconds }, ip,
   }, db);
+  if (to === 'approved') {
+    await createNotification(db, {
+      recipientId: dtr.user_id, institutionId: dtr.institution_id, type: 'dtr_approved',
+      title: 'DTR approved', message: `Your ${dtr.month} DTR was approved.`,
+      relatedType: 'monthly_dtr', relatedId: dtr.id, important: true,
+      dedupeKey: `dtr:${dtr.id}:approved:${dtr.current_revision}`,
+    });
+  }
   return getDetail({ user, id: dtr.id }, db);
 }
 

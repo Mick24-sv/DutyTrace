@@ -1,0 +1,158 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Check, CheckCheck } from 'lucide-react';
+import { apiGet, apiPatch } from '../../services/api.js';
+
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'important', label: 'Important' },
+];
+
+function notificationPath(role, item) {
+  const { relatedType, relatedId } = item;
+  if (relatedType === 'monthly_dtr') {
+    if (role === 'student') return `/student/dtr/${relatedId}`;
+    if (role === 'supervisor') return `/supervisor/dtr-review/${relatedId}`;
+    return `/admin/dtrs/${relatedId}`;
+  }
+  if (relatedType === 'absence_notice') return `/${role}/absences/${relatedId}`;
+  if (relatedType === 'compliance_case') return `/${role}/cases/${relatedId}`;
+  if (relatedType === 'academic_term') return role === 'admin' ? '/admin/semesters' : `/${role}`;
+  if (relatedType === 'student') return role === 'admin' ? '/admin/users' : `/${role}/assistants/${relatedId}`;
+  return `/${role}`;
+}
+
+export default function NotificationCenter({ role }) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [items, setItems] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const wrapRef = useRef(null);
+  const filterRef = useRef('all');
+  const navigate = useNavigate();
+
+  const load = useCallback(async (selectedFilter = 'all') => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await apiGet(`/notifications?filter=${selectedFilter}`);
+      setItems(data.notifications);
+      setUnreadCount(data.unreadCount);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load('all');
+    const timer = window.setInterval(() => load(filterRef.current), 60_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onClick = (event) => !wrapRef.current?.contains(event.target) && setOpen(false);
+    const onKey = (event) => event.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const chooseFilter = async (next) => {
+    filterRef.current = next;
+    setFilter(next);
+    await load(next);
+  };
+
+  const toggle = () => {
+    if (!open) load(filter);
+    setOpen((value) => !value);
+  };
+
+  const openNotification = async (item) => {
+    try {
+      if (!item.readAt) {
+        await apiPatch(`/notifications/${item.id}/read`, {});
+        setUnreadCount((count) => Math.max(0, count - 1));
+        setItems((current) => current.map((row) => row.id === item.id ? { ...row, readAt: new Date().toISOString() } : row));
+      }
+    } catch (err) {
+      setError(err.message);
+      return;
+    }
+    setOpen(false);
+    navigate(notificationPath(role, item));
+  };
+
+  const markAllRead = async () => {
+    try {
+      await apiPatch('/notifications/read-all', {});
+      setUnreadCount(0);
+      setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+        aria-expanded={open}
+        onClick={toggle}
+        className="relative rounded-lg p-2 text-navy hover:bg-canvas"
+      >
+        <Bell className="h-5 w-5" aria-hidden="true" />
+        {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-bad-fg px-1 text-center text-[10px] font-semibold leading-4 text-white">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+      </button>
+      {open && (
+        <section aria-label="Notification center" className="absolute right-0 z-40 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-line bg-surface shadow-card">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <div><h2 className="font-semibold text-navy">Notifications</h2><p className="text-xs text-muted">{unreadCount} unread</p></div>
+            <button type="button" onClick={markAllRead} disabled={!unreadCount} className="inline-flex items-center gap-1 text-xs font-medium text-teal underline disabled:text-muted disabled:no-underline">
+              <CheckCheck className="h-4 w-4" /> Mark all read
+            </button>
+          </div>
+          <div className="flex gap-1 border-b border-line px-3 py-2" role="tablist" aria-label="Filter notifications">
+            {FILTERS.map((option) => (
+              <button key={option.id} type="button" role="tab" aria-selected={filter === option.id} onClick={() => chooseFilter(option.id)} className={`rounded-full px-3 py-1 text-xs ${filter === option.id ? 'bg-teal text-white' : 'text-muted hover:bg-canvas'}`}>
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="max-h-[min(65vh,28rem)] overflow-y-auto">
+            {loading && items.length === 0 && <p role="status" className="p-5 text-center text-sm text-muted">Loading notifications…</p>}
+            {error && <p role="alert" className="m-3 rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}
+            {!loading && !error && items.length === 0 && <p className="p-5 text-center text-sm text-muted">No {filter === 'all' ? '' : `${filter} `}notifications.</p>}
+            <ul>
+              {items.map((item) => (
+                <li key={item.id} className={`border-b border-line last:border-0 ${item.readAt ? '' : 'bg-teal/5'}`}>
+                  <button type="button" onClick={() => openNotification(item)} className="w-full px-4 py-3 text-left hover:bg-canvas">
+                    <span className="flex items-start gap-2">
+                      {!item.readAt ? <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal" aria-label="Unread" /> : <span className="w-2 shrink-0" />}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1 text-sm font-semibold text-ink">{item.title}{item.important && <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[10px] font-medium text-warn-fg">Important</span>}</span>
+                        <span className="mt-0.5 block text-xs text-muted">{item.message}</span>
+                        <time className="mt-1 block text-[11px] text-muted" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
+                      </span>
+                      {!item.readAt && <Check className="mt-1 h-4 w-4 shrink-0 text-teal" aria-hidden="true" />}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

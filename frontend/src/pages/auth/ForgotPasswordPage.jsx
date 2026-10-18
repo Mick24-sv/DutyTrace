@@ -7,6 +7,7 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [devResetUrl, setDevResetUrl] = useState(null);
+  const [emailConfigured, setEmailConfigured] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -16,6 +17,7 @@ export default function ForgotPasswordPage() {
     setSubmitting(true);
     try {
       const data = await apiPost('/auth/forgot-password', { email });
+      setEmailConfigured(data?.emailConfigured !== false);
       // In dev mode the server returns a devResetUrl for convenience.
       if (data?.devResetUrl) setDevResetUrl(data.devResetUrl);
       setSubmitted(true);
@@ -53,7 +55,7 @@ export default function ForgotPasswordPage() {
 
         <div className="mt-6 rounded-card border border-line bg-surface p-6 shadow-card">
           {submitted ? (
-            <SuccessState devResetUrl={devResetUrl} />
+            <SuccessState devResetUrl={devResetUrl} emailConfigured={emailConfigured} />
           ) : (
             <form onSubmit={onSubmit} noValidate>
               {error && (
@@ -97,14 +99,15 @@ export default function ForgotPasswordPage() {
   );
 }
 
-function SuccessState({ devResetUrl }) {
+function SuccessState({ devResetUrl, emailConfigured }) {
   return (
     <div>
       <div className="mb-4 flex items-start gap-3 rounded-lg bg-ok-bg px-4 py-3">
         <span className="mt-0.5 text-ok-fg" aria-hidden="true">✓</span>
         <p className="text-sm text-ok-fg">
-          If an account is associated with that email address, a password reset link has been sent.
-          Please check your inbox (and spam folder).
+          {emailConfigured
+            ? 'If an account is associated with that email address, a password reset link has been sent. Please check your inbox (and spam folder).'
+            : 'Password reset email is not configured on this server. Contact your administrator for help.'}
         </p>
       </div>
       <p className="text-sm text-muted">

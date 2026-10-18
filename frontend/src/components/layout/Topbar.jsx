@@ -4,6 +4,7 @@ import { ChevronDown, LogOut, Menu } from 'lucide-react';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import { useApiHealth } from '../../hooks/useApiHealth.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
+import NotificationCenter from './NotificationCenter.jsx';
 
 const HEALTH_LABEL = {
   checking: { text: 'Checking API…', dot: 'bg-muted' },
@@ -57,6 +58,8 @@ export default function Topbar({ role, title, onMenu }) {
         <span className={`h-2 w-2 rounded-full ${health.dot}`} aria-hidden="true" />
         {health.text}
       </span>
+
+      <NotificationCenter role={role} />
 
       <div className="relative" ref={wrapRef}>
         <button

@@ -12,6 +12,7 @@ import { documentsRouter } from '../modules/documents/documents.routes.js';
 import { reportsRouter } from '../modules/reports/reports.routes.js';
 import { semestersRouter } from '../modules/semesters/semesters.routes.js';
 import { institutionsRouter } from '../modules/institutions/institutions.routes.js';
+import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
 
 // Feature routers (absences, compliance, ...) get mounted here in later phases.
 export function buildRoutes(options = {}) {
@@ -29,5 +30,6 @@ export function buildRoutes(options = {}) {
   router.use('/reports', reportsRouter);
   router.use('/semesters', semestersRouter);
   router.use('/institutions', institutionsRouter);
+  router.use('/notifications', notificationsRouter);
   return router;
 }

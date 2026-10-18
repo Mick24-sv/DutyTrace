@@ -9,6 +9,8 @@ PostgreSQL schema for DutyTrace (works on Supabase). `migrations/` holds numbere
 | `0003_*` | monthly DTRs, immutable revisions and history, policy settings |
 | `0004_*` | TRUNCATE guards |
 | `0005_*` | absence notices, documents, case types, compliance cases, requirements, history |
+| `0006_*`–`0010_*` | student requirements, password reset, institution/semester support and policies |
+| `0011_*` | recipient-scoped in-app notifications and reminder deduplication |
 
 No seed data is included. Create the first administrator with `npm run db:create-admin`. Table-by-table description: [../docs/database-schema.md](../docs/database-schema.md).
 

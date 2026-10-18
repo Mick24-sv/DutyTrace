@@ -4,7 +4,7 @@
 
 An academic capstone project. DutyTrace aims to digitize Student Assistant (SA) attendance, duty-hour compliance, monthly DTRs, supervisor verification, absence notices, and compliance-case tracking.
 
-> **Status: existing Phase 1–6 features plus semester-based duty-hour requirements.** Academic terms and individually assigned semester-hour targets are configurable per institution. Student semester completion uses approved DTR hours, while monthly DTR generation and review continue on their existing month-end workflow. No school calendar or semester-hour target is assumed. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
+> **Status: Phases 1–7, with Phase 8 security hardening and QA updates.** Academic terms and individually assigned semester-hour targets are configurable per institution. Student semester completion uses approved DTR hours, while monthly DTR generation and review continue on their existing month-end workflow. In-app notifications cover supported DTR, absence, case, document and semester requirement events; reminders use each term's configured timezone and assigned verified-hour progress. Administrators can optionally set an institution review SLA for DTRs, absence notices and cases. No school calendar or semester-hour target is assumed. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
 
 ## Tech stack
 
@@ -38,7 +38,8 @@ There is **no demo data and no hardcoded account** in the app. Everything on scr
    - `DATABASE_URL=<your Supabase connection string>` and `DATABASE_SSL=true`
    - `QR_SIGNING_SECRET=<long random string>` (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`). Changing it invalidates printed QR codes.
    - `CLIENT_ORIGIN`, `APP_TIMEZONE` (fallback timezone for the existing monthly DTR workflow)
-4. **Create the tables:** `npm run db:migrate`. This applies `database/migrations/*.sql` in order and is safe to re-run (a checksum stops edited migrations).
+   - `REMINDER_INTERVAL_MINUTES` (optional; reminder sweep interval, default `360` minutes)
+4. **Create/update the tables:** `npm run db:migrate`. This applies `database/migrations/*.sql` in order and is safe to re-run (a checksum stops edited migrations). Run it after deploying code that adds a migration, using the same `DATABASE_URL` as the API. For a hosted API, run the command in the deployment environment with its database secret, then restart/redeploy the API. The API does not apply schema changes automatically.
 5. **Create your first administrator** (nothing is preloaded):
 
    ```bash
@@ -52,7 +53,7 @@ Notes for Supabase:
 
 - The backend connects as a normal PostgreSQL client with the database password. **Keep that password server-side only; never put it in `frontend/`** (anything `VITE_` is public). The app does not use Supabase Auth, the Supabase JS client or the auto-generated REST API; sessions and roles are handled by the backend. Because the tables live in the `public` schema, **turn Row Level Security on for them in the Supabase dashboard (with no policies) so the public Supabase API cannot read them**; the backend's direct connection is unaffected.
 - Uploaded documents are stored on the backend's disk (`UPLOAD_DIR`). On a host with a temporary disk, use a persistent volume, or replace `backend/src/modules/documents/storage.js` with Supabase Storage (private bucket).
-- Tests need a **separate** database (`TEST_DATABASE_URL`, its name must contain "test"). The tests drop and recreate its schema, so never point it at your Supabase project with real data. A local PostgreSQL works: `createdb dutytrace_test`.
+- Tests need a **separate** database (`TEST_DATABASE_URL`, its name must contain "test"). The tests drop and recreate its schema, so never point it at your Supabase project with real data. A local PostgreSQL works: `createdb dutytrace_test`. Set `TEST_DATABASE_SSL=false` for a local server; this is independent of production `DATABASE_SSL`. Set it to `true` (and optionally `TEST_DATABASE_SSL_CA`) only for a separate hosted test database that requires TLS.
 
 ## Run
 
@@ -64,7 +65,7 @@ npm run dev          # backend on :4000 and frontend on :5173
 
 | Command | What it does |
 | --- | --- |
-| `npm test` | Backend tests (auth, institution permissions, QR, attendance, hour calculations, DTR workflow, semester requirements, PDF, absences, documents, cases) against `TEST_DATABASE_URL`. Test fixtures with fictional users live in `backend/tests/fixtures/` and are never used by the app |
+| `npm test` | Backend tests (auth, institution permissions, QR, attendance, DTR workflow, semester requirements, notifications/reminders, PDF, absences, documents and cases) against `TEST_DATABASE_URL`. Test fixtures with fictional users live in `backend/tests/fixtures/` and are never used by the app |
 | `npm run build` | Production build of the frontend into `frontend/dist/` |
 | `npm start` | Runs the API without file watching |
 | `npm run db:migrate` | Apply pending migrations |
@@ -158,7 +159,7 @@ Rules worth knowing:
 | Resolved | A decision is recorded | Admin: reopen or close |
 | Closed | Final | nobody |
 
-Limits to know about: no virus scanning of uploads, local-disk file storage (swap `backend/src/modules/documents/storage.js` for object storage when deploying), no Gmail or other email integration (staff record emails by hand), no notifications, a supervisor cannot make case decisions, and a case/notice stays with the office the student had when it was created.
+Limits to know about: no virus scanning of uploads, local-disk file storage (swap `backend/src/modules/documents/storage.js` for object storage when deploying), no outbound email notifications for workflow updates, a supervisor cannot make case decisions, and a case/notice stays with the office the student had when it was created.
 
 ## Dashboards and reports (Phase 6)
 
@@ -204,9 +205,13 @@ All colors are defined once in `frontend/src/styles/index.css` (`@theme` block) 
 
 - Secrets belong in `.env` files, which are git-ignored. Only `.env.example` files are committed.
 - Anything prefixed `VITE_` is public in the browser bundle.
-- **Production:** set `NODE_ENV=production` (enables `Secure` cookies; requires HTTPS), set `CLIENT_ORIGIN` to the real site, and set `TRUST_PROXY=1` behind a reverse proxy. If the client and API are on *different sites*, cookie settings (`SameSite`) and CORS must be revisited; the simplest deployment serves both from one origin.
+- **Production:** set `NODE_ENV=production`, `QR_SIGNING_SECRET` (at least 32 random characters), `DATABASE_URL`, `DATABASE_SSL=true`, and `CLIENT_ORIGIN` to the exact HTTPS origin (scheme and host, no path). The API refuses to start if these requirements are missing. Database TLS certificate verification is enabled; set `DATABASE_SSL_CA` only when the database provider requires a custom CA. Production session cookies are `Secure`, `HttpOnly`, and `SameSite=Lax`. Set `TRUST_PROXY` to the number of trusted proxy hops when deployed behind a reverse proxy. If the client and API are on *different sites*, cookie settings (`SameSite`) and CORS must be reviewed; serving both from one origin is simplest.
+- State-changing browser requests are checked against the configured `Origin`, in addition to `SameSite=Lax`; the app does not use a separate CSRF token. Keep `CLIENT_ORIGIN` exact and do not weaken this check.
+- Login and password-reset endpoints have per-process IP rate limits and login lockout. The built-in limiter uses an in-memory store; deployments with multiple API instances should configure a shared rate-limit store before relying on limits across instances.
+- Password-reset links are single-use, expire after 30 minutes, and only a token hash is stored. Reset-token verification sends the token in a POST body instead of a URL. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` to send email. In production, reset requests do not create undeliverable tokens when SMTP is missing; the page tells the user to contact an administrator. Development may return a reset URL for testing.
+- Run tests only with a separate `TEST_DATABASE_URL` whose database name contains `test` and differs from `DATABASE_URL`; the test helper drops and recreates its schema. Never use the production Supabase URL for tests.
 - **Uploaded documents are sensitive.** They are private and access-checked, but there is no virus scanning, no encryption at rest beyond what the disk provides, and no retention/deletion policy yet. Institutional data-privacy review (open question 8 and 11) must happen before real student documents are stored.
-- Not yet implemented: attendance corrections (a returned DTR cannot fix attendance by itself; corrections need their own auditable records), partial approval, DTR notifications/emails, password change/reset, email verification, multi-factor authentication, CSRF tokens (we rely on SameSite + Origin checks), admin forms for creating users in the UI (the API supports it).
+- Not yet implemented: attendance corrections (a returned DTR cannot fix attendance by itself; corrections need their own auditable records), partial approval, email verification, multi-factor authentication, outbound workflow email, admin forms for creating users in the UI (the API supports it).
 - This is a development build. It has not had a security review and must not be called production-ready.
 
 ## Roadmap

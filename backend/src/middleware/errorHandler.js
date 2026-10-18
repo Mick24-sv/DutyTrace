@@ -1,5 +1,4 @@
 import { AppError } from '../utils/response.js';
-import { isProduction } from '../config/env.js';
 
 export const notFound = (req, _res, next) => {
   next(new AppError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`));
@@ -11,8 +10,19 @@ export const errorHandler = (err, _req, res, _next) => {
   const known = err instanceof AppError;
   const status = known ? err.status : 500;
 
-  // Log full details on the server only; never leak stack traces to clients.
-  if (!known) console.error(err);
+  // The API can be deployed before its database migrations. PostgreSQL reports
+  // missing tables/columns as 42P01/42703; return an actionable, safe message
+  // instead of exposing raw SQL details (or a generic internal error).
+  if (err.code === '42P01' || err.code === '42703') {
+    console.error('Database schema is behind the application code:', err.message);
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: 'SCHEMA_NOT_READY',
+        message: 'The database schema is out of date. Run the latest database migrations, then restart the API.',
+      },
+    });
+  }
 
   // Malformed JSON bodies are the client's mistake, not a server fault.
   if (err.type === 'entity.parse.failed') {
@@ -30,11 +40,15 @@ export const errorHandler = (err, _req, res, _next) => {
     });
   }
 
+  // Log only safe metadata. Error objects can contain request bodies, which
+  // may include passwords, reset tokens, or other sensitive values.
+  if (!known) console.error('Unhandled API error', { name: err?.name, code: err?.code });
+
   return res.status(status).json({
     success: false,
     error: {
       code: known ? err.code : 'INTERNAL_ERROR',
-      message: known || !isProduction ? err.message : 'Something went wrong.',
+      message: known ? err.message : 'Something went wrong.',
       ...(known && err.details ? { details: err.details } : {}),
     },
   });

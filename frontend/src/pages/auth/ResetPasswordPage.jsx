@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
-import { apiGet, apiPost } from '../../services/api.js';
+import { apiPost } from '../../services/api.js';
 import Button from '../../components/ui/Button.jsx';
 import FullPageMessage from '../../components/layout/FullPageMessage.jsx';
 
@@ -26,7 +26,10 @@ export default function ResetPasswordPage() {
       return;
     }
     let cancelled = false;
-    apiGet(`/auth/reset-password?token=${encodeURIComponent(token)}`)
+    // Keep the bearer token out of API URLs and replace the browser history
+    // entry after capturing it from the emailed link.
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.hash}`);
+    apiPost('/auth/reset-password/verify', { token })
       .then((data) => {
         if (!cancelled) {
           setMaskedEmail(data?.maskedEmail ?? '');

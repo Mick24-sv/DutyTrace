@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EMAILS, makeClient, query, setupTestServer } from './helpers/testEnv.js';
 import { createApp } from '../src/app.js';
 import { env } from '../src/config/env.js';
+import { createHash } from 'node:crypto';
 
 const ctx = setupTestServer();
 const api = makeClient(ctx);
@@ -119,6 +120,27 @@ describe('sessions', () => {
     });
     assert.equal(res.status, 403);
     assert.equal(res.body.error.code, 'BAD_ORIGIN');
+  });
+});
+
+describe('password reset token verification', () => {
+  test('verifies a token from a POST body, disables caching, and does not accept tokens in GET URLs', async () => {
+    const token = 'test-only-reset-token-not-a-real-secret';
+    const hash = createHash('sha256').update(token).digest('hex');
+    await query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+       SELECT id, $1, now() + interval '10 minutes' FROM users WHERE email = $2`,
+      [hash, EMAILS.studentA],
+    );
+
+    const verified = await api.post('/auth/reset-password/verify', { body: { token } });
+    assert.equal(verified.status, 200);
+    assert.match(verified.headers?.get('cache-control') ?? '', /no-store/i);
+    assert.equal(verified.body.data.valid, true);
+    assert.match(verified.body.data.maskedEmail, /\*/);
+
+    const legacy = await api.get(`/auth/reset-password?token=${encodeURIComponent(token)}`);
+    assert.equal(legacy.status, 404);
   });
 });
 

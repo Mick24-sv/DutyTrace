@@ -2,6 +2,7 @@ import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { createNotification, notifyInstitutionAdmins, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { assertCanView, forbidden, isOfficeSupervisor, isOwner } from '../common/access.js';
 import {
   acceptUpload, assertRoomForDocument, countDocuments, discardUpload, insertManualReceipt, insertOnlineDocument, listDocuments,
@@ -130,9 +131,9 @@ async function loadRequirements(db, caseId) {
 
 const addEvent = (db, { id, action, from = null, to = null, actor, note = null, requirementId = null }) =>
   db.query(
-    `INSERT INTO case_events (case_id, action, from_status, to_status, actor_id, note, requirement_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    `INSERT INTO case_events (case_id, action, from_status, to_status, actor_id, note, requirement_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [id, action, from, to, actor.id, note, requirementId],
-  );
+  ).then(({ rows }) => rows[0].id);
 
 const audit = (db, user, action, id, extra = {}, ip) =>
   recordAudit({ actorId: user.id, action: `case.${action}`, targetType: 'compliance_case', targetId: id, ...extra, ip }, db);
@@ -195,6 +196,11 @@ export async function createCase({ actor, userId, caseTypeId, description, perio
     }
     await addEvent(db, { id, action: 'created', to: status, actor, note: `Case ${reference} opened (${types[0].name})` });
     await audit(db, actor, 'created', id, { after: { reference, userId, caseTypeId, periodStart, periodEnd, requirements: labels.length } }, ip);
+    await createNotification(db, {
+      recipientId: userId, institutionId: actor.institutionId, type: 'case_created',
+      title: 'A compliance case was opened', message: `Case ${reference} was opened and may require your attention.`,
+      relatedType: 'compliance_case', relatedId: id, important: true, dedupeKey: `case:${id}:created`,
+    });
     return getDetail({ user: actor, id }, db);
   });
 }
@@ -263,8 +269,24 @@ async function move({ user, id, to, action, ip, note = null, who, check, extra =
     const sets = ['status = $2']; const params = [id, to];
     for (const [col, val] of Object.entries(extra)) { params.push(val); sets.push(`${col} = $${params.length}`); }
     await db.query(`UPDATE compliance_cases SET ${sets.join(', ')} WHERE id = $1`, params);
-    await addEvent(db, { id, action, from: row.status, to, actor: user, note });
+    const eventId = await addEvent(db, { id, action, from: row.status, to, actor: user, note });
     await audit(db, user, action, id, { before: { status: row.status }, after: { status: to, ...(note ? { note } : {}) } }, ip);
+    if (row.user_id !== user.id) {
+      await createNotification(db, {
+        recipientId: row.user_id, institutionId: row.institution_id,
+        type: `case_${to}`, title: to === 'needs_correction' ? 'Compliance case needs your attention' : `Compliance case ${to.replace('_', ' ')}`,
+        message: note || `Your compliance case ${row.reference} is now ${to.replace('_', ' ')}.`,
+        relatedType: 'compliance_case', relatedId: id, important: ['needs_correction', 'documents_pending', 'under_review'].includes(to),
+        dedupeKey: `case:${id}:event:${eventId}`,
+      });
+    }
+    if (action === 'submitted_for_review') {
+      await notifyInstitutionAdmins(db, {
+        institutionId: row.institution_id, type: 'case_submitted', title: 'Compliance case submitted for review',
+        message: `Case ${row.reference} is ready for review.`, relatedType: 'compliance_case', relatedId: id,
+        important: true, dedupeKey: `case:${id}:event:${eventId}`,
+      });
+    }
     return getDetail({ user, id }, db);
   });
 }
@@ -343,6 +365,12 @@ export async function addRequirement({ user, id, label, ip }) {
     if (to) await db.query(`UPDATE compliance_cases SET status = $2 WHERE id = $1`, [id, to]);
     await addEvent(db, { id, action: 'requirement_added', from: row.status, to: to ?? row.status, actor: user, note: label, requirementId: rows[0].id });
     await audit(db, user, 'requirement_added', id, { after: { label } }, ip);
+    await createNotification(db, {
+      recipientId: row.user_id, institutionId: row.institution_id, type: 'case_document_requested',
+      title: 'A document was requested for your case', message: `Please provide: ${label}.`,
+      relatedType: 'compliance_case', relatedId: id, important: true,
+      dedupeKey: `case:${id}:requirement:${rows[0].id}`,
+    });
     return getDetail({ user, id }, db);
   });
 }
@@ -403,6 +431,16 @@ export async function addDocument({ user, id, requirementId, buffer, rawName, ip
         actorId: user.id, action: 'document.uploaded', targetType: 'document', targetId: docId,
         after: { caseId: id, requirementId, mime: accepted.mime, sizeBytes: accepted.size, method: 'online' }, ip,
       }, db);
+        await notifyOfficeSupervisors(db, {
+          officeId: pre.office_id, institutionId: pre.institution_id, type: 'case_document_submitted',
+          title: 'Compliance case document submitted', message: 'A Student Assistant submitted a document for a compliance case.',
+          relatedType: 'compliance_case', relatedId: id, important: true, dedupeKey: `case:${id}:document:${docId}`,
+        });
+        await notifyInstitutionAdmins(db, {
+          institutionId: pre.institution_id, type: 'case_document_submitted',
+          title: 'Compliance case document submitted', message: 'A Student Assistant submitted a document for a compliance case.',
+          relatedType: 'compliance_case', relatedId: id, important: true, dedupeKey: `case:${id}:document:${docId}`,
+        });
       return getDetail({ user, id }, db);
     });
   } catch (err) {

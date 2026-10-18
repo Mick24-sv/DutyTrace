@@ -92,7 +92,9 @@ describe('Phase 5 - secure documents', () => {
       assert.match(stored, /^[0-9a-f-]{36}$/);
       assert.ok((await files()).includes(stored));
       assert.deepEqual(await readFile(path.join(ctx.uploadDir, stored)), SAMPLE.pdf);
-      assert.equal((await stat(path.join(ctx.uploadDir, stored))).mode & 0o777, 0o600);
+      if (process.platform !== 'win32') {
+        assert.equal((await stat(path.join(ctx.uploadDir, stored))).mode & 0o777, 0o600);
+      }
       assert.equal(rows[0].size_bytes, SAMPLE.pdf.length);
       assert.equal(rows[0].sha256.length, 64);
       assert.equal(JSON.stringify(res.body).includes(stored), false, 'the stored name never reaches the client');

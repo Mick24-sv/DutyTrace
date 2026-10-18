@@ -2,6 +2,7 @@ import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { createNotification } from '../notifications/notifications.service.js';
 import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { calculateSemesterProgress, verifiedSecondsForTerm } from './semester.rules.js';
 
@@ -90,6 +91,26 @@ export async function saveTerm({ actor, termId, input, ip }) {
       row.institution_name = actor.institution?.name ?? null;
     }
     const after = mapTerm(row);
+    if (termId && (
+      before.startsOn !== after.startsOn || before.endsOn !== after.endsOn
+      || before.completionDeadline !== after.completionDeadline || before.timezone !== after.timezone
+    )) {
+      const { rows: assignedStudents } = await db.query(
+        `SELECT DISTINCT student_id FROM semester_requirement_assignments
+         WHERE term_id = $1 AND required_hours IS NOT NULL`, [termId],
+      );
+      for (const student of assignedStudents) {
+        await createNotification(db, {
+          recipientId: student.student_id, institutionId: actor.institutionId, type: 'semester_deadline_changed',
+          title: 'Academic term dates changed',
+          message: after.completionDeadline
+            ? `The ${after.academicYear} ${after.semester} term dates or completion deadline changed. New deadline: ${after.completionDeadline}.`
+            : `The ${after.academicYear} ${after.semester} term dates changed and no completion deadline is currently set.`,
+          relatedType: 'academic_term', relatedId: after.id, important: true,
+          dedupeKey: `term:${termId}:updated:${row.updated_at}`,
+        });
+      }
+    }
     await recordAudit({
       actorId: actor.id,
       action: termId ? 'academic_term.update' : 'academic_term.create',
@@ -203,6 +224,15 @@ export async function assignRequirement({ actor, termId, studentId, officeId, re
       ? { officeId: previous.office_id, requiredHours: previous.required_hours == null ? null : Number(previous.required_hours), assignedAt: previous.assigned_at }
       : null;
     const after = { officeId, officeName: office.name, requiredHours, assignedAt: assignment.assigned_at };
+    await createNotification(db, {
+      recipientId: student.id, institutionId: actor.institutionId, type: 'semester_requirement_changed',
+      title: requiredHours == null ? 'Semester duty-hour requirement removed' : 'Semester duty-hour requirement updated',
+      message: requiredHours == null
+        ? `Your ${term.academic_year} ${term.semester} semester duty-hour requirement was removed.`
+        : `Your ${term.academic_year} ${term.semester} semester duty-hour requirement is ${requiredHours} hours.${term.completion_deadline ? ` Completion deadline: ${term.completion_deadline}.` : ''}`,
+      relatedType: 'academic_term', relatedId: term.id, important: true,
+      dedupeKey: `semester-requirement:${assignment.id}`,
+    });
     await recordAudit({
       actorId: actor.id,
       action: previous ? 'semester_requirement.update' : 'semester_requirement.assign',
@@ -240,7 +270,7 @@ async function progressForStudents(term, students, now) {
   }
 
   const { rows: approvedDtrs } = await query(
-    `SELECT d.user_id, d.verified_seconds, rv.snapshot
+    `SELECT d.user_id, d.status, d.verified_seconds, rv.snapshot
      FROM monthly_dtrs d
      JOIN dtr_revisions rv ON rv.dtr_id = d.id AND rv.revision_no = d.verified_revision
      WHERE d.user_id = ANY($1::uuid[]) AND d.status = 'approved'

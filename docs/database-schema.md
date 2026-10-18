@@ -15,6 +15,7 @@ monthly_dtrs 1───* dtr_events                    (immutable who/what/when 
 institution_dtr_policies                         (one monthly DTR policy per institution)
 
 institutions 1───* users, offices, academic_terms, case_types, institution_dtr_policies
+users 1───* notifications *───1 institutions             (recipient-scoped inbox)
 academic_terms 1───* semester_requirement_assignments *───1 users
 semester_requirement_assignments                 (append-only target history)
 
@@ -38,7 +39,8 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 | `institutions` | Tenant boundary, display name and default IANA timezone (0008) | Users, offices, academic terms, case types and monthly DTR policies are institution-scoped; administrator APIs are scoped to the signed-in administrator's institution |
 | `academic_terms` | Institution-specific academic year, semester, date range, deadline and timezone (0008) | Term ranges cannot overlap within an institution; finalization freezes the calendar and prevents later requirement changes |
 | `semester_requirement_assignments` | Individual required hours and office assignment for one student and term (0008) | Immutable version rows; each change preserves the previous assignment, validated to keep the term, student and office within one institution |
-| `institution_dtr_policies` | Monthly DTR target separated from semester completion target (0009) | One monthly DTR policy per institution; semester requirements are individually assigned |
+| `institution_dtr_policies` | Monthly DTR target and optional review SLA (0009, 0011) | One policy per institution; review SLA is nullable and from 1–720 hours; semester requirements are individually assigned |
+| `notifications` | In-app notifications (0011) | Recipient and institution scoped; unique `(recipient_id, dedupe_key)` prevents duplicate event/reminder notifications; nullable `read_at` tracks unread state |
 | `monthly_dtrs` | One DTR per (user, month) (0003) with `status` (`dtr_status` enum), `current_revision`, `office_id` (office at generation) | `UNIQUE (user_id, month)`. `verified_seconds` is **only** allowed when `status = 'approved'` (CHECK) and is required then. `decided_by <> user_id` (CHECK, no self-decision). A trigger refuses: DELETE, TRUNCATE, any change to an approved row, changing owner/month, and invalid status moves (`draft->submitted`, `submitted->under_review`, `under_review->approved/needs_correction`, `needs_correction->draft/submitted`) |
 | `dtr_revisions` | Frozen JSON snapshot of each generation (0003): daily sessions, flags, totals, required hours used, timezone | `UNIQUE (dtr_id, revision_no)`. **Append-only**: triggers block UPDATE, DELETE and TRUNCATE (0004). Contains recorded hours only, never verified hours |
 | `dtr_events` | History (0003): `generated, regenerated, submitted, review_started, approved, returned` with actor, from/to status, `reason`, time | **Append-only** like revisions. CHECK: a `returned` event must have a non-blank reason |

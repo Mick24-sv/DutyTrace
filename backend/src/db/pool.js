@@ -2,6 +2,11 @@ import fs from 'node:fs';
 import pg from 'pg';
 import { env } from '../config/env.js';
 
+// PostgreSQL DATE values are calendar dates, not instants. The default pg
+// parser turns them into local-midnight Date objects, which can shift a day
+// when passed back to PostgreSQL from a process in another timezone.
+pg.types.setTypeParser(1082, (value) => value);
+
 // One shared connection pool. All queries use parameter placeholders ($1, $2…)
 // so user input is never concatenated into SQL.
 
@@ -11,7 +16,7 @@ import { env } from '../config/env.js';
 const buildSsl = () => {
   if (!env.databaseSsl) return undefined;
   const ca = env.databaseSslCa ? fs.readFileSync(env.databaseSslCa, 'utf8') : undefined;
-  return { rejectUnauthorized: Boolean(ca), ...(ca ? { ca } : {}) };
+  return { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
 };
 
 let pool;

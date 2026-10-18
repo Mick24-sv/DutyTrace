@@ -48,8 +48,8 @@ Scan error codes: `400 INVALID_QR` (not ours, tampered, unknown), `400 QR_REVOKE
 
 | Method & path | Who | Description |
 | --- | --- | --- |
-| `GET /dtrs/policy` | signed in | `{ requiredMonthlyHours, timezone, requiredHoursConfirmed: false, officialTemplate: false, updatedAt, updatedBy }` |
-| `PUT /dtrs/policy` | admin | `{ requiredMonthlyHours }` (> 0, <= 744). Affects DTRs generated afterwards; audited |
+| `GET /dtrs/policy` | signed in | `{ requiredMonthlyHours, reviewSlaHours, timezone, requiredHoursConfirmed: false, officialTemplate: false, updatedAt, updatedBy }` |
+| `PUT /dtrs/policy` | admin | `{ requiredMonthlyHours, reviewSlaHours? }`; monthly target affects later DTRs; optional review SLA is 1–720 hours or `null` to disable. Changes are audited |
 | `GET /dtrs/mine` | student | The last 12 **ended** months with the DTR (if any) of each, plus `verifiedHoursTotal` (approved DTRs only) |
 | `GET /dtrs/preview?month=YYYY-MM` | student | Computed snapshot of an ended month; **nothing is stored**. `409 MONTH_NOT_ENDED` for current/future months |
 | `POST /dtrs` | student | `{ month }`. Creates the draft (revision 1), or adds a new revision while the DTR is `draft` / `needs_correction`. `409 DTR_LOCKED` otherwise; `403 NOT_ASSIGNED` without an office |
@@ -119,6 +119,16 @@ Case types, cases, absences, documents, reports, offices, users and academic ter
 | `GET /reports/semester-hours?termId=&officeId=&format=` | admin, supervisor (own office) | Recorded/verified semester totals, individual targets, remaining hours and capped completion percentage; supports CSV |
 
 Error codes added: `400 VALIDATION_ERROR` (including unsupported or mismatched file type), `413 FILE_TOO_LARGE`, `409 TOO_MANY_DOCUMENTS`, `409 DOCUMENTS_MISSING`, `409 INVALID_TRANSITION`, `404 FILE_MISSING`.
+
+### Notifications
+
+| Method & path | Who | Description |
+| --- | --- | --- |
+| `GET /notifications?filter=all\|unread\|important` | any authenticated user | Up to 100 newest notifications for the signed-in recipient and institution, plus unread count |
+| `PATCH /notifications/:id/read` | notification recipient | Mark one own notification read |
+| `PATCH /notifications/read-all` | authenticated user | Mark all own notifications read |
+
+Notifications are created transactionally with supported workflow changes. Reminder sweeps check each academic term's timezone, assigned hours, approved DTR snapshots and completion deadline. Notification ownership and institution are both checked on every read/write.
 
 ### Reports & Dashboards (Phase 6)
 

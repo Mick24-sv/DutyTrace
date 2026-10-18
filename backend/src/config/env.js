@@ -16,24 +16,40 @@ const toInt = (value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {})
 const toBool = (value) => ['1', 'true', 'yes'].includes(String(value ?? '').toLowerCase());
 
 const nodeEnv = process.env.NODE_ENV ?? 'development';
+const clientOrigin = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173';
+const databaseUrl = process.env.DATABASE_URL;
+const databaseSsl = toBool(process.env.DATABASE_SSL);
+const qrSecret = process.env.QR_SIGNING_SECRET;
 
 // Secret used to sign office QR payloads. There is no built-in default: you must set QR_SIGNING_SECRET
 // (32+ characters). Only the automated tests, which run under `node --test`, use a throwaway value.
 const underTest = Boolean(process.env.NODE_TEST_CONTEXT);
-if (!underTest && !(process.env.QR_SIGNING_SECRET?.length >= 32)) {
+if (!underTest && !(qrSecret?.length >= 32)) {
   throw new Error('QR_SIGNING_SECRET must be set (32+ characters). See backend/.env.example.');
+}
+
+if (!underTest && nodeEnv === 'production') {
+  if (!databaseUrl) throw new Error('DATABASE_URL must be set in production.');
+  if (!databaseSsl) throw new Error('DATABASE_SSL=true is required in production.');
+  let origin;
+  try { origin = new URL(clientOrigin); } catch { throw new Error('CLIENT_ORIGIN must be a valid HTTPS URL in production.'); }
+  if (origin.protocol !== 'https:' || origin.origin !== clientOrigin || origin.username || origin.password) {
+    throw new Error('CLIENT_ORIGIN must be an HTTPS origin without a path or credentials in production.');
+  }
 }
 
 export const env = {
   nodeEnv,
   port: toInt(process.env.PORT, 4000, { max: 65535 }),
-  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+  clientOrigin,
   // Fallback timezone for month-based records. Each academic term stores its institution timezone.
   timezone: process.env.APP_TIMEZONE ?? 'UTC',
 
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl,
   testDatabaseUrl: process.env.TEST_DATABASE_URL,
-  databaseSsl: toBool(process.env.DATABASE_SSL),
+  testDatabaseSsl: toBool(process.env.TEST_DATABASE_SSL),
+  testDatabaseSslCa: process.env.TEST_DATABASE_SSL_CA,
+  databaseSsl,
   databaseSslCa: process.env.DATABASE_SSL_CA, // optional path to a CA certificate
 
   sessionCookieName: 'dt_session',
@@ -41,10 +57,11 @@ export const env = {
   // Behind a reverse proxy (Render, Fly, Nginx…) set TRUST_PROXY=1 so client IPs are correct.
   trustProxy: toInt(process.env.TRUST_PROXY, 0, { min: 0 }),
 
-  qrSecret: process.env.QR_SIGNING_SECRET || 'test-only-qr-secret-not-for-real-use-0000000000',
+  qrSecret: qrSecret || 'test-only-qr-secret-not-for-real-use-0000000000',
   // A completed session longer than this is NOT counted as hours and is flagged
   // for review (likely a forgotten time-out).
   maxSessionHours: toInt(process.env.MAX_SESSION_HOURS, 12, { max: 24 }),
+  reminderIntervalMinutes: toInt(process.env.REMINDER_INTERVAL_MINUTES, 360, { max: 10080 }),
 
   // Private document storage (Phase 5). Never served statically; files are only reachable through
   // authenticated, access-checked API routes. Keep this directory OUT of git and any web root.

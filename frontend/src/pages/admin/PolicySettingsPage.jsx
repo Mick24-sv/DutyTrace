@@ -12,17 +12,28 @@ export default function PolicySettingsPage() {
   const { data, loading, error } = useApiData('/dtrs/policy');
   const [policy, setPolicy] = useState(null);
   const [hours, setHours] = useState('');
+  const [reviewSlaHours, setReviewSlaHours] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null); // { ok, text }
 
-  useEffect(() => { if (data) { setPolicy(data); setHours(String(data.requiredMonthlyHours)); } }, [data]);
+  useEffect(() => {
+    if (data) {
+      setPolicy(data);
+      setHours(String(data.requiredMonthlyHours));
+      setReviewSlaHours(data.reviewSlaHours == null ? '' : String(data.reviewSlaHours));
+    }
+  }, [data]);
 
   async function save(e) {
     e.preventDefault();
     setBusy(true); setMessage(null);
     try {
-      const updated = await apiPut('/dtrs/policy', { requiredMonthlyHours: Number(hours) });
+      const updated = await apiPut('/dtrs/policy', {
+        requiredMonthlyHours: Number(hours),
+        reviewSlaHours: reviewSlaHours.trim() === '' ? null : Number(reviewSlaHours),
+      });
       setPolicy(updated); setMessage({ ok: true, text: 'Saved.' });
+      setReviewSlaHours(updated.reviewSlaHours == null ? '' : String(updated.reviewSlaHours));
     } catch (err) {
       setMessage({ ok: false, text: err.details?.requiredMonthlyHours ?? err.message });
     } finally { setBusy(false); }
@@ -44,6 +55,18 @@ export default function PolicySettingsPage() {
             <p className="mt-2 text-xs text-muted">
               This serves as the default baseline requirement for student assistants. You can configure and customize individual required duty hours for any specific student under the <strong className="text-ink">Users & Roles</strong> page.
               {policy.updatedBy && <> Last changed by {policy.updatedBy} on {formatDateTime(policy.updatedAt, policy.timezone)}.</>}
+            </p>
+            <label htmlFor="review-sla-hours" className="mb-1 mt-5 block text-sm font-medium">Review time limit (optional)</label>
+            <div className="flex items-center gap-2">
+              <input
+                id="review-sla-hours" type="number" step="1" min="1" max="720" value={reviewSlaHours}
+                onChange={(e) => setReviewSlaHours(e.target.value)} placeholder="Not configured"
+                className="w-40 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+              />
+              <span className="text-sm text-muted">hours</span>
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              When set, supervisors and administrators receive an in-app reminder during the final 24 hours and again when a DTR, absence notice, or case review becomes overdue. Leave blank to disable review deadline reminders.
             </p>
             {message && (
               <p role={message.ok ? 'status' : 'alert'} className={`mt-3 rounded-lg px-3 py-2 text-sm ${message.ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}>{message.text}</p>

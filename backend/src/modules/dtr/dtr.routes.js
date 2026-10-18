@@ -22,11 +22,14 @@ const revisionSchema = z.coerce.number().int().min(1).max(10000).optional();
 dtrRouter.get('/policy', asyncHandler(async (req, res) => ok(res, await dtr.getPolicy(req.user.institutionId))));
 
 dtrRouter.put('/policy', requireRole('admin'), asyncHandler(async (req, res) => {
-  const { requiredMonthlyHours } = parse(
-    z.object({ requiredMonthlyHours: z.number().positive('Must be greater than 0.').max(744, 'Too large for one month.') }),
+  const { requiredMonthlyHours, reviewSlaHours } = parse(
+    z.object({
+      requiredMonthlyHours: z.number().positive('Must be greater than 0.').max(744, 'Too large for one month.'),
+      reviewSlaHours: z.number().int().min(1).max(720).nullable().optional(),
+    }),
     req.body ?? {},
   );
-  ok(res, await dtr.setRequiredHours({ actor: req.user, hours: requiredMonthlyHours, ip: req.ip }));
+  ok(res, await dtr.setRequiredHours({ actor: req.user, hours: requiredMonthlyHours, reviewSlaHours, ip: req.ip }));
 }));
 
 // ---------------------------------------------------------------- student

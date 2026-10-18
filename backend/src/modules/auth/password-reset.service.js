@@ -22,6 +22,10 @@ const TOKEN_MINUTES = 30;
  * Returns { sent, devUrl? } so the route can surface the devUrl in dev only.
  */
 export async function requestReset({ email, ip, userAgent }) {
+  // Without a delivery provider in production, do not create a token that
+  // cannot be delivered. The route still responds generically for every email.
+  if (isProduction && !emailConfigured()) return { sent: false };
+
   // Fetch user — but even when not found we continue with a dummy path
   // so response time is similar and the caller sees no difference.
   const { rows } = await query(

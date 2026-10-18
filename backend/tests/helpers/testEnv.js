@@ -19,6 +19,8 @@ function useTestDatabase() {
   const dbName = new URL(url).pathname.slice(1);
   if (!/test/i.test(dbName)) throw new Error(`Test database name must contain "test" (got "${dbName}").`);
   env.databaseUrl = url;
+  env.databaseSsl = env.testDatabaseSsl;
+  env.databaseSslCa = env.testDatabaseSslCa;
 }
 
 async function resetDatabase() {
@@ -47,9 +49,9 @@ export function setupTestServer(appOptions = {}, onReady) {
   });
 
   after(async () => {
-    await new Promise((resolve) => server.close(resolve));
+    if (server) await new Promise((resolve) => server.close(resolve));
     await closePool();
-    await rm(ctx.uploadDir, { recursive: true, force: true });
+    if (ctx.uploadDir) await rm(ctx.uploadDir, { recursive: true, force: true });
   });
 
   return ctx;
@@ -68,7 +70,7 @@ export function makeClient(ctx) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => null);
-    return { status: res.status, body: json, setCookie: res.headers.getSetCookie() };
+    return { status: res.status, body: json, headers: res.headers, setCookie: res.headers.getSetCookie() };
   };
 
   // Log in and return the "name=value" cookie string.

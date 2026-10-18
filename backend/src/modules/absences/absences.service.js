@@ -2,6 +2,7 @@ import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { createNotification, notifyInstitutionAdmins, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { assertCanView, forbidden, isOfficeSupervisor, isOwner } from '../common/access.js';
 import {
   acceptUpload, assertRoomForDocument, countDocuments, discardUpload, insertManualReceipt, insertOnlineDocument, listDocuments,
@@ -45,9 +46,9 @@ const loadRow = async (id, db = { query }, lock = false) =>
 
 const addEvent = (db, { id, action, from, to, actor, note = null }) =>
   db.query(
-    `INSERT INTO absence_events (absence_id, action, from_status, to_status, actor_id, note) VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO absence_events (absence_id, action, from_status, to_status, actor_id, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [id, action, from, to, actor.id, note],
-  );
+  ).then(({ rows }) => rows[0].id);
 
 // ----------------------------------------------------------------- submit
 export async function create({ user, type, startDate, endDate, reason, ip }) {
@@ -64,6 +65,11 @@ export async function create({ user, type, startDate, endDate, reason, ip }) {
     );
     const id = rows[0].id;
     await addEvent(db, { id, action: 'submitted', from: null, to: 'pending', actor: user });
+    await notifyOfficeSupervisors(db, {
+      officeId: user.office.id, institutionId: user.institutionId, type: 'absence_submitted',
+      title: 'Absence notice submitted', message: `${user.fullName} submitted an absence notice for review.`,
+      relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:submitted`,
+    });
     await recordAudit({
       actorId: user.id, action: 'absence.submitted', targetType: 'absence_notice', targetId: id,
       after: { type, startDate, endDate, officeId: user.office.id }, ip,
@@ -135,7 +141,16 @@ async function review({ user, id, to, action, response, ip }) {
          responded_by = $4, responded_at = now() WHERE id = $1`,
       [id, to, response ?? null, user.id],
     );
-    await addEvent(db, { id, action, from: row.status, to, actor: user, note: response ?? null });
+    const eventId = await addEvent(db, { id, action, from: row.status, to, actor: user, note: response ?? null });
+    if (to === 'needs_follow_up' || to === 'acknowledged' || to === 'reviewed') {
+      await createNotification(db, {
+        recipientId: row.user_id, institutionId: row.institution_id, type: `absence_${to}`,
+        title: to === 'needs_follow_up' ? 'Absence notice needs your attention' : `Absence notice ${to}`,
+        message: response || `Your absence notice status is now ${to.replace('_', ' ')}.`,
+        relatedType: 'absence_notice', relatedId: id, important: to === 'needs_follow_up',
+        dedupeKey: `absence:${id}:event:${eventId}`,
+      });
+    }
     await recordAudit({
       actorId: user.id, action: `absence.${action}`, targetType: 'absence_notice', targetId: id,
       before: { status: row.status }, after: { status: to }, ip,
@@ -158,7 +173,12 @@ export async function respond({ user, id, message, ip }) {
       throw new AppError(409, 'INVALID_TRANSITION', 'There is no follow-up request to answer.');
     }
     await db.query(`UPDATE absence_notices SET status = 'pending' WHERE id = $1`, [id]);
-    await addEvent(db, { id, action: 'student_responded', from: row.status, to: 'pending', actor: user, note: message });
+    const eventId = await addEvent(db, { id, action: 'student_responded', from: row.status, to: 'pending', actor: user, note: message });
+    await notifyOfficeSupervisors(db, {
+      officeId: row.office_id, institutionId: row.institution_id, type: 'absence_response',
+      title: 'Student responded to an absence follow-up', message: 'A Student Assistant responded to a follow-up request.',
+      relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:event:${eventId}`,
+    });
     await recordAudit({ actorId: user.id, action: 'absence.student_responded', targetType: 'absence_notice', targetId: id, ip }, db);
     return getDetail({ user, id }, db);
   });
@@ -185,6 +205,16 @@ export async function addDocument({ user, id, buffer, rawName, ip }) {
         actorId: user.id, action: 'document.uploaded', targetType: 'document', targetId: docId,
         after: { absenceId: id, mime: accepted.mime, sizeBytes: accepted.size, method: 'online' }, ip,
       }, db);
+      await notifyOfficeSupervisors(db, {
+        officeId: row.office_id, institutionId: row.institution_id, type: 'absence_document_submitted',
+        title: 'Absence supporting document submitted', message: 'A Student Assistant added a supporting document to an absence notice.',
+        relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:document:${docId}`,
+      });
+      await notifyInstitutionAdmins(db, {
+        institutionId: row.institution_id, type: 'absence_document_submitted',
+        title: 'Absence supporting document submitted', message: 'A Student Assistant added a supporting document to an absence notice.',
+        relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:document:${docId}`,
+      });
       return getDetail({ user, id }, db);
     });
   } catch (err) {
