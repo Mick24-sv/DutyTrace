@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/*
+  DutyTrace design tokens — the ONLY place raw colors are defined.
+  Tailwind turns each --color-* into utilities, e.g. bg-navy, text-ink, border-line.
+  Change a value here and the whole app updates.
+*/
+@theme {
+  /* Brand */
+  --color-navy: #153B50;      /* navigation, headings, primary buttons */
+  --color-teal: #007F86;      /* accent: QR actions, links, active nav, progress */
+  --color-canvas: #F4F7FA;    /* app background (Soft Gray) */
+  --color-surface: #FFFFFF;   /* cards, forms, tables, dialogs */
+  --color-ink: #253746;       /* body text (Slate) */
+  --color-line: #DCE4EA;      /* borders */
+  --color-muted: #64748B;     /* secondary text */
+
+  /* Status — use ONLY for status badges, alerts and related feedback */
+  --color-ok-fg: #166534;     /* Approved / Verified */
+  --color-ok-bg: #DCFCE7;
+  --color-warn-fg: #92400E;   /* Pending / Under Review */
+  --color-warn-bg: #FEF3C7;
+  --color-bad-fg: #991B1B;    /* Rejected / Needs Action */
+  --color-bad-bg: #FEE2E2;
+  --color-info-fg: #1D4ED8;   /* Informational */
+  --color-info-bg: #DBEAFE;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(21 59 80 / 0.06), 0 1px 3px rgb(21 59 80 / 0.04);
+}
+
+@layer base {
+  html {
+    background-color: var(--color-canvas);
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background-color: var(--color-canvas);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    color: var(--color-navy);
+  }
+  /* Visible keyboard focus everywhere */
+  :focus-visible {
+    outline: 2px solid var(--color-teal);
+    outline-offset: 2px;
+  }
+}
+
+/* Printer-friendly: hide app chrome, keep content white (used for DTRs later) */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}

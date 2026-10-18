@@ -1,0 +1,26 @@
+{
+  "name": "dutytrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DutyTrace: QR-enabled Student Assistant duty verification and compliance tracking (ADNU capstone)",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,cyan \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "start": "npm run start -w backend",
+    "db:migrate": "npm run db:migrate -w backend",
+    "db:create-admin": "npm run db:create-admin -w backend",
+    "test": "npm run test -w backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
