@@ -21,6 +21,7 @@ Thumbs.db
 # Uploads and generated files (private documents must never be committed)
 backend/uploads/
 backend/generated/
+backend/certs/supabase-ca.crt
 
 # Test output
 coverage/
