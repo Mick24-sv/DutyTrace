@@ -98,8 +98,9 @@ async function liveSnapshot(user, month, now) {
   await requireMonthEnded(month, now);
   if (!user.office) throw new AppError(403, 'NOT_ASSIGNED', 'You are not assigned to an office. Ask an administrator.');
   const [history, policy] = await Promise.all([monthHistory(user.id, month), getPolicy()]);
+  const effectiveRequiredHours = user.requiredHours != null ? Number(user.requiredHours) : policy.requiredMonthlyHours;
   return buildSnapshot({
-    history, student: user, office: user.office, requiredHours: policy.requiredMonthlyHours, generatedAt: now,
+    history, student: user, office: user.office, requiredHours: effectiveRequiredHours, generatedAt: now,
   });
 }
 
@@ -114,9 +115,14 @@ export async function myOverview(user) {
   const { rows } = await query(`${DTR_SELECT} WHERE d.user_id = $1`, [user.id]);
   const byMonth = new Map(rows.map((r) => [r.month, mapDtr(r)]));
   const verified = rows.filter((r) => r.status === 'approved').reduce((sum, r) => sum + r.verified_seconds, 0);
+  const policy = await getPolicy();
+  const effectivePolicy = {
+    ...policy,
+    requiredMonthlyHours: user.requiredHours != null ? Number(user.requiredHours) : policy.requiredMonthlyHours,
+  };
   return {
     timezone: env.timezone,
-    policy: await getPolicy(),
+    policy: effectivePolicy,
     months: endedMonths(now, env.timezone).map((month) => ({ month, dtr: byMonth.get(month) ?? null })),
     verifiedHoursTotal: secondsToHours(verified),
     approvedCount: rows.filter((r) => r.status === 'approved').length,

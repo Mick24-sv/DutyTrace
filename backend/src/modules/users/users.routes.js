@@ -16,6 +16,7 @@ const createSchema = z.object({
   role: z.enum(ROLES),
   password: z.string().min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters.`).max(200),
   officeId: z.string().uuid().nullish(),
+  requiredHours: z.coerce.number().min(0.5, 'Minimum 0.5 hours').max(744, 'Maximum 744 hours').nullish(),
 });
 
 const updateSchema = z
@@ -23,13 +24,21 @@ const updateSchema = z
     fullName: z.string().trim().min(1).max(120).optional(),
     role: z.enum(ROLES).optional(),
     status: z.enum(['active', 'disabled']).optional(),
+    requiredHours: z.coerce.number().min(0.5, 'Minimum 0.5 hours').max(744, 'Maximum 744 hours').nullable().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, 'Provide at least one field to change.');
 
 const assignmentSchema = z.object({ officeId: z.string().uuid().nullable() });
 
 // Fields safe to store in the audit log (never the password hash).
-const auditView = (u) => ({ email: u.email, fullName: u.fullName, role: u.role, status: u.status, officeId: u.office?.id ?? null });
+const auditView = (u) => ({
+  email: u.email,
+  fullName: u.fullName,
+  role: u.role,
+  status: u.status,
+  requiredHours: u.requiredHours,
+  officeId: u.office?.id ?? null,
+});
 
 const fetchUser = async (id, db = { query }) => {
   const { rows } = await db.query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1`, [id]);
@@ -58,8 +67,8 @@ usersRouter.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
     if (dup.rowCount) throw new AppError(409, 'EMAIL_TAKEN', 'An account with that email already exists.');
 
     const { rows } = await db.query(
-      'INSERT INTO users (email, password_hash, full_name, role) VALUES ($1, $2, $3, $4) RETURNING id',
-      [input.email, passwordHash, input.fullName, input.role],
+      'INSERT INTO users (email, password_hash, full_name, role, required_hours) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [input.email, passwordHash, input.fullName, input.role, input.role === 'student' ? (input.requiredHours ?? null) : null],
     );
     if (input.officeId) {
       const office = await db.query('SELECT 1 FROM offices WHERE id = $1 AND is_active', [input.officeId]);
@@ -103,9 +112,19 @@ usersRouter.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) =>
       throw new AppError(400, 'VALIDATION_ERROR', 'End the office assignment before making this user an administrator.');
     }
     await db.query(
-      `UPDATE users SET full_name = COALESCE($2, full_name), role = COALESCE($3::user_role, role),
-              status = COALESCE($4::user_status, status) WHERE id = $1`,
-      [id, changes.fullName ?? null, changes.role ?? null, changes.status ?? null],
+      `UPDATE users SET full_name = COALESCE($2, full_name),
+                        role = COALESCE($3::user_role, role),
+                        status = COALESCE($4::user_status, status),
+                        required_hours = CASE WHEN $5::boolean THEN $6::numeric ELSE required_hours END
+       WHERE id = $1`,
+      [
+        id,
+        changes.fullName ?? null,
+        changes.role ?? null,
+        changes.status ?? null,
+        'requiredHours' in changes,
+        changes.requiredHours ?? null,
+      ],
     );
     if (changes.status === 'disabled') await revokeAllSessions(id, db);
 

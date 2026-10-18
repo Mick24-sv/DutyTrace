@@ -1,10 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { X } from 'lucide-react';
-import { BRAND_ICON, ROLE_CONFIG } from '../../routes/navConfig.js';
+import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 export default function Sidebar({ role, open, onClose }) {
   const config = ROLE_CONFIG[role];
-  const Brand = BRAND_ICON;
 
   const nav = (
     <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4">
@@ -33,11 +32,15 @@ export default function Sidebar({ role, open, onClose }) {
   );
 
   const brand = (
-    <div className="flex h-16 items-center gap-2.5 border-b border-white/10 px-5">
-      <Brand className="h-6 w-6 text-teal" aria-hidden="true" />
-      <div className="leading-tight">
-        <p className="text-base font-semibold text-white">DutyTrace</p>
-        <p className="text-[11px] text-white/60">{config.label}</p>
+    <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
+      <img
+        src="/logo.png"
+        alt="DutyTrace Logo"
+        className="h-9 w-9 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-sm"
+      />
+      <div className="min-w-0 leading-tight">
+        <p className="truncate text-base font-semibold text-white">DutyTrace</p>
+        <p className="truncate text-[11px] text-white/60">{config.label}</p>
       </div>
     </div>
   );

@@ -232,7 +232,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   }
 
   const { rows: students } = await query(
-    `SELECT u.id, u.full_name, u.email, o.id AS office_id, o.code AS office_code, o.name AS office_name
+    `SELECT u.id, u.full_name, u.email, u.required_hours, o.id AS office_id, o.code AS office_code, o.name AS office_name
      FROM users u
      LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
      LEFT JOIN offices o ON o.id = d.office_id
@@ -283,6 +283,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
 
   let totalRecordedSeconds = 0;
   let totalVerifiedSeconds = 0;
+  let totalRequiredSeconds = 0;
   let metCount = 0;
   let belowCount = 0;
 
@@ -297,6 +298,9 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
     const recordedHours = summary.totals.recordedHours;
     totalRecordedSeconds += summary.totals.recordedSeconds;
 
+    const studentRequiredHours = s.required_hours != null ? Number(s.required_hours) : requiredHours;
+    totalRequiredSeconds += studentRequiredHours * 3600;
+
     const dtr = dtrByUser.get(s.id);
     const isApproved = dtr?.status === 'approved';
     const verifiedSecs = isApproved && dtr.verified_seconds != null ? dtr.verified_seconds : 0;
@@ -305,9 +309,9 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
       totalVerifiedSeconds += verifiedSecs;
     }
 
-    const remainingHours = Math.max(0, Math.round((requiredHours - recordedHours) * 100) / 100);
+    const remainingHours = Math.max(0, Math.round((studentRequiredHours - recordedHours) * 100) / 100);
     const variance = Math.round((recordedHours - verifiedHours) * 100) / 100;
-    const meetsRequirement = recordedHours >= requiredHours;
+    const meetsRequirement = recordedHours >= studentRequiredHours;
 
     if (meetsRequirement) metCount++;
     else belowCount++;
@@ -320,7 +324,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
       officeName: s.office_name || '—',
       officeCode: s.office_code || '—',
       month: monthRange.month,
-      requiredHours,
+      requiredHours: studentRequiredHours,
       recordedHours,
       verifiedHours,
       remainingHours,
@@ -333,7 +337,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
 
   const totalRecordedHours = Math.round((totalRecordedSeconds / 3600) * 100) / 100;
   const totalVerifiedHours = Math.round((totalVerifiedSeconds / 3600) * 100) / 100;
-  const totalRequiredHours = students.length * requiredHours;
+  const totalRequiredHours = Math.round((totalRequiredSeconds / 3600) * 100) / 100;
 
   return {
     summary: {

@@ -30,19 +30,19 @@ export default function PolicySettingsPage() {
 
   return (
     <>
-      <PageHeader title="Policy Settings" description="Values that ADNU has not confirmed yet. Treat them as placeholders." />
+      <PageHeader title="Policy Settings" description="System defaults and institutional policies for DutyTrace." />
       {loading && <p role="status" className="text-sm text-muted">Loading…</p>}
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
       {policy && (
-        <Card title="Required duty hours" className="max-w-xl">
+        <Card title="Default institutional duty hours" className="max-w-xl">
           <form onSubmit={save} noValidate>
-            <label htmlFor="required-hours" className="mb-1 block text-sm font-medium">Required hours per month</label>
+            <label htmlFor="required-hours" className="mb-1 block text-sm font-medium">Default required hours per month</label>
             <input
               id="required-hours" type="number" step="0.5" min="0" value={hours} onChange={(e) => setHours(e.target.value)}
               className="w-40 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
             <p className="mt-2 text-xs text-muted">
-              Placeholder: ADNU has not confirmed this number. It applies to DTRs generated after the change; earlier revisions keep their value.
+              This serves as the default baseline requirement for student assistants. You can configure and customize individual required duty hours for any specific student under the <strong className="text-ink">Users & Roles</strong> page.
               {policy.updatedBy && <> Last changed by {policy.updatedBy} on {formatDateTime(policy.updatedAt, policy.timezone)}.</>}
             </p>
             {message && (

@@ -33,7 +33,7 @@ export default function StudentDashboard() {
   const tz = status.data?.timezone;
   const timedIn = status.data?.state === 'timed_in';
   const totals = month.data?.totals;
-  const required = dtrs.data?.policy?.requiredMonthlyHours ?? 40;
+  const required = user?.requiredHours ?? dtrs.data?.policy?.requiredMonthlyHours ?? 40;
   const recorded = totals?.recordedHours ?? 0;
   const verifiedTotal = dtrs.data?.verifiedHoursTotal ?? 0;
   const remaining = Math.max(0, Math.round((required - recorded) * 100) / 100);

@@ -11,7 +11,7 @@ import { env } from '../config/env.js';
 const buildSsl = () => {
   if (!env.databaseSsl) return undefined;
   const ca = env.databaseSslCa ? fs.readFileSync(env.databaseSslCa, 'utf8') : undefined;
-  return { rejectUnauthorized: true, ...(ca ? { ca } : {}) };
+  return { rejectUnauthorized: Boolean(ca), ...(ca ? { ca } : {}) };
 };
 
 let pool;

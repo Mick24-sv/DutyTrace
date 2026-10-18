@@ -3,6 +3,7 @@ import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { Eye, EyeOff } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPatch, apiPost, apiPut } from '../../services/api.js';
@@ -10,12 +11,78 @@ import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
 
+function StudentHoursInput({ user, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(user.requiredHours != null ? String(user.requiredHours) : '');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e) => {
+    e?.preventDefault();
+    setSaving(true);
+    try {
+      await onUpdate(val.trim() === '' ? null : Number(val));
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setVal(user.requiredHours != null ? String(user.requiredHours) : ''); setEditing(true); }}
+        className="group flex items-center gap-1.5 text-left text-sm text-ink hover:text-teal focus:outline-none"
+        title="Click to edit required duty hours for this student"
+      >
+        {user.requiredHours != null ? (
+          <span className="font-semibold text-ink">{user.requiredHours} hrs</span>
+        ) : (
+          <span className="text-xs text-muted italic">Default (Policy)</span>
+        )}
+        <span className="text-xs text-teal opacity-0 group-hover:opacity-100 underline">Edit</span>
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="flex items-center gap-1">
+      <input
+        type="number"
+        step="0.5"
+        min="1"
+        max="744"
+        placeholder="Default"
+        value={val}
+        autoFocus
+        onChange={(e) => setVal(e.target.value)}
+        className="w-20 rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink focus:border-teal focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={saving}
+        className="rounded bg-teal px-1.5 py-0.5 text-[11px] font-medium text-white hover:bg-teal/90 disabled:opacity-50"
+      >
+        {saving ? '…' : 'Save'}
+      </button>
+      <button
+        type="button"
+        onClick={() => setEditing(false)}
+        className="rounded border border-line px-1 py-0.5 text-[11px] text-muted hover:text-ink"
+      >
+        ✕
+      </button>
+    </form>
+  );
+}
+
 // Administrators create accounts, assign people to offices and enable/disable accounts.
 export default function UsersPage() {
   const [tick, setTick] = useState(0);
   const { data, loading, error } = useApiData(`/users?_=${tick}`);
   const offices = useApiData('/offices');
-  const [form, setForm] = useState({ email: '', fullName: '', role: 'student', password: '', officeId: '' });
+  const [form, setForm] = useState({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [rowError, setRowError] = useState('');
@@ -27,8 +94,12 @@ export default function UsersPage() {
     e.preventDefault();
     setBusy(true); setFormError('');
     try {
-      await apiPost('/users', { ...form, officeId: form.role === 'admin' || !form.officeId ? undefined : form.officeId });
-      setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '' });
+      await apiPost('/users', {
+        ...form,
+        officeId: form.role === 'admin' || !form.officeId ? undefined : form.officeId,
+        requiredHours: form.role === 'student' && form.requiredHours ? Number(form.requiredHours) : undefined,
+      });
+      setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
       reload();
     } catch (err) { setFormError(err.details ? Object.values(err.details).join(' ') : err.message); } finally { setBusy(false); }
   }
@@ -54,6 +125,19 @@ export default function UsersPage() {
         </select>
       )),
     },
+    {
+      key: 'requiredHours',
+      header: 'Duty Hours / Mo',
+      render: (u) => {
+        if (u.role !== 'student') return <span className="text-muted">—</span>;
+        return (
+          <StudentHoursInput
+            user={u}
+            onUpdate={(val) => act(() => apiPatch(`/users/${u.id}`, { requiredHours: val }))}
+          />
+        );
+      },
+    },
     { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'approved' : 'rejected'}>{u.status}</Badge> },
     {
       key: 'action', header: '',
@@ -70,7 +154,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <PageHeader title="Users & Roles" description="Create accounts, assign people to offices and enable or disable access." />
+      <PageHeader title="Users & Roles" description="Create accounts, assign people to offices, customize student duty hours, and enable or disable access." />
       <Card title="Create an account" className="mb-6">
         <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -94,9 +178,50 @@ export default function UsersPage() {
               {officeList.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
+          {form.role === 'student' && (
+            <div className="sm:col-span-2">
+              <label htmlFor="u-req-hours" className="mb-1 block text-xs font-medium text-muted">
+                Required monthly duty hours (optional)
+              </label>
+              <input
+                id="u-req-hours"
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="744"
+                placeholder="Leave blank to use institutional default (Policy Settings)"
+                value={form.requiredHours}
+                onChange={set('requiredHours')}
+                className={field}
+              />
+              <p className="mt-1 text-[11px] text-muted">
+                Assign a custom monthly duty-hour requirement for this student, or leave blank to follow the institutional default.
+              </p>
+            </div>
+          )}
           <div className="sm:col-span-2">
             <label htmlFor="u-pass" className="mb-1 block text-xs font-medium text-muted">Temporary password (at least 10 characters)</label>
-            <input id="u-pass" type="password" autoComplete="new-password" value={form.password} onChange={set('password')} required minLength={10} className={field} />
+            <div className="relative">
+              <input
+                id="u-pass"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={form.password}
+                onChange={set('password')}
+                required
+                minLength={10}
+                className={`${field} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted hover:text-ink focus:outline-none focus-visible:text-teal"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
+              </button>
+            </div>
             <p className="mt-1 text-xs text-muted">Tell the person their password privately. There is no password-reset flow yet.</p>
           </div>
           {formError && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg sm:col-span-2">{formError}</p>}

@@ -26,12 +26,13 @@ export const toPublicUser = (row) => ({
   fullName: row.full_name,
   role: row.role,
   status: row.status,
+  requiredHours: row.required_hours != null ? Number(row.required_hours) : null,
   office: row.office_id ? { id: row.office_id, code: row.office_code, name: row.office_name } : null,
 });
 
 // Shared SELECT: a user plus their current office (if any).
 export const USER_WITH_OFFICE_SQL = `
-  SELECT u.id, u.email, u.full_name, u.role, u.status,
+  SELECT u.id, u.email, u.full_name, u.role, u.status, u.required_hours,
          o.id AS office_id, o.code AS office_code, o.name AS office_name
   FROM users u
   LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
