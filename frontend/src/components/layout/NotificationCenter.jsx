@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, CheckCheck } from 'lucide-react';
-import { apiGet, apiPatch } from '../../services/api.js';
+import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { apiDelete, apiGet, apiPatch } from '../../services/api.js';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -30,6 +30,7 @@ export default function NotificationCenter({ role }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
   const wrapRef = useRef(null);
   const filterRef = useRef('all');
   const navigate = useNavigate();
@@ -102,6 +103,21 @@ export default function NotificationCenter({ role }) {
     }
   };
 
+  const deleteNotification = async (event, item) => {
+    event.stopPropagation();
+    setError('');
+    setDeletingId(item.id);
+    try {
+      await apiDelete(`/notifications/${item.id}`);
+      setItems((current) => current.filter((row) => row.id !== item.id));
+      if (!item.readAt) setUnreadCount((count) => Math.max(0, count - 1));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="relative" ref={wrapRef}>
       <button
@@ -135,8 +151,8 @@ export default function NotificationCenter({ role }) {
             {!loading && !error && items.length === 0 && <p className="p-5 text-center text-sm text-muted">No {filter === 'all' ? '' : `${filter} `}notifications.</p>}
             <ul>
               {items.map((item) => (
-                <li key={item.id} className={`border-b border-line last:border-0 ${item.readAt ? '' : 'bg-teal/5'}`}>
-                  <button type="button" onClick={() => openNotification(item)} className="w-full px-4 py-3 text-left hover:bg-canvas">
+                <li key={item.id} className={`flex items-start border-b border-line last:border-0 ${item.readAt ? '' : 'bg-teal/5'}`}>
+                  <button type="button" onClick={() => openNotification(item)} className="min-w-0 flex-1 px-4 py-3 text-left hover:bg-canvas">
                     <span className="flex items-start gap-2">
                       {!item.readAt ? <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal" aria-label="Unread" /> : <span className="w-2 shrink-0" />}
                       <span className="min-w-0 flex-1">
@@ -146,6 +162,16 @@ export default function NotificationCenter({ role }) {
                       </span>
                       {!item.readAt && <Check className="mt-1 h-4 w-4 shrink-0 text-teal" aria-hidden="true" />}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete notification: ${item.title}`}
+                    title="Delete notification"
+                    disabled={deletingId === item.id}
+                    onClick={(event) => deleteNotification(event, item)}
+                    className="m-2 rounded-lg p-2 text-muted hover:bg-bad-bg hover:text-bad-fg disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </li>
               ))}

@@ -38,59 +38,119 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <header className="bg-navy px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <img src="/logo.png" alt="DutyTrace Logo" className="h-9 w-9 rounded-full bg-white object-contain p-0.5 shadow-sm" />
-          <span className="text-xl font-semibold tracking-tight text-white">DutyTrace</span>
-        </div>
+    <div className="min-h-screen w-full bg-surface">
+      <header className="flex h-[76px] w-full items-center bg-navy px-6 sm:px-10 lg:px-12 xl:px-20">
+        <img src="/logo.png" alt="DutyTrace" className="h-11 w-11 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-sm" />
+        <span className="ml-3 text-xl font-semibold tracking-tight text-white">DutyTrace</span>
       </header>
 
-      <main className="mx-auto max-w-md px-6 py-10">
-        <div className="mb-6 text-center">
-          <img
-            src="/logo.png"
-            alt="DutyTrace Logo"
-            className="mx-auto mb-3 h-28 w-28 rounded-2xl border border-line bg-surface object-contain p-2 shadow-sm"
-          />
-          <h1 className="text-2xl font-bold text-ink">Sign in to DutyTrace</h1>
-          <p className="mt-2 text-sm text-muted">
-            Student Assistant duty verification and compliance tracking.
-          </p>
+      <main className="grid min-h-[calc(100vh-76px)] w-full bg-surface lg:grid-cols-[minmax(420px,0.95fr)_minmax(420px,1.05fr)]">
+        <section className="flex min-h-[calc(100vh-76px)] flex-col px-6 py-7 sm:px-10 lg:px-12 xl:px-20">
+        <div className="flex flex-1 items-center justify-center py-12">
+          <div className="w-full max-w-md">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold tracking-tight text-navy sm:text-4xl">Welcome back</h1>
+              <p className="mt-3 text-base text-muted">Sign in to your DutyTrace account</p>
+            </div>
+
+            <form onSubmit={onSubmit} noValidate>
+              {error && (
+                <p role="alert" className="mb-5 rounded-lg bg-bad-bg px-4 py-3 text-sm text-bad-fg">
+                  {error}
+                </p>
+              )}
+
+              <Field
+                id="email" label="Email address" type="email" autoComplete="username"
+                value={email} onChange={setEmail} error={fieldErrors.email}
+              />
+              <Field
+                id="password" label="Password" type="password" autoComplete="current-password"
+                value={password} onChange={setPassword} error={fieldErrors.password}
+              />
+
+              <div className="-mt-1 mb-6 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-medium text-teal hover:underline focus:outline-none focus-visible:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
+              <Button type="submit" className="mt-1 min-h-12 w-full" disabled={submitting}>
+                {submitting ? 'Signing in…' : 'Sign in'}
+              </Button>
+            </form>
+          </div>
         </div>
 
-        <form onSubmit={onSubmit} noValidate className="mt-6 rounded-card border border-line bg-surface p-6 shadow-card">
-          {error && (
-            <p role="alert" className="mb-4 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">
-              {error}
+        <p className="text-center text-xs text-muted lg:text-left">Duty hours and attendance, in one place.</p>
+        </section>
+
+        <aside className="relative hidden min-h-[calc(100vh-76px)] items-center justify-center overflow-hidden bg-canvas px-8 py-12 lg:flex xl:px-16">
+        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-teal/5" aria-hidden="true" />
+        <div className="absolute -bottom-28 -left-24 h-96 w-96 rounded-full bg-navy/5" aria-hidden="true" />
+        <div className="relative w-full max-w-2xl">
+          <DutyIllustration />
+          <div className="mx-auto mt-8 max-w-lg text-center">
+            <h2 className="text-3xl font-bold tracking-tight text-navy">Your duty. Your progress.</h2>
+            <p className="mt-3 text-base leading-7 text-muted">
+              Track your hours. Stay on schedule. Meet your requirements.
             </p>
-          )}
-
-          <Field
-            id="email" label="Email" type="email" autoComplete="username"
-            value={email} onChange={setEmail} error={fieldErrors.email}
-          />
-          <Field
-            id="password" label="Password" type="password" autoComplete="current-password"
-            value={password} onChange={setPassword} error={fieldErrors.password}
-          />
-
-          <div className="mb-3 -mt-2 text-right">
-            <Link
-              to="/forgot-password"
-              className="text-sm text-teal hover:underline focus:outline-none focus-visible:underline"
-            >
-              Forgot password?
-            </Link>
           </div>
-
-          <Button type="submit" className="mt-2 w-full" disabled={submitting}>
-            {submitting ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </form>
-
+        </div>
+        </aside>
       </main>
     </div>
+  );
+}
+
+function DutyIllustration() {
+  return (
+    <svg viewBox="0 0 640 460" role="img" aria-labelledby="duty-illustration-title" className="mx-auto block w-full max-w-xl">
+      <title id="duty-illustration-title">Student assistant organizing duty hours on a laptop</title>
+      <ellipse cx="320" cy="414" rx="232" ry="20" fill="var(--color-line)" opacity="0.65" />
+
+      <rect x="344" y="51" width="218" height="138" rx="18" fill="var(--color-surface)" stroke="var(--color-line)" strokeWidth="2" />
+      <rect x="365" y="72" width="40" height="40" rx="12" fill="var(--color-info-bg)" />
+      <path d="M385 81v12l8 5" fill="none" stroke="var(--color-navy)" strokeWidth="3" strokeLinecap="round" />
+      <circle cx="385" cy="93" r="13" fill="none" stroke="var(--color-navy)" strokeWidth="2.5" />
+      <rect x="419" y="78" width="112" height="9" rx="4.5" fill="var(--color-line)" />
+      <rect x="419" y="96" width="79" height="7" rx="3.5" fill="var(--color-line)" opacity="0.8" />
+      <rect x="365" y="128" width="176" height="42" rx="10" fill="var(--color-canvas)" />
+      <rect x="378" y="141" width="82" height="7" rx="3.5" fill="var(--color-teal)" />
+      <rect x="378" y="153" width="128" height="5" rx="2.5" fill="var(--color-line)" />
+      <circle cx="521" cy="149" r="9" fill="var(--color-ok-bg)" />
+      <path d="m517 149 3 3 6-7" fill="none" stroke="var(--color-ok-fg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+      <rect x="75" y="111" width="128" height="186" rx="16" fill="var(--color-surface)" stroke="var(--color-line)" strokeWidth="2" />
+      <rect x="93" y="131" width="91" height="34" rx="9" fill="var(--color-navy)" />
+      <rect x="104" y="143" width="52" height="7" rx="3.5" fill="var(--color-surface)" opacity="0.9" />
+      <g fill="var(--color-canvas)">
+        <rect x="93" y="178" width="25" height="25" rx="6" /><rect x="125" y="178" width="25" height="25" rx="6" /><rect x="157" y="178" width="27" height="25" rx="6" />
+        <rect x="93" y="211" width="25" height="25" rx="6" /><rect x="125" y="211" width="25" height="25" rx="6" /><rect x="157" y="211" width="27" height="25" rx="6" />
+      </g>
+      <g fill="var(--color-teal)">
+        <rect x="93" y="244" width="25" height="25" rx="6" /><rect x="125" y="244" width="25" height="25" rx="6" /><rect x="157" y="244" width="27" height="25" rx="6" />
+      </g>
+
+      <path d="M207 328c4-64 39-106 104-106s101 42 105 106v60H207z" fill="var(--color-navy)" />
+      <path d="M264 210c0-42 20-69 53-69s53 27 53 69v24h-106z" fill="var(--color-ink)" />
+      <ellipse cx="317" cy="211" rx="42" ry="51" fill="var(--color-warn-bg)" />
+      <path d="M275 207c0-44 19-67 46-67 28 0 47 23 47 63-13-3-22-12-27-24-12 17-36 26-66 28z" fill="var(--color-ink)" />
+      <path d="M298 215h1m36 0h1" stroke="var(--color-navy)" strokeWidth="5" strokeLinecap="round" />
+      <path d="M307 237c7 6 15 6 22 0" fill="none" stroke="var(--color-navy)" strokeWidth="3" strokeLinecap="round" />
+      <path d="M268 281c15 17 31 25 49 25s35-8 50-25l22 47H246z" fill="var(--color-teal)" />
+
+      <path d="M178 360h282l-30 47H207z" fill="var(--color-navy)" />
+      <path d="M195 360h248l-20 31H215z" fill="var(--color-line)" />
+      <rect x="282" y="366" width="77" height="5" rx="2.5" fill="var(--color-muted)" opacity="0.5" />
+      <path d="M168 408h300" stroke="var(--color-ink)" strokeWidth="8" strokeLinecap="round" />
+
+      <circle cx="505" cy="259" r="24" fill="var(--color-info-bg)" />
+      <path d="M495 259h20m-10-10v20" stroke="var(--color-teal)" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -101,7 +161,7 @@ function Field({ id, label, type, value, onChange, error, autoComplete }) {
 
   return (
     <div className="mb-4">
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">{label}</label>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-ink">{label}</label>
       <div className="relative">
         <input
           id={id}
@@ -112,7 +172,7 @@ function Field({ id, label, type, value, onChange, error, autoComplete }) {
           onChange={(e) => onChange(e.target.value)}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
-          className={`w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal ${
+          className={`min-h-12 w-full rounded-lg border border-line bg-surface px-3 py-3 text-base text-ink placeholder:text-muted focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal ${
             isPassword ? 'pr-10' : ''
           }`}
         />

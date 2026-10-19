@@ -115,16 +115,18 @@ async function requirementFor({ user, term, officeId, startsOn, endsOn, db = { q
   );
   const assignedHours = hours(assignments[0]?.required_hours);
   const defaultMinimumDailyHours = await settingsFor(user.institutionId, db);
-  const requiredTermHours = policy?.scope_type === 'student'
+  const individualPolicyHours = policy?.scope_type === 'student' && policy.required_term_hours != null
     ? hours(policy.required_term_hours)
-    : assignedHours ?? hours(policy?.required_term_hours);
+    : null;
+  const requiredTermHours = individualPolicyHours ?? assignedHours ?? hours(policy?.required_term_hours);
   return {
     policy: publicPolicy(policy),
     defaultMinimumDailyHours,
     requiredTermHours,
-    totalHoursSource: policy?.scope_type === 'student'
-      ? 'individual_exception'
-      : assignedHours != null ? 'individual_assignment' : policy?.scope_type ?? null,
+    totalHoursSource: requiredTermHours == null
+      ? null
+      : individualPolicyHours != null ? 'individual_exception'
+        : assignedHours != null ? 'individual_assignment' : policy?.scope_type ?? null,
     minimumDailyHours: hours(policy?.minimum_daily_hours) ?? defaultMinimumDailyHours,
     maximumDailyHours: hours(policy?.maximum_daily_hours),
     permittedWeekdays: (policy?.permitted_weekdays ?? []).map(Number).filter((weekday) => weekday <= 6),
@@ -241,7 +243,6 @@ export async function savePolicy({ actor, policyId, input, ip }) {
       if (input.scopeType === 'student') {
         const { rowCount } = await db.query("SELECT 1 FROM users WHERE id = $1 AND institution_id = $2 AND role = 'student'", [scopeId, actor.institutionId]);
         if (!rowCount) throw forbidden();
-        if (!input.exceptionReason?.trim()) throw new AppError(400, 'VALIDATION_ERROR', 'An individual exception needs an authorization reason.');
       }
       let previous = null;
       if (policyId) {
@@ -255,10 +256,10 @@ export async function savePolicy({ actor, policyId, input, ip }) {
       }
       const values = [
         input.termId, actor.institutionId, input.scopeType, scopeId,
-        input.effectiveStartsOn, input.effectiveEndsOn, input.requiredTermHours,
+        input.effectiveStartsOn, input.effectiveEndsOn, input.requiredTermHours ?? null,
         input.minimumDailyHours ?? null, input.maximumDailyHours ?? null,
         input.permittedWeekdays, JSON.stringify(input.permittedTimeWindows),
-        input.scopeType === 'student' ? input.exceptionReason.trim() : null, actor.id,
+        input.scopeType === 'student' ? input.exceptionReason?.trim() || null : null, actor.id,
       ];
       let row;
       if (policyId) {

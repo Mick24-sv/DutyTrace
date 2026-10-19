@@ -80,3 +80,14 @@ export async function markAllRead(user) {
   );
   return { updated: rowCount };
 }
+
+export async function deleteNotification(user, id) {
+  const { rows } = await query(
+    `DELETE FROM notifications
+     WHERE id = $1 AND recipient_id = $2 AND institution_id = $3
+     RETURNING read_at`,
+    [id, user.id, user.institutionId],
+  );
+  if (!rows[0]) throw new AppError(404, 'NOT_FOUND', 'Notification not found.');
+  return { deleted: true, wasUnread: rows[0].read_at === null };
+}

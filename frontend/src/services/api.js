@@ -52,6 +52,7 @@ export const apiGet = (path, opts) => request('GET', path, opts);
 export const apiPost = (path, body, opts) => request('POST', path, { ...opts, body });
 export const apiPut = (path, body, opts) => request('PUT', path, { ...opts, body });
 export const apiPatch = (path, body, opts) => request('PATCH', path, { ...opts, body });
+export const apiDelete = (path, opts) => request('DELETE', path, opts);
 
 // Upload one file: the request body IS the file, its name travels in ?filename=. The server decides
 // whether the type and size are acceptable; this only reports its answer.

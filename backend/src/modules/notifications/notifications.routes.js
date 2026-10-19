@@ -18,3 +18,7 @@ notificationsRouter.patch('/read-all', asyncHandler(async (req, res) => {
 notificationsRouter.patch('/:id/read', asyncHandler(async (req, res) => {
   ok(res, { notification: await notifications.markRead(req.user, parseId(req.params.id)) });
 }));
+
+notificationsRouter.delete('/:id', asyncHandler(async (req, res) => {
+  ok(res, await notifications.deleteNotification(req.user, parseId(req.params.id)));
+}));
