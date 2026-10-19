@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, QrCode, Clock, CalendarDays, FileText, CalendarOff,
   FolderCheck, Users, ClipboardCheck, Building2, BarChart3, ScrollText,
-  Settings, ShieldCheck, CalendarRange,
+  Settings, ShieldCheck, CalendarRange, ClipboardList,
 } from 'lucide-react';
 
 // One source of truth for role-specific navigation.
@@ -14,7 +14,7 @@ export const ROLE_CONFIG = {
       { to: '', label: 'Dashboard', icon: LayoutDashboard },
       { to: 'scan', label: 'Scan QR', icon: QrCode },
       { to: 'attendance', label: 'My Attendance', icon: Clock },
-      { to: 'schedule', label: 'Schedule', icon: CalendarDays },
+      { to: 'schedule', label: 'My Duty Preferences', icon: CalendarDays },
       { to: 'dtr', label: 'Monthly DTR', icon: FileText },
       { to: 'absences', label: 'Absence Notices', icon: CalendarOff },
       { to: 'cases', label: 'Compliance Cases', icon: FolderCheck },
@@ -25,10 +25,11 @@ export const ROLE_CONFIG = {
     base: '/supervisor',
     nav: [
       { to: '', label: 'Dashboard', icon: LayoutDashboard },
-      { to: 'scan', label: 'Scan QR', icon: QrCode },
+      { to: 'office-qr', label: 'Office QR Code', icon: QrCode },
       { to: 'attendance', label: 'My Attendance', icon: Clock },
       { to: 'assistants', label: 'Student Assistants', icon: Users },
       { to: 'dtr-review', label: 'DTR Review', icon: ClipboardCheck },
+      { to: 'schedule-review', label: 'Duty Schedule Review', icon: ClipboardList },
       { to: 'absences', label: 'Absence Notices', icon: CalendarOff },
       { to: 'cases', label: 'Compliance Cases', icon: FolderCheck },
       { to: 'reports', label: 'Reports', icon: BarChart3 },
@@ -48,6 +49,7 @@ export const ROLE_CONFIG = {
       { to: 'reports', label: 'Reports', icon: BarChart3 },
       { to: 'audit', label: 'Audit Trail', icon: ScrollText, phase: 6 },
       { to: 'settings', label: 'Policy Settings', icon: Settings },
+      { to: 'duty-requirements', label: 'Duty Requirements', icon: ClipboardList },
     ],
   },
 };

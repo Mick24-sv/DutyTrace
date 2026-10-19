@@ -10,6 +10,11 @@ import { buildPayload } from './qr.service.js';
 export const qrRouter = Router({ mergeParams: true });
 qrRouter.use(requireAuth, requireRole('admin'));
 
+// Supervisors may display or print the active code for their assigned office,
+// but cannot generate, replace, or revoke it.
+export const supervisorQrRouter = Router();
+supervisorQrRouter.use(requireAuth, requireRole('supervisor'));
+
 const toCode = (r, { withPayload = false } = {}) => ({
   id: r.id,
   createdAt: r.created_at,
@@ -63,6 +68,13 @@ const issue = async (db, officeId, adminId) => {
 
 qrRouter.get('/', asyncHandler(async (req, res) => {
   ok(res, await view(parseId(req.params.officeId), req.user.institutionId));
+}));
+
+supervisorQrRouter.get('/', asyncHandler(async (req, res) => {
+  const officeId = req.user.office?.id;
+  if (!officeId) throw new AppError(409, 'OFFICE_NOT_ASSIGNED', 'You are not assigned to an office. Ask an administrator for help.');
+  const officeQr = await view(officeId, req.user.institutionId);
+  ok(res, { office: officeQr.office, active: officeQr.active });
 }));
 
 // Generate the first code. Refuses if a valid one already exists (use regenerate).

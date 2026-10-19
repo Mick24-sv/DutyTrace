@@ -21,6 +21,10 @@ import DtrReviewPage from './pages/supervisor/DtrReviewPage.jsx';
 import DtrOverviewPage from './pages/admin/DtrOverviewPage.jsx';
 import PolicySettingsPage from './pages/admin/PolicySettingsPage.jsx';
 import AcademicTermsPage from './pages/admin/AcademicTermsPage.jsx';
+import DutyRequirementsPage from './pages/admin/DutyRequirementsPage.jsx';
+import DutySchedulePage from './pages/student/DutySchedulePage.jsx';
+import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
+import SupervisorQrPage from './pages/supervisor/SupervisorQrPage.jsx';
 import DtrDetailPage from './pages/shared/DtrDetailPage.jsx';
 import MyAbsencesPage from './pages/student/MyAbsencesPage.jsx';
 import AbsenceQueuePage from './pages/supervisor/AbsenceQueuePage.jsx';
@@ -40,9 +44,9 @@ const DASHBOARDS = {
 
 // Pages that are really built; every other nav item falls back to <ComingSoon>.
 const BUILT_PAGES = {
-  student: { scan: ScanPage, attendance: MyAttendancePage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
-  supervisor: { scan: ScanPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
-  admin: { users: UsersPage, semesters: AcademicTermsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, settings: PolicySettingsPage, reports: ReportsPage },
+  student: { scan: ScanPage, attendance: MyAttendancePage, schedule: DutySchedulePage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
+  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
+  admin: { users: UsersPage, semesters: AcademicTermsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, settings: PolicySettingsPage, reports: ReportsPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).

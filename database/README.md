@@ -11,6 +11,9 @@ PostgreSQL schema for DutyTrace (works on Supabase). `migrations/` holds numbere
 | `0005_*` | absence notices, documents, case types, compliance cases, requirements, history |
 | `0006_*`–`0010_*` | student requirements, password reset, institution/semester support and policies |
 | `0011_*` | recipient-scoped in-app notifications and reminder deduplication |
+| `0012_*` | configurable duty requirement policies and versioned student schedule preferences |
+| `0013_*` | optional maximum daily hours and supervisor-proposed schedule alternatives |
+| `0014_*` | optional afternoon duty period for each selected schedule weekday |
 
 No seed data is included. Create the first administrator with `npm run db:create-admin`. Table-by-table description: [../docs/database-schema.md](../docs/database-schema.md).
 

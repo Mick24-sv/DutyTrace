@@ -116,6 +116,24 @@ Case types, cases, absences, documents, reports, offices, users and academic ter
 | `GET /semesters/:termId/requirements` | admin | Students, office and current individual requirement assignments |
 | `PUT /semesters/:termId/requirements/:studentId` | admin | Assign/update `{ officeId, requiredHours }`; updates append audit/history rows; `requiredHours: null` removes the requirement |
 | `GET /semesters/:termId/office/:officeId` | admin, supervisor (own office) | Semester progress; administrators see only their institution |
+
+## Duty requirements and SA schedule preferences
+
+All endpoints require an authenticated session. Institution, office, term, student and reviewer boundaries are enforced by the backend. A schedule preference is not attendance authorization; `/attendance/scan` continues to authorize scans using its existing office QR flow.
+
+| Method and path | Role | Purpose |
+| --- | --- | --- |
+| `GET /duty-schedules/admin/:termId` | admin | Effective term policy list and institution default daily minimum |
+| `PUT /duty-schedules/admin/default` | admin | Set institution default `{ minimumDailyHours }` (new institutions start at 3 hours/day; configurable) |
+| `POST /duty-schedules/admin/policies` / `PUT /duty-schedules/admin/policies/:policyId` | admin | Configure term, institution/office/student scope, effective dates, total hours, minimum/maximum daily hours, weekdays, time windows, and authorized individual exception reason |
+| `GET /duty-schedules/mine` | student | Own term requirements, preference/review status, approved preference monitoring |
+| `POST /duty-schedules` | student | Create a draft or change request with dates and weekly preference days |
+| `PUT /duty-schedules/:scheduleId` | owning student | Edit an editable draft, rejected preference, or returned change request |
+| `POST /duty-schedules/:scheduleId/submit` | owning student | Validate against effective policy and submit for review |
+| `GET /duty-schedules/review` / `GET /duty-schedules/review/:scheduleId` | admin, supervisor (own office) | List or inspect pending proposals within the authorized institution/office |
+| `POST /duty-schedules/review/:scheduleId/decision` | admin, supervisor (own office) | Approve, reject with reason, or request revision with reason and optional policy-valid suggested duty times |
+
+Policy precedence is student exception, office policy, then institution policy. Existing per-student term-hour assignments remain the total-hour source unless an explicit student exception policy overrides them. A policy cannot overlap another policy at the same scope. Preferences allow one non-overnight interval per ISO weekday; dates and times use the term's IANA timezone. The capacity estimate assumes every policy-valid interval is worked; it compares available recurring hours before the deadline with remaining verified hours and is advisory. Reviewers see overlapping approved preferences in the same office as possible conflicts and can suggest alternative times without changing the student's proposal. Attendance outside an approved preference is reported as monitoring information only.
 | `GET /reports/semester-hours?termId=&officeId=&format=` | admin, supervisor (own office) | Recorded/verified semester totals, individual targets, remaining hours and capped completion percentage; supports CSV |
 
 Error codes added: `400 VALIDATION_ERROR` (including unsupported or mismatched file type), `413 FILE_TOO_LARGE`, `409 TOO_MANY_DOCUMENTS`, `409 DOCUMENTS_MISSING`, `409 INVALID_TRANSITION`, `404 FILE_MISSING`.

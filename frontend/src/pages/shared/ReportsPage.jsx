@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Download,
   Filter,
@@ -35,6 +35,10 @@ const REPORT_TABS = [
   { id: 'cases', label: 'Compliance Cases', icon: FolderCheck },
 ];
 
+const statusLabel = (value) => (typeof value === 'string' && value.trim()
+  ? value.replace(/_/g, ' ')
+  : 'Unknown');
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const isSupervisor = user?.role === 'supervisor';
@@ -68,11 +72,14 @@ export default function ReportsPage() {
 
   // Report Data State
   const [reportData, setReportData] = useState(null);
+  const reportRequestId = useRef(0);
+  const currentReportData = reportData?.tab === activeTab ? reportData.data : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Load report data when filters or active tab change
   const fetchReport = async () => {
+    const requestId = ++reportRequestId.current;
     setLoading(true);
     setError(null);
     try {
@@ -93,11 +100,15 @@ export default function ReportsPage() {
       if (activeTab === 'semester-hours') endpoint = '/reports/semester-hours';
 
       const data = await apiGet(`${endpoint}?${params.toString()}`);
-      setReportData(data);
+      if (requestId === reportRequestId.current) {
+        setReportData({ tab: activeTab, data });
+      }
     } catch (err) {
-      setError(err.message || 'Failed to generate report.');
+      if (requestId === reportRequestId.current) {
+        setError(err.message || 'Failed to generate report.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === reportRequestId.current) setLoading(false);
     }
   };
 
@@ -173,11 +184,17 @@ export default function ReportsPage() {
           {
             key: 'status',
             header: 'Status',
-            render: (r) => (
-              <Badge tone={r.counted ? 'approved' : r.status === 'in_progress' ? 'pending' : 'rejected'}>
-                {r.status.replace(/_/g, ' ')}
-              </Badge>
-            ),
+            render: (r) => {
+              const status = typeof r.status === 'string' ? r.status : 'unknown';
+              const tone = status === 'unknown'
+                ? 'neutral'
+                : r.counted
+                  ? 'approved'
+                  : status === 'in_progress'
+                    ? 'pending'
+                    : 'rejected';
+              return <Badge tone={tone}>{status.replace(/_/g, ' ')}</Badge>;
+            },
           },
         ];
 
@@ -229,11 +246,21 @@ export default function ReportsPage() {
           {
             key: 'status',
             header: 'Review Status',
-            render: (r) => (
-              <Badge tone={r.status === 'approved' ? 'approved' : r.status === 'needs_correction' ? 'rejected' : 'pending'}>
-                {r.status.replace(/_/g, ' ')}
-              </Badge>
-            ),
+            render: (r) => {
+              const status = typeof r.status === 'string' ? r.status : 'unknown';
+              const tone = status === 'unknown'
+                ? 'neutral'
+                : status === 'approved'
+                  ? 'approved'
+                  : status === 'needs_correction'
+                    ? 'rejected'
+                    : 'pending';
+              return (
+                <Badge tone={tone}>
+                  {status.replace(/_/g, ' ')}
+                </Badge>
+              );
+            },
           },
           { key: 'currentRevision', header: 'Rev', render: (r) => `v${r.currentRevision}` },
           {
@@ -307,11 +334,11 @@ export default function ReportsPage() {
           {
             key: 'status',
             header: 'Status',
-            render: (r) => (
-              <Badge tone={r.status === 'reviewed' ? 'approved' : r.status === 'needs_follow_up' ? 'rejected' : 'pending'}>
-                {r.status.replace(/_/g, ' ')}
-              </Badge>
-            ),
+            render: (r) => {
+              const status = typeof r.status === 'string' ? r.status : 'unknown';
+              const tone = status === 'reviewed' ? 'approved' : status === 'needs_follow_up' ? 'rejected' : 'pending';
+              return <Badge tone={tone}>{statusLabel(status)}</Badge>;
+            },
           },
           { key: 'documentCount', header: 'Docs', render: (r) => `${r.documentCount} file(s)` },
         ];
@@ -330,11 +357,11 @@ export default function ReportsPage() {
           {
             key: 'status',
             header: 'Status',
-            render: (r) => (
-              <Badge tone={r.status === 'resolved' ? 'approved' : r.status === 'closed' ? 'neutral' : 'pending'}>
-                {r.status.replace(/_/g, ' ')}
-              </Badge>
-            ),
+            render: (r) => {
+              const status = typeof r.status === 'string' ? r.status : 'unknown';
+              const tone = status === 'resolved' ? 'approved' : status === 'closed' ? 'neutral' : 'pending';
+              return <Badge tone={tone}>{statusLabel(status)}</Badge>;
+            },
           },
           { key: 'missingRequirements', header: 'Missing Reqs', render: (r) => r.missingRequirements },
           {
@@ -351,7 +378,7 @@ export default function ReportsPage() {
 
   // Render High-Level KPI Summary banner above table
   const renderSummaryCards = () => {
-    const s = reportData?.summary;
+    const s = currentReportData?.summary;
     if (!s) return null;
 
     switch (activeTab) {
@@ -361,7 +388,7 @@ export default function ReportsPage() {
             <div className="rounded-lg border border-line bg-surface p-3">
               <div className="text-xs text-muted">Academic Term</div>
               <div className="text-lg font-bold text-navy mt-1">
-                {reportData?.term ? `${reportData.term.academicYear} · ${reportData.term.semester}` : 'No active term'}
+                {currentReportData?.term ? `${currentReportData.term.academicYear} · ${currentReportData.term.semester}` : 'No active term'}
               </div>
             </div>
             <div className="rounded-lg border border-line bg-surface p-3">
@@ -511,8 +538,8 @@ export default function ReportsPage() {
     }
   };
 
-  const items = reportData?.items ?? [];
-  const pagination = reportData?.pagination ?? { page: 1, limit: 20, total: items.length, totalPages: 1 };
+  const items = currentReportData?.items ?? [];
+  const pagination = currentReportData?.pagination ?? { page: 1, limit: 20, total: items.length, totalPages: 1 };
 
   return (
     <>

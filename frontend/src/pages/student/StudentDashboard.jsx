@@ -82,6 +82,13 @@ export default function StudentDashboard() {
           <QrCode className="h-4 w-4" aria-hidden="true" />
           Scan QR to {timedIn ? 'time out' : 'time in'}
         </Link>
+        <Link
+          to="/student/schedule"
+          className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-canvas transition"
+        >
+          <CalendarRange className="h-4 w-4" aria-hidden="true" />
+          My Duty Preferences
+        </Link>
       </PageHeader>
 
       {anyError && (

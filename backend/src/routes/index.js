@@ -3,7 +3,7 @@ import health from './health.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { usersRouter } from '../modules/users/users.routes.js';
 import { officesRouter } from '../modules/offices/offices.routes.js';
-import { qrRouter } from '../modules/qr/qr.routes.js';
+import { qrRouter, supervisorQrRouter } from '../modules/qr/qr.routes.js';
 import { attendanceRouter } from '../modules/attendance/attendance.routes.js';
 import { dtrRouter } from '../modules/dtr/dtr.routes.js';
 import { absencesRouter } from '../modules/absences/absences.routes.js';
@@ -13,6 +13,7 @@ import { reportsRouter } from '../modules/reports/reports.routes.js';
 import { semestersRouter } from '../modules/semesters/semesters.routes.js';
 import { institutionsRouter } from '../modules/institutions/institutions.routes.js';
 import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
+import { dutyRequirementsRouter } from '../modules/duty-requirements/duty-requirements.routes.js';
 
 // Feature routers (absences, compliance, ...) get mounted here in later phases.
 export function buildRoutes(options = {}) {
@@ -21,6 +22,7 @@ export function buildRoutes(options = {}) {
   router.use('/auth', authRoutes(options));
   router.use('/users', usersRouter);
   router.use('/offices/:officeId/qr', qrRouter); // before /offices so it matches first
+  router.use('/supervisor/office-qr', supervisorQrRouter);
   router.use('/offices', officesRouter);
   router.use('/attendance', attendanceRouter);
   router.use('/dtrs', dtrRouter);
@@ -31,5 +33,6 @@ export function buildRoutes(options = {}) {
   router.use('/semesters', semestersRouter);
   router.use('/institutions', institutionsRouter);
   router.use('/notifications', notificationsRouter);
+  router.use('/duty-schedules', dutyRequirementsRouter);
   return router;
 }

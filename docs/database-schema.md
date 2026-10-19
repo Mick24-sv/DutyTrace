@@ -51,6 +51,10 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 | `case_requirements` | Documents a case asks for, copied from the type when opened | Satisfied by a document, a recorded receipt or a one-time waiver with a reason; no deletes |
 | `case_events` | History of a case (who, what, note, when) | Append-only |
 | `documents` | One row per uploaded file or manual receipt (0005) | Belongs to exactly one notice **or** one case (CHECK). `online` rows have a stored file, `uploaded_by = owner`; `email`/`in_person` rows have a received date and recorded-by staff, no file. Stores a random `stored_name` and SHA-256, never returned by the API. Append-only |
+| `institution_duty_requirement_settings` | Configurable institution defaults for new duty policies | Minimum daily hours is configurable; new institutions default to 3 hours/day unless changed |
+| `duty_requirement_policies` | Term-specific institution, office or individual rules | Effective dates must fit the term; same-scope policies cannot overlap; minimum/maximum daily caps are checked; individual exceptions require an authorized reason |
+| `student_duty_schedules` | Versioned SA preference proposals and reviewer decisions | Status transitions are constrained; reviewer, decision time, reason and optional alternative times are retained; office and institution are checked server-side |
+| `student_duty_schedule_days` | Weekly duty preference intervals for a schedule version | One row per ISO weekday with a required morning interval and optional non-overlapping afternoon interval; overnight intervals are unsupported |
 | `schema_migrations` | Created by the migration runner | Name + checksum of applied files |
 
 ## Conventions
@@ -61,6 +65,8 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 - Derived totals (hours) are intentionally **not stored** for attendance; they are calculated from `attendance_events` on every request (`backend/src/modules/attendance/calc.js`). Events are the single source of truth. A DTR is different on purpose: it is a **frozen snapshot** (what the supervisor actually reviewed), stored in `dtr_revisions`, so later changes to attendance or policy never rewrite what was approved. `monthly_dtrs.verified_seconds` is the only stored verified figure and approval is the only thing that writes it.
 - Never edit an applied migration; add the next numbered file (e.g. `0003_….sql`). The runner stores a checksum and refuses edited files.
 
+Duty requirement precedence is student exception, office policy, then institution policy. An existing per-student `semester_requirement_assignments` total remains authoritative unless an explicit student exception overrides it. Approved preferences are for monitoring only and do not authorize or block attendance scans. Monthly DTR revisions and finalized academic terms remain unchanged by later policy edits.
+
 ## Not yet in the schema
 
-`duty_schedules`, `attendance_corrections` (the append-only trigger means fixes must be new records, not edits), `office_calendar_events`, notification records.
+`attendance_corrections` (the append-only trigger means fixes must be new records, not edits), `office_calendar_events`.
