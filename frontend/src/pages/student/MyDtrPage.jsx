@@ -63,7 +63,39 @@ export default function MyDtrPage() {
           </div>
 
           <Card title="Last 12 months" className="mt-6">
-            <DataTable columns={columns} rows={data.months.map((m) => ({ ...m, id: m.month }))} caption="Monthly DTRs by month" />
+            <div className="hidden sm:block">
+              <DataTable columns={columns} rows={data.months.map((m) => ({ ...m, id: m.month }))} caption="Monthly DTRs by month" />
+            </div>
+            <div className="divide-y divide-line sm:hidden">
+              {data.months.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted">No ended months available yet.</p>
+              ) : data.months.map((row) => (
+                <article key={row.month} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-medium text-ink">{formatMonth(row.month)}</h3>
+                    {row.dtr ? (
+                      <Link to={row.dtr.id} className="shrink-0 font-medium text-teal underline">Open</Link>
+                    ) : (
+                      <button type="button" onClick={() => { setMonth(row.month); setGenError(''); }} className="shrink-0 text-right text-sm font-medium text-teal underline">Preview &amp; create</button>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted">Status</p>
+                      <div className="mt-1">{row.dtr ? <DtrStatusBadge status={row.dtr.status} /> : <span className="text-muted">Not generated</span>}</div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted">Recorded</p>
+                      <p className="mt-1">{row.dtr ? formatHours(row.dtr.recordedHours) : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted">Verified</p>
+                      <p className="mt-1">{row.dtr?.verifiedHours != null ? formatHours(row.dtr.verifiedHours) : <span className="text-muted">Not verified</span>}</p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
           </Card>
 
           {month && (

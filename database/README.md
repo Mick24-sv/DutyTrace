@@ -16,6 +16,11 @@ PostgreSQL schema for DutyTrace (works on Supabase). `migrations/` holds numbere
 | `0014_*` | optional afternoon duty period for each selected schedule weekday |
 | `0015_*` | makes individual exception notes optional while retaining admin authorization and audit history |
 | `0016_*` | makes policy total term hours optional; per-student term assignments remain authoritative |
+| `0017_*` | adds configurable office schedule capacity (default one student per overlapping slot) |
+| `0018_*` | adds institution scope to audit logs |
+| `0019_*` | adds configurable forecast historical evaluation window to institution duty requirement settings |
+| `0020_*` | stores dated missed-hours recovery requests separately from attendance |
+| `0021_*` | adds institution-configured semester transition policy, previews and immutable source-term outcomes |
 
 No seed data is included. Create the first administrator with `npm run db:create-admin`. Table-by-table description: [../docs/database-schema.md](../docs/database-schema.md).
 

@@ -4,7 +4,7 @@ import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Search } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPatch, apiPost, apiPut } from '../../services/api.js';
@@ -87,9 +87,17 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [rowError, setRowError] = useState('');
+  const [userSearch, setUserSearch] = useState('');
+  const [expandedUserId, setExpandedUserId] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const reload = () => setTick((t) => t + 1);
   const officeList = offices.data?.offices ?? [];
+  const filteredUsers = (data?.users ?? []).filter((user) => {
+    const query = userSearch.trim().toLocaleLowerCase();
+    if (!query) return true;
+    return [user.fullName, user.email, ROLE_CONFIG[user.role]?.label, user.office?.name, user.status]
+      .some((value) => String(value ?? '').toLocaleLowerCase().includes(query));
+  });
 
   async function create(e) {
     e.preventDefault();
@@ -232,11 +240,81 @@ export default function UsersPage() {
           <div className="sm:col-span-2"><Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button></div>
         </form>
       </Card>
-      <Card>
+      <Card title="Users">
         {loading && <p role="status" className="text-sm text-muted">Loading users…</p>}
         {error && <p role="alert" className="text-sm text-bad-fg">{error}</p>}
         {rowError && <p role="alert" className="mb-3 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{rowError}</p>}
-        {data && <DataTable columns={columns} rows={data.users} caption="Users" empty="No users yet." />}
+        {data && (
+          <>
+            <label htmlFor="user-search" className="sr-only">Search users</label>
+            <div className="relative mb-3 w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                id="user-search"
+                type="search"
+                value={userSearch}
+                onChange={(event) => setUserSearch(event.target.value)}
+                placeholder="Search users by name or email"
+                className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted"
+              />
+            </div>
+            <div className="hidden sm:block">
+              <DataTable columns={columns} rows={filteredUsers} caption="Users" empty={userSearch ? 'No matching users.' : 'No users yet.'} />
+            </div>
+            <div className="divide-y divide-line sm:hidden">
+              {filteredUsers.length === 0 ? (
+                <p className="py-5 text-center text-sm text-muted">{userSearch ? 'No matching users.' : 'No users yet.'}</p>
+              ) : filteredUsers.map((user) => (
+                <article key={user.id} className="py-2 first:pt-0 last:pb-0">
+                  <button
+                    type="button"
+                    aria-expanded={expandedUserId === user.id}
+                    aria-controls={`user-details-${user.id}`}
+                    onClick={() => setExpandedUserId((current) => current === user.id ? null : user.id)}
+                    className="flex min-h-12 w-full items-center gap-2 rounded-md py-1 text-left hover:bg-canvas/60 focus-visible:outline-offset-2"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-sm font-medium text-ink">{user.fullName}</span>
+                      <span className="block break-all text-xs text-muted">{user.email}</span>
+                      <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <span className="text-ink">{ROLE_CONFIG[user.role].label}</span>
+                        <Badge tone={user.status === 'active' ? 'approved' : 'rejected'}>{user.status}</Badge>
+                      </span>
+                    </span>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform ${expandedUserId === user.id ? 'rotate-180' : ''}`} aria-hidden="true" />
+                  </button>
+                  {expandedUserId === user.id && <div id={`user-details-${user.id}`} className="mt-2 space-y-2 border-t border-line pt-2 pl-1">
+                    <div className="col-span-2 min-w-0">
+                      <p className="mb-1 text-xs text-muted">Office</p>
+                      {user.role === 'admin' ? <span className="text-muted">—</span> : (
+                        <select
+                          aria-label={`Office for ${user.fullName}`} value={user.office?.id ?? ''} className={`${field} min-w-0`}
+                          onChange={(event) => act(() => apiPut(`/users/${user.id}/assignment`, { officeId: event.target.value || null }))}
+                        >
+                          <option value="">Not assigned</option>
+                          {officeList.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    {user.role === 'student' && (
+                      <div>
+                        <p className="mb-1 text-xs text-muted">Monthly DTR target</p>
+                        <StudentHoursInput user={user} onUpdate={(value) => act(() => apiPatch(`/users/${user.id}`, { requiredHours: value }))} />
+                      </div>
+                    )}
+
+                  <button
+                    type="button" className="min-h-10 text-sm font-medium text-teal underline"
+                    onClick={() => act(() => apiPatch(`/users/${user.id}`, { status: user.status === 'active' ? 'disabled' : 'active' }))}
+                  >
+                    {user.status === 'active' ? 'Disable account' : 'Enable account'}
+                  </button>
+                  </div>}
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </Card>
     </>
   );

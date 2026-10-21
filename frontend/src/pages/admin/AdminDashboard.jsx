@@ -23,6 +23,7 @@ import { formatHours, formatMonth } from '../../utils/format.js';
 
 export default function AdminDashboard() {
   const { data, loading, error } = useApiData('/reports/dashboard-stats');
+  const forecastData = useApiData('/forecast/institution');
 
   const users = data?.users ?? { total: 0, active: 0, students: 0, supervisors: 0 };
   const offices = data?.offices ?? { total: 0, active: 0 };
@@ -221,6 +222,37 @@ export default function AdminDashboard() {
                 <span className="font-bold text-bad-fg">{semester.studentsBelowRequirement}</span>
               </div>
             </div>
+
+            {forecastData.data?.summary && (
+              <div className="rounded-lg border border-line bg-canvas/40 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-navy uppercase tracking-wider">
+                    Completion Forecast
+                  </p>
+                  <Link to="/admin/reports" className="text-[11px] font-medium text-teal hover:underline">
+                    Reports
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                  <div className="rounded border border-line bg-surface p-1.5">
+                    <span className="text-[10px] text-muted block">On Track</span>
+                    <span className="font-bold text-ok-fg font-mono">{forecastData.data.summary.onTrack}</span>
+                  </div>
+                  <div className="rounded border border-line bg-surface p-1.5">
+                    <span className="text-[10px] text-muted block">At Risk</span>
+                    <span className="font-bold text-bad-fg font-mono">{forecastData.data.summary.atRisk}</span>
+                  </div>
+                  <div className="rounded border border-line bg-surface p-1.5">
+                    <span className="text-[10px] text-muted block">Completed</span>
+                    <span className="font-bold text-teal font-mono">{forecastData.data.summary.completed}</span>
+                  </div>
+                  <div className="rounded border border-line bg-surface p-1.5">
+                    <span className="text-[10px] text-muted block">Insufficient</span>
+                    <span className="font-bold text-muted font-mono">{forecastData.data.summary.insufficientData}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <p className="text-xs text-muted">
               Monthly DTRs remain separate. Semester requirement targets are individually assigned under Academic Terms.

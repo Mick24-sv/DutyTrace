@@ -145,6 +145,17 @@ async function requirementFor({ user, term, officeId, startsOn, endsOn, db = { q
   };
 }
 
+// Resolve the semester target with the same individual-assignment and scoped-policy
+// precedence used by Student Assistant schedule validation.
+export async function termRequirementForStudent({ studentId, termId, institutionId, officeId, db = { query } }) {
+  const { rows: [term] } = await db.query(
+    `SELECT * FROM academic_terms WHERE id=$1 AND institution_id=$2`, [termId,institutionId]);
+  if (!term) throw new AppError(404,'NOT_FOUND','Academic term not found.');
+  const {rows:[assignment]}=await db.query(`SELECT office_id FROM semester_requirement_assignments WHERE term_id=$1 AND student_id=$2 ORDER BY assigned_at DESC,id DESC LIMIT 1`,[termId,studentId]);
+  const requirement=await requirementFor({user:{id:studentId,institutionId},term,officeId:assignment?.office_id??officeId,startsOn:term.starts_on,endsOn:term.ends_on,db});
+  return {requiredHours:requirement.requiredTermHours,source:requirement.totalHoursSource};
+}
+
 function scheduleIssues(days, requirement) {
   const issues = [];
   if (!requirement.policy) {
@@ -378,16 +389,17 @@ export async function studentTerms(user) {
     });
     const approvedDays = approved ? await daysFor(approved.id) : [];
     const verifiedHours = await verifiedTermHours(user.id, term);
+    const today = await localToday(term.timezone);
     const scheduleDays = displayed ? days : [];
     const scheduleDates = displayed ?? { effective_starts_on: term.starts_on, effective_ends_on: term.ends_on };
     const issues = scheduleIssues(scheduleDays, requirement);
     result.push({
-      term: requirement.term,
+      term: { ...requirement.term, isCurrent: today >= term.starts_on && today <= term.ends_on },
       requirement,
       proposal: displayed ? publicSchedule(displayed, days) : null,
       approvedSchedule: approved ? publicSchedule(approved, approvedDays) : null,
       attendanceMonitoring: approved ? await attendanceMonitoring(approved, approvedDays, term) : null,
-      feasibility: estimateFeasibility({ days: scheduleDays, schedule: scheduleDates, requirement, verifiedHours, validationIssues: issues, today: await localToday(term.timezone) }),
+      feasibility: estimateFeasibility({ days: scheduleDays, schedule: scheduleDates, requirement, verifiedHours, validationIssues: issues, today }),
       validationIssues: issues,
     });
   }
@@ -477,6 +489,8 @@ async function potentialScheduleConflicts(schedule, days, db = { query }) {
      JOIN users u ON u.id = s.student_id
      WHERE s.office_id = $1 AND s.institution_id = $2 AND s.student_id <> $3
        AND s.status = 'approved'
+       AND s.version = (SELECT max(active.version) FROM student_duty_schedules active
+                        WHERE active.student_id = s.student_id AND active.term_id = s.term_id AND active.status = 'approved')
        AND daterange(s.effective_starts_on, s.effective_ends_on, '[]')
            && daterange($4::date, $5::date, '[]')`,
     [schedule.office_id, schedule.institution_id, schedule.student_id, schedule.effective_starts_on, schedule.effective_ends_on],
@@ -500,6 +514,56 @@ async function potentialScheduleConflicts(schedule, days, db = { query }) {
         note: 'Overlaps another approved preference in this office. Confirm office capacity and coordinate; this is not an attendance restriction.',
       })));
   });
+}
+
+// Approved weekly schedules are the confirmed recurring assignments. Locking the
+// institution/term key at approval serializes competing approvals, so two
+// supervisors cannot consume the same final capacity slot concurrently.
+async function confirmedAssignmentConflicts(schedule, days, db = { query }) {
+  const { rows: existing } = await db.query(
+    `SELECT s.id, s.student_id, s.office_id, s.effective_starts_on::text, s.effective_ends_on::text,
+            u.full_name AS student_name, o.schedule_capacity, d.weekday, d.starts_at::text, d.ends_at::text,
+            d.afternoon_starts_at::text, d.afternoon_ends_at::text
+     FROM student_duty_schedules s
+     JOIN student_duty_schedule_days d ON d.schedule_id = s.id
+     JOIN users u ON u.id = s.student_id JOIN offices o ON o.id = s.office_id
+     WHERE s.institution_id = $1 AND s.term_id = $2 AND s.status = 'approved'
+       AND s.id <> $3
+       AND s.version = (SELECT max(active.version) FROM student_duty_schedules active
+                        WHERE active.student_id = s.student_id AND active.term_id = s.term_id AND active.status = 'approved')
+       AND daterange(s.effective_starts_on, s.effective_ends_on, '[]')
+           && daterange($5::date, $6::date, '[]')`,
+    [schedule.institution_id, schedule.term_id, schedule.id,
+      schedule.effective_starts_on, schedule.effective_ends_on],
+  );
+  const conflicts = [];
+  for (const day of days) {
+    const candidates = dayPeriods(day);
+    const matching = existing.filter((row) => Number(row.weekday) === day.weekday);
+    for (const period of candidates) {
+      const overlapping = matching.filter((row) => {
+        const periods = dayPeriods({
+          startsAt: timeText(row.starts_at), endsAt: timeText(row.ends_at),
+          afternoonStartsAt: row.afternoon_starts_at ? timeText(row.afternoon_starts_at) : null,
+          afternoonEndsAt: row.afternoon_ends_at ? timeText(row.afternoon_ends_at) : null,
+        });
+        return periods.some((other) => period.startsAt < other.endsAt && other.startsAt < period.endsAt);
+      });
+      const studentOverlap = overlapping.find((row) => row.student_id === schedule.student_id && row.office_id !== schedule.office_id);
+      if (studentOverlap) {
+        conflicts.push({ code: 'STUDENT_SHIFT_OVERLAP', weekday: day.weekday, startsAt: period.startsAt, endsAt: period.endsAt,
+          message: `This shift overlaps ${studentOverlap.student_name}'s confirmed schedule in another approved version or office.` });
+      }
+      const officeAssignments = new Set(overlapping.filter((row) => row.office_id === schedule.office_id && row.student_id !== schedule.student_id).map((row) => row.student_id));
+      const capacity = Number(overlapping.find((row) => row.office_id === schedule.office_id)?.schedule_capacity ?? 1);
+      if (officeAssignments.size >= capacity) {
+        conflicts.push({ code: 'OFFICE_CAPACITY_EXCEEDED', weekday: day.weekday, startsAt: period.startsAt, endsAt: period.endsAt,
+          capacity, assigned: officeAssignments.size,
+          message: `This shift exceeds the office capacity of ${capacity} student${capacity === 1 ? '' : 's'} for an overlapping time slot.` });
+      }
+    }
+  }
+  return conflicts;
 }
 
 export async function createDraft({ user, termId, effectiveStartsOn, effectiveEndsOn, days = [], ip }) {
@@ -640,9 +704,43 @@ export async function reviewQueue({ actor, termId }) {
       requirement,
       feasibility: estimateFeasibility({ days, schedule: row, requirement, verifiedHours, validationIssues, today }),
       potentialConflicts: await potentialScheduleConflicts(row, days),
+      assignmentConflicts: await confirmedAssignmentConflicts(row, days),
     });
   }
   return out;
+}
+
+export async function supervisorScheduleOverview({ actor }) {
+  if (actor.role === 'supervisor' && !actor.office?.id) return { term: null, schedules: [] };
+  const { rows: [term] } = await query(
+    `SELECT id, institution_id, academic_year, semester, starts_on::text, ends_on::text
+     FROM academic_terms t
+     WHERE t.institution_id = $1
+       AND (now() AT TIME ZONE t.timezone)::date BETWEEN t.starts_on AND t.ends_on
+     ORDER BY t.starts_on DESC LIMIT 1`,
+    [actor.institutionId],
+  );
+  if (!term) return { term: null, schedules: [] };
+  const params = [actor.institutionId, term.id];
+  const officeFilter = actor.role === 'supervisor' ? `AND s.office_id = $${params.push(actor.office.id)}` : '';
+  const { rows } = await query(
+    `SELECT DISTINCT ON (s.student_id) s.*, u.full_name AS student_name, u.email AS student_email, o.name AS office_name
+     FROM student_duty_schedules s
+     JOIN users u ON u.id = s.student_id
+     JOIN offices o ON o.id = s.office_id
+     JOIN duty_assignments da ON da.user_id = s.student_id AND da.office_id = s.office_id AND da.ends_on IS NULL
+     WHERE s.institution_id = $1 AND s.term_id = $2
+       AND s.status IN ('pending_review', 'approved') ${officeFilter}
+     ORDER BY s.student_id, s.version DESC`,
+    params,
+  );
+  const schedules = [];
+  for (const row of rows) schedules.push(publicSchedule(row, await daysFor(row.id)));
+  return {
+    term: { id: term.id, academicYear: term.academic_year, semester: term.semester,
+      startsOn: term.starts_on, endsOn: term.ends_on },
+    schedules,
+  };
 }
 
 export async function decideSchedule({ actor, scheduleId, decision, reason, suggestedDays = [], ip }) {
@@ -658,6 +756,23 @@ export async function decideSchedule({ actor, scheduleId, decision, reason, sugg
     }
     if (suggestedDays.length && decision !== 'request_changes') {
       throw new AppError(400, 'VALIDATION_ERROR', 'Suggested duty times can only accompany a revision request.');
+    }
+    if (decision === 'approve') {
+      await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`duty-schedule-approval:${row.institution_id}:${row.term_id}`]);
+      const term = await termFor(row.term_id, actor.institutionId, db);
+      const days = await daysFor(scheduleId, db);
+      const requirement = await requirementFor({
+        user: { id: row.student_id, institutionId: row.institution_id }, term,
+        officeId: row.office_id, startsOn: row.effective_starts_on, endsOn: row.effective_ends_on, db,
+      });
+      const validationIssues = scheduleIssues(days, requirement);
+      if (validationIssues.length) {
+        throw new AppError(409, 'SCHEDULE_VALIDATION_FAILED', 'This schedule no longer meets the applicable duty rules.', { issues: validationIssues });
+      }
+      const conflicts = await confirmedAssignmentConflicts(row, days, db);
+      if (conflicts.length) {
+        throw new AppError(409, 'SCHEDULE_CONFLICT', 'Resolve overlapping assignments or office capacity conflicts before approval.', { conflicts });
+      }
     }
     if (suggestedDays.length) {
       const term = await termFor(row.term_id, actor.institutionId, db);

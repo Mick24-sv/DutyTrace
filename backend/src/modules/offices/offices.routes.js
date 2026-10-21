@@ -11,7 +11,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(120),
 });
 
-const toOffice = (r) => ({ id: r.id, code: r.code, name: r.name, isActive: r.is_active });
+const toOffice = (r) => ({ id: r.id, code: r.code, name: r.name, isActive: r.is_active, scheduleCapacity: Number(r.schedule_capacity ?? 1) });
 
 export const officesRouter = Router();
 officesRouter.use(requireAuth);
@@ -20,8 +20,8 @@ officesRouter.use(requireAuth);
 // Students have no need to list offices (they get theirs from /auth/me).
 officesRouter.get('/', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   const { rows } = req.user.role === 'admin'
-    ? await query('SELECT id, code, name, is_active FROM offices WHERE institution_id = $1 ORDER BY code', [req.user.institutionId])
-    : await query('SELECT id, code, name, is_active FROM offices WHERE id = $1', [req.user.office?.id ?? null]);
+    ? await query('SELECT id, code, name, is_active, schedule_capacity FROM offices WHERE institution_id = $1 ORDER BY code', [req.user.institutionId])
+    : await query('SELECT id, code, name, is_active, schedule_capacity FROM offices WHERE id = $1', [req.user.office?.id ?? null]);
   ok(res, { offices: rows.map(toOffice) });
 }));
 
@@ -31,13 +31,27 @@ officesRouter.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
     const dup = await db.query('SELECT 1 FROM offices WHERE institution_id = $2 AND lower(code) = lower($1)', [input.code, req.user.institutionId]);
     if (dup.rowCount) throw new AppError(409, 'CODE_TAKEN', 'An office with that code already exists.');
     const { rows } = await db.query(
-      'INSERT INTO offices (code, name, institution_id) VALUES ($1, $2, $3) RETURNING id, code, name, is_active',
+      'INSERT INTO offices (code, name, institution_id) VALUES ($1, $2, $3) RETURNING id, code, name, is_active, schedule_capacity',
       [input.code, input.name, req.user.institutionId],
     );
     await recordAudit({ actorId: req.user.id, action: 'office.create', targetType: 'office', targetId: rows[0].id, after: toOffice(rows[0]), ip: req.ip }, db);
     return toOffice(rows[0]);
   });
   ok(res, { office }, 201);
+}));
+
+officesRouter.put('/:id/schedule-capacity', requireRole('admin'), asyncHandler(async (req, res) => {
+  const officeId = parseId(req.params.id);
+  const { scheduleCapacity } = parse(z.object({ scheduleCapacity: z.number().int().min(1).max(500) }), req.body ?? {});
+  const result = await withTransaction(async (db) => {
+    const { rows: [before] } = await db.query('SELECT id, schedule_capacity FROM offices WHERE id = $1 AND institution_id = $2 FOR UPDATE', [officeId, req.user.institutionId]);
+    if (!before) throw new AppError(404, 'NOT_FOUND', 'Office not found.');
+    const { rows: [row] } = await db.query('UPDATE offices SET schedule_capacity = $2 WHERE id = $1 RETURNING id, schedule_capacity', [officeId, scheduleCapacity]);
+    await recordAudit({ actorId: req.user.id, action: 'office.schedule_capacity_updated', targetType: 'office', targetId: officeId,
+      before: { scheduleCapacity: Number(before.schedule_capacity) }, after: { scheduleCapacity: Number(row.schedule_capacity) }, ip: req.ip }, db);
+    return { officeId, scheduleCapacity: Number(row.schedule_capacity) };
+  });
+  ok(res, result);
 }));
 
 // Student assistants currently assigned to an office.

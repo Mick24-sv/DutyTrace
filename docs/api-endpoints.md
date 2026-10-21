@@ -112,10 +112,25 @@ Case types, cases, absences, documents, reports, offices, users and academic ter
 | `GET /semesters/mine` | student | Current and historical terms with recorded hours, approved-DTR verified hours, individual requirement and progress |
 | `GET /semesters` | admin | This institution's configured terms |
 | `POST /semesters` / `PUT /semesters/:termId` | admin | Create/update an institution-specific academic year, semester, dates, deadline and timezone; dates cannot overlap |
-| `POST /semesters/:termId/finalize` | admin | Permanently lock the term calendar and requirements |
+| `POST /semesters/:termId/finalize` | admin | Legacy endpoint; rejects direct closure and directs administrators to the reviewed Semester Transition Planner |
 | `GET /semesters/:termId/requirements` | admin | Students, office and current individual requirement assignments |
 | `PUT /semesters/:termId/requirements/:studentId` | admin | Assign/update `{ officeId, requiredHours }`; updates append audit/history rows; `requiredHours: null` removes the requirement |
 | `GET /semesters/:termId/office/:officeId` | admin, supervisor (own office) | Semester progress; administrators see only their institution |
+
+### Semester transitions
+
+All endpoints are administrator-only and scoped to the authenticated institution. A transition requires an explicit institution policy (`keep_original`), an existing later destination term, and explicit student selection. The policy finalizes the source term while preserving its verified and outstanding totals there; it does not copy hours or overwrite destination requirements. Destination requirements must be configured independently.
+
+| Method & path | Who | Description |
+| --- | --- | --- |
+| `GET /semester-transitions/overview?termId=&page=&limit=&search=` | admin | Paginated source-term hours, forecast, DTR/recovery review counts, next terms and recent transition history |
+| `PUT /semester-transitions/policy` | admin | Explicitly configure `{ policy: "keep_original" }`; no policy is assumed by default |
+| `POST /semester-transitions/preview` | admin | Create/refresh preview for `{ sourceTermId, destinationTermId, studentIds }`; captures requirements, hours, review issues and a stale-data fingerprint |
+| `POST /semester-transitions/:transitionId/finalize` | admin | Revalidate the preview, close an ended source term, preserve its records, and audit the result in one transaction |
+| `POST /semester-transitions/:transitionId/cancel` | admin | Cancel a preview without changing term records |
+| `GET /semester-transitions/history` | admin | List the latest 50 institution-scoped previews, finalizations and cancellations |
+
+Finalization refuses a stale preview, an unended or already-finalized source term, finalized destination, unresolved DTRs, incomplete attendance, pending recovery shifts, inactive selected accounts, missing requirements, or cross-institution terms. Explanatory-letter workflow is not currently implemented; the planner reports that limitation instead of fabricating explanation statuses.
 
 ## Duty requirements and SA schedule preferences
 

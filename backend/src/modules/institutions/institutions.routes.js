@@ -50,6 +50,7 @@ institutionsRouter.put('/me', requireRole('admin'), asyncHandler(async (req, res
     );
     await recordAudit({
       actorId: req.user.id,
+      institutionId: req.user.institutionId,
       action: 'institution.update',
       targetType: 'institution',
       targetId: updated.id,

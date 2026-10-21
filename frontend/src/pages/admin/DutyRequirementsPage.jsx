@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -36,8 +37,16 @@ export default function DutyRequirementsPage() {
   const [defaultError, setDefaultError] = useState('');
   const [policyMessage, setPolicyMessage] = useState('');
   const [policyError, setPolicyError] = useState('');
+  const [policySearch, setPolicySearch] = useState('');
   useEffect(() => { if (!termId && terms.length) setTermId(terms[0].id); }, [termId, terms]);
   const context = contextQuery.data;
+  const filteredPolicies = (context?.policies ?? []).filter((policy) => [
+    names[policy.scopeType], policy.scopeName, policy.effectiveStartsOn, policy.effectiveEndsOn,
+    policy.requiredTermHours, policy.minimumDailyHours, policy.maximumDailyHours,
+    policy.permittedWeekdays.map((day) => week[day - 1]).join(' '),
+    policy.permittedTimeWindows.map((window) => `${window.startTime} ${window.endTime}`).join(' '),
+    policy.exceptionReason,
+  ].some((value) => String(value ?? '').toLowerCase().includes(policySearch.trim().toLowerCase())));
   useEffect(() => {
     if (!context) return;
     setStarts(context.term.startsOn); setEnds(context.term.endsOn);
@@ -116,7 +125,37 @@ export default function DutyRequirementsPage() {
             </div>
           </form>
         </Card>
-        <Card><h2 className="mb-3 text-lg font-semibold">Configured policies</h2>{context.policies.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-line text-muted"><th className="p-2">Scope</th><th className="p-2">Effective dates</th><th className="p-2">Required hours</th><th className="p-2">Min / max per day</th><th className="p-2">Days / windows</th><th className="p-2">Exception authorization</th><th className="p-2"></th></tr></thead><tbody>{context.policies.map((p) => <tr key={p.id} className="border-b border-line"><td className="p-2">{names[p.scopeType]} · {p.scopeName}</td><td className="p-2">{p.effectiveStartsOn} – {p.effectiveEndsOn}</td><td className="p-2">{p.requiredTermHours == null ? 'Individual assignment' : `${p.requiredTermHours} h`}</td><td className="p-2">{p.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {p.maximumDailyHours ?? 'no cap'}</td><td className="p-2">{p.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {p.permittedTimeWindows.map((w) => `${w.startTime}–${w.endTime}`).join(', ')}</td><td className="p-2">{p.exceptionReason ?? '—'}</td><td className="p-2"><Button type="button" onClick={() => editPolicy(p)}>Edit</Button></td></tr>)}</tbody></table></div> : <p className="text-sm text-muted">No policies configured for this term.</p>}</Card>
+        <Card>
+          <h2 className="mb-3 text-lg font-semibold">Configured policies</h2>
+          <label htmlFor="policy-search" className="sr-only">Search configured policies</label>
+          <div className="relative mb-3 w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input id="policy-search" type="search" value={policySearch} onChange={(event) => setPolicySearch(event.target.value)} placeholder="Search policies" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+          </div>
+          {filteredPolicies.length ? <>
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-left text-sm">
+                <thead><tr className="border-b border-line text-muted"><th className="p-2">Scope</th><th className="p-2">Effective dates</th><th className="p-2">Required hours</th><th className="p-2">Min / max per day</th><th className="p-2">Days / windows</th><th className="p-2">Exception authorization</th><th className="p-2"></th></tr></thead>
+                <tbody>{filteredPolicies.map((p) => <tr key={p.id} className="border-b border-line"><td className="p-2">{names[p.scopeType]} · {p.scopeName}</td><td className="p-2">{p.effectiveStartsOn} – {p.effectiveEndsOn}</td><td className="p-2">{p.requiredTermHours == null ? 'Individual assignment' : `${p.requiredTermHours} h`}</td><td className="p-2">{p.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {p.maximumDailyHours ?? 'no cap'}</td><td className="p-2">{p.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {p.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ')}</td><td className="p-2">{p.exceptionReason ?? '—'}</td><td className="p-2"><Button type="button" onClick={() => editPolicy(p)}>Edit</Button></td></tr>)}</tbody>
+              </table>
+            </div>
+            <div className="divide-y divide-line sm:hidden">
+              {filteredPolicies.map((policy) => (
+                <article key={policy.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                  <h3 className="break-words text-sm font-medium text-ink">{names[policy.scopeType]} · {policy.scopeName}</h3>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div><dt className="text-muted">Effective dates</dt><dd className="mt-0.5 break-words text-ink">{policy.effectiveStartsOn} – {policy.effectiveEndsOn}</dd></div>
+                    <div><dt className="text-muted">Required hours</dt><dd className="mt-0.5 text-ink">{policy.requiredTermHours == null ? 'Individual assignment' : `${policy.requiredTermHours} h`}</dd></div>
+                    <div><dt className="text-muted">Min / max per day</dt><dd className="mt-0.5 text-ink">{policy.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {policy.maximumDailyHours ?? 'No cap'}</dd></div>
+                    <div className="col-span-2"><dt className="text-muted">Days / windows</dt><dd className="mt-0.5 break-words text-ink">{policy.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {policy.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ')}</dd></div>
+                    {policy.exceptionReason && <div className="col-span-2"><dt className="text-muted">Exception authorization</dt><dd className="mt-0.5 break-words text-ink">{policy.exceptionReason}</dd></div>}
+                  </dl>
+                  <Button type="button" onClick={() => editPolicy(policy)}>Edit</Button>
+                </article>
+              ))}
+            </div>
+          </> : <p className="text-sm text-muted">{policySearch ? 'No matching policies.' : 'No policies configured for this term.'}</p>}
+        </Card>
       </>}
     </>}
   </>;

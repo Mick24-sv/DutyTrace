@@ -41,6 +41,14 @@ export const formatClock = (iso, timeZone) =>
   iso ? new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(iso)) : '—';
 
 // Today's date as 'YYYY-MM-DD' on the server's clock (APP_TIMEZONE), for default/maximum values in date inputs.
+export const formatDutyTime = (time) => {
+  if (!time) return '—';
+  const match = /^(\d{2}):(\d{2})/.exec(time);
+  if (!match) return time;
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+};
+
 export const todayKey = (timeZone) =>
   new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 

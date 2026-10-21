@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -29,6 +30,7 @@ export default function CasesListPage() {
   const types = useApiData(isAdmin ? `/cases/types?_=${tick}` : null);
   const users = useApiData(isAdmin ? '/users' : null);
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
 
   const columns = [
     { key: 'ref', header: 'Reference', render: (r) => <span className="font-medium">{r.reference}</span> },
@@ -43,6 +45,8 @@ export default function CasesListPage() {
 
   const students = (users.data?.users ?? []).filter((u) => u.role === 'student' && u.status === 'active');
   const activeTypes = (types.data?.types ?? []).filter((t) => t.isActive);
+  const filteredCases = (data?.cases ?? []).filter((caseItem) => [caseItem.reference, caseItem.student?.fullName, caseItem.type?.name, caseItem.status, caseItem.periodStart, caseItem.periodEnd]
+    .some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase())));
 
   return (
     <>
@@ -72,7 +76,34 @@ export default function CasesListPage() {
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
       {data && (
         <Card>
-          <DataTable columns={columns} rows={data.cases} caption="Compliance cases" empty="No compliance cases." />
+          <label htmlFor="case-search" className="sr-only">Search compliance cases</label>
+          <div className="relative mb-3 w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input id="case-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search cases" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+          </div>
+          <div className="hidden sm:block">
+            <DataTable columns={columns} rows={filteredCases} caption="Compliance cases" empty={search ? 'No matching cases.' : 'No compliance cases.'} />
+          </div>
+          <div className="divide-y divide-line sm:hidden">
+            {filteredCases.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching cases.' : 'No compliance cases.'}</p> : filteredCases.map((caseItem) => (
+              <article key={caseItem.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="break-all text-sm font-medium text-ink">{caseItem.reference}</p>
+                    {user.role !== 'student' && <p className="break-words text-xs text-muted">{caseItem.student.fullName}</p>}
+                  </div>
+                  <CaseStatusBadge status={caseItem.status} />
+                </div>
+                <p className="break-words text-sm text-ink">{caseItem.type.name}</p>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted">
+                  <span>{formatDateRange(caseItem.periodStart, caseItem.periodEnd)}</span>
+                  <span>{caseItem.missingRequirements > 0 ? `${caseItem.missingRequirements} missing docs` : 'No missing docs'}</span>
+                  <span>Updated {formatDateTime(caseItem.updatedAt, data.timezone)}</span>
+                  <Link to={caseItem.id} className="font-medium text-teal underline">Open</Link>
+                </div>
+              </article>
+            ))}
+          </div>
         </Card>
       )}
 

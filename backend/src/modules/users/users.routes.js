@@ -79,7 +79,7 @@ usersRouter.post('/', requireRole('admin'), asyncHandler(async (req, res) => {
       await db.query('INSERT INTO duty_assignments (user_id, office_id) VALUES ($1, $2)', [rows[0].id, input.officeId]);
     }
     const user = await fetchUser(rows[0].id, db);
-    await recordAudit({ actorId: req.user.id, action: 'user.create', targetType: 'user', targetId: user.id, after: auditView(user), ip: req.ip }, db);
+    await recordAudit({ actorId: req.user.id, institutionId: req.user.institutionId, action: 'user.create', targetType: 'user', targetId: user.id, after: auditView(user), ip: req.ip }, db);
     return user;
   });
   ok(res, { user: created }, 201);
@@ -132,7 +132,7 @@ usersRouter.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) =>
     if (changes.status === 'disabled') await revokeAllSessions(id, db);
 
     const after = await fetchUser(id, db);
-    await recordAudit({ actorId: req.user.id, action: 'user.update', targetType: 'user', targetId: id, before: auditView(before), after: auditView(after), ip: req.ip }, db);
+    await recordAudit({ actorId: req.user.id, institutionId: req.user.institutionId, action: 'user.update', targetType: 'user', targetId: id, before: auditView(before), after: auditView(after), ip: req.ip }, db);
     return after;
   });
   ok(res, { user: updated });
@@ -160,7 +160,7 @@ usersRouter.put('/:id/assignment', requireRole('admin'), asyncHandler(async (req
     if (officeId) await db.query('INSERT INTO duty_assignments (user_id, office_id) VALUES ($1, $2)', [id, officeId]);
 
     const after = await fetchUser(id, db);
-    await recordAudit({ actorId: req.user.id, action: 'user.assignment_change', targetType: 'user', targetId: id, before: auditView(before), after: auditView(after), ip: req.ip }, db);
+    await recordAudit({ actorId: req.user.id, institutionId: req.user.institutionId, action: 'user.assignment_change', targetType: 'user', targetId: id, before: auditView(before), after: auditView(after), ip: req.ip }, db);
     return after;
   });
   ok(res, { user: updated });

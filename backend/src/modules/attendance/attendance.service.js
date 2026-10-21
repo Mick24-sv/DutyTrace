@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../../db/pool.js';
+﻿import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
@@ -70,7 +70,7 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
       const event = rows[0];
 
       await recordAudit({
-        actorId: user.id, action: `attendance.${action}`, targetType: 'attendance_event', targetId: event.id,
+        actorId: user.id, institutionId: user.institutionId, action: `attendance.${action}`, targetType: 'attendance_event', targetId: event.id,
         after: { officeId: qr.office_id, qrCodeId: qr.id, recordedAt: event.recorded_at }, ip,
       }, db);
 
@@ -91,7 +91,7 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
     // Log refused scans (outside the rolled-back transaction) so odd patterns are visible.
     if (err instanceof AppError && err.status < 500) {
       await recordAudit({
-        actorId: user.id, action: 'attendance.scan_rejected', targetType: 'user', targetId: user.id,
+        actorId: user.id, institutionId: user.institutionId, action: 'attendance.scan_rejected', targetType: 'user', targetId: user.id,
         after: { reason: err.code, attempted: action }, ip,
       }).catch(() => {});
     }
@@ -199,3 +199,4 @@ export async function officeSummary(officeId, requestedMonth) {
     }),
   };
 }
+

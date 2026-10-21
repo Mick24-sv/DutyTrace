@@ -14,6 +14,7 @@ import {
   TrendingDown,
   RefreshCw,
   CalendarRange,
+  Search,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -54,6 +55,7 @@ export default function ReportsPage() {
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('');
   const [termId, setTermId] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -539,6 +541,8 @@ export default function ReportsPage() {
   };
 
   const items = currentReportData?.items ?? [];
+  const reportColumns = renderColumns();
+  const filteredItems = items.filter((item) => JSON.stringify(item).toLowerCase().includes(search.trim().toLowerCase()));
   const pagination = currentReportData?.pagination ?? { page: 1, limit: 20, total: items.length, totalPages: 1 };
 
   return (
@@ -771,13 +775,43 @@ export default function ReportsPage() {
             {pagination.total} total record{pagination.total === 1 ? '' : 's'} found
           </span>
         </div>
-
-        <DataTable
-          columns={renderColumns()}
-          rows={items}
-          caption="Report data results table"
-          empty={loading ? 'Querying database...' : 'No records match the selected filter criteria.'}
-        />
+        <label htmlFor="report-search" className="sr-only">Search report records</label>
+        <div className="relative mb-3 w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+          <input id="report-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search records" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+        </div>
+        <div className="hidden sm:block">
+          <DataTable
+            columns={reportColumns}
+            rows={filteredItems}
+            caption="Report data results table"
+            empty={loading ? 'Querying database...' : 'No records match the selected filter criteria.'}
+          />
+        </div>
+        <div className="divide-y divide-line sm:hidden">
+          {filteredItems.length === 0 ? <p className="py-5 text-center text-sm text-muted">{loading ? 'Querying database...' : 'No records match the selected filter criteria.'}</p> : filteredItems.map((item, index) => {
+            const visibleColumns = reportColumns.filter((column) => column.header);
+            const first = visibleColumns[0];
+            const second = visibleColumns[1];
+            const renderValue = (column) => column.render ? column.render(item) : item[column.key];
+            return (
+              <article key={item.id ?? item.reference ?? item.date ?? index} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  {first && <p className="break-words text-sm font-medium text-ink">{renderValue(first)}</p>}
+                  {second && <p className="break-words text-xs text-muted">{renderValue(second)}</p>}
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  {visibleColumns.slice(2).map((column) => (
+                    <div key={column.key} className="min-w-0">
+                      <dt className="text-muted">{column.header}</dt>
+                      <dd className="mt-0.5 break-words text-ink">{renderValue(column)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            );
+          })}
+        </div>
 
         {/* Pagination Navigation */}
         {pagination.totalPages > 1 && (

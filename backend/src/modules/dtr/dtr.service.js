@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../../db/pool.js';
+﻿import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
@@ -47,6 +47,7 @@ export async function setRequiredHours({ actor, hours, reviewSlaHours, ip }) {
     );
     await recordAudit({
       actorId: actor.id,
+      institutionId: actor.institutionId,
       action: Number(rows[0].required_monthly_hours) !== hours
         ? 'policy.required_hours_changed'
         : rows[0].review_sla_hours !== nextReviewSlaHours ? 'policy.review_sla_changed' : 'policy.settings_saved',
@@ -191,7 +192,7 @@ export async function generate({ user, month, ip }) {
       [id, revisionNo, action, from, user.id],
     );
     await recordAudit({
-      actorId: user.id, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: id,
+      actorId: user.id, institutionId: user.institutionId, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: id,
       after: { month, revision: revisionNo, recordedHours: snapshot.totals.recordedHours, incompleteCount: snapshot.totals.incompleteCount }, ip,
     }, db);
     return getDetail({ user, id }, db);
@@ -272,7 +273,7 @@ async function transition({ user, id, to, action, ip, reason = null, check, extr
       [id, dtr.current_revision, action, dtr.status, to, user.id, reason],
     );
     await recordAudit({
-      actorId: user.id, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: id,
+      actorId: user.id, institutionId: user.institutionId, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: id,
       before: { status: dtr.status }, after: { status: to, revision: dtr.current_revision, ...(reason ? { reason } : {}) }, ip,
     }, db);
     if (to === 'submitted') {
@@ -349,7 +350,7 @@ async function transitionInside(db, { user, dtr, to, action, ip, extra }) {
     [dtr.id, dtr.current_revision, action, dtr.status, to, user.id],
   );
   await recordAudit({
-    actorId: user.id, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: dtr.id,
+    actorId: user.id, institutionId: user.institutionId, action: `dtr.${action}`, targetType: 'monthly_dtr', targetId: dtr.id,
     before: { status: dtr.status }, after: { status: to, revision: dtr.current_revision, verifiedSeconds: extra.verified_seconds }, ip,
   }, db);
   if (to === 'approved') {
@@ -375,3 +376,5 @@ export async function reviewQueueCounts(user) {
   const n = (s) => rows.find((r) => r.status === s)?.n ?? 0;
   return { submitted: n('submitted'), underReview: n('under_review') };
 }
+
+

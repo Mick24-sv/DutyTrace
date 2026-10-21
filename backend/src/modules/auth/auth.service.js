@@ -44,7 +44,7 @@ export const USER_WITH_OFFICE_SQL = `
 
 export async function login({ email, password, ip, userAgent }) {
   const { rows } = await query(
-    'SELECT id, password_hash, status, failed_login_count, locked_until FROM users WHERE email = $1',
+    'SELECT id, password_hash, status, failed_login_count, locked_until, institution_id FROM users WHERE email = $1',
     [email],
   );
   const user = rows[0];
@@ -64,13 +64,15 @@ export async function login({ email, password, ip, userAgent }) {
         [user.id, lockNow ? 0 : failures, lockNow, env.lockoutMinutes],
       );
       await recordAudit({
-        actorId: user.id, action: lockNow ? 'auth.account_locked' : 'auth.login_failed',
+        actorId: user.id, institutionId: user.institution_id,
+        action: lockNow ? 'auth.account_locked' : 'auth.login_failed',
         targetType: 'user', targetId: user.id, ip,
       });
     } else {
       // Unknown email, disabled or locked account: log without recording what was typed.
       await recordAudit({
-        actorId: user?.id ?? null, action: 'auth.login_rejected',
+        actorId: user?.id ?? null, institutionId: user?.institution_id ?? null,
+        action: 'auth.login_rejected',
         targetType: 'user', targetId: user?.id ?? null, ip,
         after: { reason: !user ? 'unknown_email' : locked ? 'locked' : user.status !== 'active' ? 'disabled' : 'bad_password' },
       });
@@ -87,7 +89,7 @@ export async function login({ email, password, ip, userAgent }) {
        VALUES ($1, $2, now() + make_interval(hours => $3), $4, $5)`,
       [user.id, sha256(token), env.sessionHours, ip, userAgent?.slice(0, 300) ?? null],
     );
-    await recordAudit({ actorId: user.id, action: 'auth.login', targetType: 'user', targetId: user.id, ip }, db);
+    await recordAudit({ actorId: user.id, institutionId: user.institution_id, action: 'auth.login', targetType: 'user', targetId: user.id, ip }, db);
   });
 
   const { rows: full } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.id = $1`, [user.id]);
@@ -115,7 +117,7 @@ export async function getUserForToken(token) {
 export async function logout({ token, user, ip }) {
   if (!token) return;
   await query('UPDATE sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL', [sha256(token)]);
-  if (user) await recordAudit({ actorId: user.id, action: 'auth.logout', targetType: 'user', targetId: user.id, ip });
+  if (user) await recordAudit({ actorId: user.id, institutionId: user.institutionId, action: 'auth.logout', targetType: 'user', targetId: user.id, ip });
 }
 
 export async function revokeAllSessions(userId, db = { query }) {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarRange, LockKeyhole } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -18,7 +19,7 @@ const emptyTerm = (timezone) => ({
   timezone,
 });
 
-function RequirementRow({ student, offices, locked, reload }) {
+function RequirementRow({ student, offices, locked, reload, mobile = false }) {
   const [hours, setHours] = useState(student.requiredHours == null ? '' : String(student.requiredHours));
   const [officeId, setOfficeId] = useState(student.officeId ?? '');
   const [busy, setBusy] = useState(false);
@@ -44,6 +45,32 @@ function RequirementRow({ student, offices, locked, reload }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (mobile) {
+    return (
+      <article className="rounded-lg border border-line p-3">
+        <div className="mb-3 min-w-0">
+          <p className="break-words font-medium text-ink">{student.fullName}</p>
+          <p className="break-all text-xs text-muted">{student.email}</p>
+        </div>
+        <div className="grid gap-3">
+          <label className="block text-xs font-medium text-muted">Assigned office
+            <select aria-label={`Requirement office for ${student.fullName}`} className={`${field} mt-1`} value={officeId} onChange={(event) => setOfficeId(event.target.value)} disabled={locked}>
+              <option value="">Select office</option>
+              {offices.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-muted">Required hours
+            <input type="number" min="0.01" max="10000" step="0.01" aria-label={`Required semester hours for ${student.fullName}`} placeholder="No requirement" className={`${field} mt-1`} value={hours} onChange={(event) => setHours(event.target.value)} disabled={locked} />
+          </label>
+          <Button type="button" className="w-full" onClick={save} disabled={locked || busy || !officeId}>
+            {busy ? 'Saving…' : hours === '' && student.requiredHours != null ? 'Remove requirement' : 'Save requirement'}
+          </Button>
+          {error && <p role="alert" className="text-xs text-bad-fg">{error}</p>}
+        </div>
+      </article>
+    );
   }
 
   return (
@@ -157,20 +184,6 @@ export default function AcademicTermsPage() {
     }
   }
 
-  async function finalize() {
-    if (!selected || !window.confirm(`Finalize ${selected.academicYear} ${semesterLabels[selected.semester]}? This permanently locks its dates and requirements.`)) return;
-    setBusy(true);
-    setError('');
-    try {
-      await apiPost(`/semesters/${selected.id}/finalize`, {});
-      reload();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function saveInstitution(event) {
     event.preventDefault();
     setInstitutionBusy(true);
@@ -262,9 +275,9 @@ export default function AcademicTermsPage() {
           <div className="sm:col-span-2 flex flex-wrap gap-2">
             <Button type="submit" disabled={busy || Boolean(selected?.finalizedAt)}>{busy ? 'Saving…' : 'Save term'}</Button>
             {selected && !selected.finalizedAt && (
-              <Button type="button" onClick={finalize} disabled={busy} className="bg-navy hover:bg-navy/90">
-                <LockKeyhole className="mr-2 inline h-4 w-4" /> Finalize historical term
-              </Button>
+              <Link to="/admin/semester-transitions" className="inline-flex items-center rounded-lg bg-navy px-3 py-2 text-sm font-medium text-white hover:bg-navy/90">
+                <LockKeyhole className="mr-2 inline h-4 w-4" /> Open semester transition planner
+              </Link>
             )}
           </div>
         </form>
@@ -282,8 +295,9 @@ export default function AcademicTermsPage() {
           {requirementsQuery.loading && <p role="status" className="text-sm text-muted">Loading students…</p>}
           {requirementsQuery.error && <p role="alert" className="text-sm text-bad-fg">{requirementsQuery.error}</p>}
           {requirementsQuery.data && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+            <>
+              <div className="hidden overflow-x-auto sm:block">
+              <table className="min-w-[640px] w-full text-left text-sm">
                 <thead><tr className="border-b border-line text-xs text-muted">
                   <th className="pb-2 pr-4">Student Assistant</th><th className="pb-2 pr-4">Assigned office</th>
                   <th className="pb-2 pr-4">Required hours</th><th className="pb-2">Action</th>
@@ -294,8 +308,12 @@ export default function AcademicTermsPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
+              <div className="space-y-3 sm:hidden">
+                {requirementRows.map((student) => <RequirementRow key={student.id} mobile student={student} offices={offices} locked={Boolean(selected.finalizedAt)} reload={reload} />)}
+              </div>
               {requirementRows.length === 0 && <p className="py-4 text-sm text-muted">No student accounts in this institution.</p>}
-            </div>
+            </>
           )}
         </Card>
       )}

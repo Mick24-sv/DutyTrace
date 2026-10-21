@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, Menu } from 'lucide-react';
+import { Building2, ChevronDown, LogOut, Mail, Menu } from 'lucide-react';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import { useApiHealth } from '../../hooks/useApiHealth.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
@@ -68,10 +68,10 @@ export default function Topbar({ role, title, onMenu }) {
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label="Account menu"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-canvas"
+          className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-canvas sm:rounded-xl sm:bg-canvas sm:px-3"
         >
           <span
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white sm:h-10 sm:w-10"
             aria-hidden="true"
           >
             {initials(user.fullName)}
@@ -86,22 +86,42 @@ export default function Topbar({ role, title, onMenu }) {
         {menuOpen && (
           <div
             role="menu"
-            className="absolute right-0 mt-2 w-64 rounded-card border border-line bg-surface p-1 shadow-card"
+            className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-xl sm:w-96"
           >
-            <div className="px-3 py-2">
-              <p className="truncate text-sm font-medium">{user.fullName}</p>
-              <p className="truncate text-xs text-muted">{user.email}</p>
-              {user.office && <p className="mt-1 truncate text-xs text-muted">Office: {user.office.name}</p>}
+            <div className="flex items-center gap-4 border-b border-line px-5 py-5 sm:px-6 sm:py-6">
+              <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-navy text-lg font-semibold text-white" aria-hidden="true">{initials(user.fullName)}</span>
+              <div className="min-w-0">
+                <p className="break-words text-lg font-semibold leading-tight text-navy">{user.fullName}</p>
+                <p className="mt-1 text-sm text-muted">{ROLE_CONFIG[role].label}</p>
+              </div>
             </div>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={signOut}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-canvas"
-            >
-              <LogOut className="h-4 w-4 text-teal" aria-hidden="true" />
-              Sign out
-            </button>
+            <div className="space-y-4 px-5 py-5 sm:px-6">
+              <div className="flex min-w-0 items-start gap-3">
+                <Mail className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Email</p>
+                  <p className="mt-1 break-all text-sm text-navy">{user.email}</p>
+                </div>
+              </div>
+              {user.office && <div className="flex min-w-0 items-start gap-3">
+                <Building2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Office</p>
+                  <p className="mt-1 break-words text-sm text-navy">{user.office.name}</p>
+                </div>
+              </div>}
+              <div className="border-t border-line pt-4">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                  className="flex w-full items-center gap-3 rounded-xl bg-bad-bg px-4 py-3 text-left text-sm font-medium text-bad-fg transition hover:bg-bad-bg/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bad-fg"
+                >
+                  <LogOut className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
+                  Sign out
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

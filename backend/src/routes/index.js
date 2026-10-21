@@ -14,6 +14,10 @@ import { semestersRouter } from '../modules/semesters/semesters.routes.js';
 import { institutionsRouter } from '../modules/institutions/institutions.routes.js';
 import { notificationsRouter } from '../modules/notifications/notifications.routes.js';
 import { dutyRequirementsRouter } from '../modules/duty-requirements/duty-requirements.routes.js';
+import { auditRouter } from '../modules/audit/audit.routes.js';
+import { forecastRouter } from '../modules/forecast/forecast.routes.js';
+import { recoveryRouter } from '../modules/recovery/recovery.routes.js';
+import { transitionsRouter } from '../modules/transitions/transitions.routes.js';
 
 // Feature routers (absences, compliance, ...) get mounted here in later phases.
 export function buildRoutes(options = {}) {
@@ -34,5 +38,9 @@ export function buildRoutes(options = {}) {
   router.use('/institutions', institutionsRouter);
   router.use('/notifications', notificationsRouter);
   router.use('/duty-schedules', dutyRequirementsRouter);
+  router.use('/audit', auditRouter);
+  router.use('/forecast', forecastRouter);
+  router.use('/recovery', recoveryRouter);
+  router.use('/semester-transitions', transitionsRouter);
   return router;
 }

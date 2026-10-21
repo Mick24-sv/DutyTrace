@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, CircleCheck, ClipboardList, Eye, EyeOff, LockKeyhole, ScanLine } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import Button from '../../components/ui/Button.jsx';
 import FullPageMessage from '../../components/layout/FullPageMessage.jsx';
+import AppFooter from '../../components/layout/AppFooter.jsx';
 
 export default function LoginPage() {
   const { user, status, login } = useAuth();
@@ -44,117 +45,126 @@ export default function LoginPage() {
         <span className="ml-3 text-xl font-semibold tracking-tight text-white">DutyTrace</span>
       </header>
 
-      <main className="grid min-h-[calc(100vh-76px)] w-full bg-surface lg:grid-cols-[minmax(420px,0.95fr)_minmax(420px,1.05fr)]">
-        <section className="flex min-h-[calc(100vh-76px)] flex-col px-6 py-7 sm:px-10 lg:px-12 xl:px-20">
-        <div className="flex flex-1 items-center justify-center py-12">
-          <div className="w-full max-w-md">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold tracking-tight text-navy sm:text-4xl">Welcome back</h1>
-              <p className="mt-3 text-base text-muted">Sign in to your DutyTrace account</p>
-            </div>
-
-            <form onSubmit={onSubmit} noValidate>
-              {error && (
-                <p role="alert" className="mb-5 rounded-lg bg-bad-bg px-4 py-3 text-sm text-bad-fg">
-                  {error}
-                </p>
-              )}
-
-              <Field
-                id="email" label="Email address" type="email" autoComplete="username"
-                value={email} onChange={setEmail} error={fieldErrors.email}
-              />
-              <Field
-                id="password" label="Password" type="password" autoComplete="current-password"
-                value={password} onChange={setPassword} error={fieldErrors.password}
-              />
-
-              <div className="-mt-1 mb-6 text-right">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm font-medium text-teal hover:underline focus:outline-none focus-visible:underline"
-                >
-                  Forgot password?
-                </Link>
+      <main className="grid min-h-[calc(100vh-140px)] w-full bg-surface lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="flex min-h-[calc(100vh-140px)] flex-col px-6 py-8 sm:px-10 lg:px-12 xl:px-20">
+          <div className="flex flex-1 items-center justify-center py-6 sm:py-10">
+            <div className="w-full max-w-[480px]">
+              <div className="mb-10">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-[0.14em] text-teal">Your DutyTrace workspace</p>
+                <h1 className="text-4xl font-medium tracking-tight text-navy sm:text-[2.6rem]">Welcome back</h1>
+                <p className="mt-3 text-base text-muted">Sign in to your DutyTrace account.</p>
               </div>
 
-              <Button type="submit" className="mt-1 min-h-12 w-full" disabled={submitting}>
-                {submitting ? 'Signing in…' : 'Sign in'}
-              </Button>
-            </form>
-          </div>
-        </div>
+              <form onSubmit={onSubmit} noValidate>
+                {error && (
+                  <p role="alert" className="mb-5 rounded-lg border border-bad-fg/20 bg-bad-bg px-4 py-3 text-sm text-bad-fg">
+                    {error}
+                  </p>
+                )}
 
-        <p className="text-center text-xs text-muted lg:text-left">Duty hours and attendance, in one place.</p>
+                <Field
+                  id="email" label="Email address" placeholder="Enter your email address" type="email" autoComplete="username"
+                  value={email} onChange={setEmail} error={fieldErrors.email}
+                />
+                <Field
+                  id="password" label="Password" placeholder="Enter your password" type="password" autoComplete="current-password"
+                  value={password} onChange={setPassword} error={fieldErrors.password}
+                />
+
+                <div className="-mt-1 mb-6 text-right">
+                  <Link
+                    to="/forgot-password"
+                    className="rounded-sm text-sm font-semibold text-teal transition-colors hover:text-navy hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+
+                <Button variant="accent" type="submit" className="mt-1 min-h-14 w-full rounded-lg text-base font-semibold shadow-sm transition-colors" disabled={submitting} aria-busy={submitting}>
+                  {submitting ? 'Signing in…' : <>Sign in <ArrowRight className="h-4 w-4" aria-hidden="true" /></>}
+                </Button>
+              </form>
+
+              <div className="mt-8 flex items-center gap-3 border-t border-line pt-5 text-sm text-muted">
+                <LockKeyhole className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>Secure access to your workspace</span>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <aside className="relative hidden min-h-[calc(100vh-76px)] items-center justify-center overflow-hidden bg-canvas px-8 py-12 lg:flex xl:px-16">
-        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-teal/5" aria-hidden="true" />
-        <div className="absolute -bottom-28 -left-24 h-96 w-96 rounded-full bg-navy/5" aria-hidden="true" />
-        <div className="relative w-full max-w-2xl">
-          <DutyIllustration />
-          <div className="mx-auto mt-8 max-w-lg text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-navy">Your duty. Your progress.</h2>
-            <p className="mt-3 text-base leading-7 text-muted">
-              Track your hours. Stay on schedule. Meet your requirements.
-            </p>
+        <aside className="relative hidden min-h-[calc(100vh-140px)] items-center justify-center overflow-hidden bg-canvas px-8 py-12 lg:flex xl:px-14">
+          <div className="relative w-full max-w-[650px]">
+            <div className="mb-8 text-center">
+              <p className="mb-4 inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-teal"><span className="h-0.5 w-5 bg-teal" aria-hidden="true" />Every hour counts</p>
+              <h2 className="text-3xl font-semibold tracking-tight text-navy xl:text-[2.5rem]">Your duty. Your progress.</h2>
+              <p className="mx-auto mt-3 max-w-md text-base leading-7 text-muted">Track your hours. Stay on schedule.<br />Meet your requirements.</p>
+            </div>
+            <DutyIllustration />
+            <div className="mt-8 flex flex-wrap justify-center gap-x-7 gap-y-3 text-xs text-muted">
+              {['Clearer records', 'Track your Hours', 'More peace of mind'].map((item) => <span key={item} className="inline-flex items-center gap-2"><CircleCheck className="h-4 w-4 text-teal" aria-hidden="true" />{item}</span>)}
+            </div>
           </div>
-        </div>
         </aside>
+
       </main>
+      <AppFooter />
     </div>
   );
 }
 
 function DutyIllustration() {
+  const bars = [42, 65, 53, 82, 71, 100, 77];
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
   return (
-    <svg viewBox="0 0 640 460" role="img" aria-labelledby="duty-illustration-title" className="mx-auto block w-full max-w-xl">
-      <title id="duty-illustration-title">Student assistant organizing duty hours on a laptop</title>
-      <ellipse cx="320" cy="414" rx="232" ry="20" fill="var(--color-line)" opacity="0.65" />
+    <div className="relative mx-auto w-full max-w-[620px] pb-5">
+      <div role="img" aria-label="Example DutyTrace overview showing weekly duty hours, recent approved shifts, and semester progress" className="rounded-2xl border border-line bg-surface p-5 shadow-[0_20px_55px_-34px_rgba(21,59,80,0.35)] sm:p-6">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-info-bg text-teal"><ScanLine className="h-5 w-5" aria-hidden="true" /></span>
+            <div><p className="text-sm font-semibold text-navy">My overview</p><p className="text-[11px] text-muted">Illustrative preview</p></div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted"><CalendarDays className="h-4 w-4" aria-hidden="true" />This week</span>
+        </div>
 
-      <rect x="344" y="51" width="218" height="138" rx="18" fill="var(--color-surface)" stroke="var(--color-line)" strokeWidth="2" />
-      <rect x="365" y="72" width="40" height="40" rx="12" fill="var(--color-info-bg)" />
-      <path d="M385 81v12l8 5" fill="none" stroke="var(--color-navy)" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="385" cy="93" r="13" fill="none" stroke="var(--color-navy)" strokeWidth="2.5" />
-      <rect x="419" y="78" width="112" height="9" rx="4.5" fill="var(--color-line)" />
-      <rect x="419" y="96" width="79" height="7" rx="3.5" fill="var(--color-line)" opacity="0.8" />
-      <rect x="365" y="128" width="176" height="42" rx="10" fill="var(--color-canvas)" />
-      <rect x="378" y="141" width="82" height="7" rx="3.5" fill="var(--color-teal)" />
-      <rect x="378" y="153" width="128" height="5" rx="2.5" fill="var(--color-line)" />
-      <circle cx="521" cy="149" r="9" fill="var(--color-ok-bg)" />
-      <path d="m517 149 3 3 6-7" fill="none" stroke="var(--color-ok-fg)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <div className="grid gap-6 sm:grid-cols-[1fr_0.95fr]">
+          <div>
+            <p className="text-xs text-muted">Hours this week</p>
+            <p className="mt-1 flex items-baseline gap-1.5 text-navy"><strong className="text-4xl font-medium tracking-tight">32.5</strong><span className="text-sm text-muted">/ 40 hrs</span></p>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-canvas"><div className="h-full w-[81%] rounded-full bg-teal" /></div>
+            <p className="mt-2 text-[11px] font-medium text-teal">81% of your weekly goal</p>
+          </div>
+          <div className="flex min-h-[116px] items-end justify-between gap-2 px-1" aria-hidden="true">
+            {bars.map((height, index) => <div key={`${days[index]}-${index}`} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><div className={`w-full max-w-7 rounded-t-md ${index === 5 ? 'bg-teal' : 'bg-teal/20'}`} style={{ height: `${height}%` }} /><span className="text-[10px] text-muted">{days[index]}</span></div>)}
+          </div>
+        </div>
 
-      <rect x="75" y="111" width="128" height="186" rx="16" fill="var(--color-surface)" stroke="var(--color-line)" strokeWidth="2" />
-      <rect x="93" y="131" width="91" height="34" rx="9" fill="var(--color-navy)" />
-      <rect x="104" y="143" width="52" height="7" rx="3.5" fill="var(--color-surface)" opacity="0.9" />
-      <g fill="var(--color-canvas)">
-        <rect x="93" y="178" width="25" height="25" rx="6" /><rect x="125" y="178" width="25" height="25" rx="6" /><rect x="157" y="178" width="27" height="25" rx="6" />
-        <rect x="93" y="211" width="25" height="25" rx="6" /><rect x="125" y="211" width="25" height="25" rx="6" /><rect x="157" y="211" width="27" height="25" rx="6" />
-      </g>
-      <g fill="var(--color-teal)">
-        <rect x="93" y="244" width="25" height="25" rx="6" /><rect x="125" y="244" width="25" height="25" rx="6" /><rect x="157" y="244" width="27" height="25" rx="6" />
-      </g>
-
-      <path d="M207 328c4-64 39-106 104-106s101 42 105 106v60H207z" fill="var(--color-navy)" />
-      <path d="M264 210c0-42 20-69 53-69s53 27 53 69v24h-106z" fill="var(--color-ink)" />
-      <ellipse cx="317" cy="211" rx="42" ry="51" fill="var(--color-warn-bg)" />
-      <path d="M275 207c0-44 19-67 46-67 28 0 47 23 47 63-13-3-22-12-27-24-12 17-36 26-66 28z" fill="var(--color-ink)" />
-      <path d="M298 215h1m36 0h1" stroke="var(--color-navy)" strokeWidth="5" strokeLinecap="round" />
-      <path d="M307 237c7 6 15 6 22 0" fill="none" stroke="var(--color-navy)" strokeWidth="3" strokeLinecap="round" />
-      <path d="M268 281c15 17 31 25 49 25s35-8 50-25l22 47H246z" fill="var(--color-teal)" />
-
-      <path d="M178 360h282l-30 47H207z" fill="var(--color-navy)" />
-      <path d="M195 360h248l-20 31H215z" fill="var(--color-line)" />
-      <rect x="282" y="366" width="77" height="5" rx="2.5" fill="var(--color-muted)" opacity="0.5" />
-      <path d="M168 408h300" stroke="var(--color-ink)" strokeWidth="8" strokeLinecap="round" />
-
-      <circle cx="505" cy="259" r="24" fill="var(--color-info-bg)" />
-      <path d="M495 259h20m-10-10v20" stroke="var(--color-teal)" strokeWidth="3" strokeLinecap="round" />
-    </svg>
+        <div className="mt-6 border-t border-line pt-4">
+          <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold text-navy">Recent activity</p><span className="text-[11px] font-medium text-teal">View all →</span></div>
+          <div className="flex items-center gap-3 border-t border-line py-3 first:border-0">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-muted"><ClipboardList className="h-4 w-4" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1"><p className="text-xs font-medium text-navy">Morning duty</p><p className="mt-0.5 text-[10px] text-muted">Today · 8:00 AM – 12:00 PM</p></div>
+            <span className="text-xs font-semibold text-navy">4.0 hrs</span>
+            <span className="rounded-full bg-ok-bg px-2.5 py-1 text-[10px] font-medium text-ok-fg">Approved</span>
+          </div>
+          <div className="flex items-center gap-3 border-t border-line py-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-canvas text-muted"><ClipboardList className="h-4 w-4" aria-hidden="true" /></span>
+            <div className="min-w-0 flex-1"><p className="text-xs font-medium text-navy">Afternoon duty</p><p className="mt-0.5 text-[10px] text-muted">Yesterday · 1:00 PM – 5:30 PM</p></div>
+            <span className="text-xs font-semibold text-navy">4.5 hrs</span>
+            <span className="rounded-full bg-ok-bg px-2.5 py-1 text-[10px] font-medium text-ok-fg">Approved</span>
+          </div>
+        </div>
+      </div>
+      <div className="absolute -bottom-1 right-2 flex items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-lg sm:-right-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-ok-bg text-teal"><Check className="h-5 w-5" aria-hidden="true" /></span>
+        <div><p className="text-xs font-semibold text-navy">You&apos;re right on track</p><p className="mt-0.5 text-[10px] text-muted">Your latest hours are up to date.</p></div>
+      </div>
+    </div>
   );
 }
 
-function Field({ id, label, type, value, onChange, error, autoComplete }) {
+function Field({ id, label, type, value, onChange, error, autoComplete, placeholder }) {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === 'password';
   const effectiveType = isPassword ? (showPassword ? 'text' : 'password') : type;
@@ -168,12 +178,13 @@ function Field({ id, label, type, value, onChange, error, autoComplete }) {
           name={id}
           type={effectiveType}
           value={value}
+          placeholder={placeholder}
           autoComplete={autoComplete}
           onChange={(e) => onChange(e.target.value)}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${id}-error` : undefined}
-          className={`min-h-12 w-full rounded-lg border border-line bg-surface px-3 py-3 text-base text-ink placeholder:text-muted focus:border-teal focus:outline-none focus:ring-1 focus:ring-teal ${
-            isPassword ? 'pr-10' : ''
+          className={`h-14 w-full rounded-lg border border-line bg-surface px-4 text-base text-ink placeholder:text-muted transition-colors focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/20 ${
+            isPassword ? 'pr-12' : ''
           }`}
         />
         {isPassword && (
@@ -182,17 +193,18 @@ function Field({ id, label, type, value, onChange, error, autoComplete }) {
             onClick={() => setShowPassword((prev) => !prev)}
             aria-label={showPassword ? 'Hide password' : 'Show password'}
             title={showPassword ? 'Hide password' : 'Show password'}
-            className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted hover:text-ink focus:outline-none focus-visible:text-teal"
+            aria-pressed={showPassword}
+            className="absolute inset-y-1 right-1 flex w-11 items-center justify-center rounded-md text-muted transition-colors hover:bg-canvas hover:text-navy focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal"
           >
             {showPassword ? (
-              <EyeOff className="h-4 w-4" aria-hidden="true" />
+              <EyeOff className="h-[18px] w-[18px]" aria-hidden="true" />
             ) : (
-              <Eye className="h-4 w-4" aria-hidden="true" />
+              <Eye className="h-[18px] w-[18px]" aria-hidden="true" />
             )}
           </button>
         )}
       </div>
-      {error && <p id={`${id}-error`} className="mt-1 text-xs text-bad-fg">{error}</p>}
+      {error && <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-bad-fg">{error}</p>}
     </div>
   );
 }

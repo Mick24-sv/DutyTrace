@@ -137,6 +137,10 @@ describe('configurable duty requirements and SA schedule preferences', () => {
     const approved = await api.post(`/duty-schedules/review/${scheduleId}/decision`, { ...as('supervisorA'), body: { decision: 'approve' } });
     assert.equal(approved.status, 200, JSON.stringify(approved.body));
     assert.equal(approved.body.data.schedule.status, 'approved');
+    const supervisorOverview = await api.get('/duty-schedules/overview', as('supervisorA'));
+    assert.equal(supervisorOverview.status, 200, JSON.stringify(supervisorOverview.body));
+    assert.ok(supervisorOverview.body.data.schedules.some((schedule) => schedule.id === scheduleId));
+    assert.equal((await api.get('/duty-schedules/overview', as('supervisorB'))).body.data.schedules.some((schedule) => schedule.id === scheduleId), false);
     const monitored = await api.get('/duty-schedules/mine', as('studentA'));
     assert.equal(monitored.body.data.terms[0].attendanceMonitoring.measuredEvents, 0);
 
@@ -149,11 +153,19 @@ describe('configurable duty requirements and SA schedule preferences', () => {
     const conflictQueue = await api.get('/duty-schedules/review', as('supervisorA'));
     const conflictItem = conflictQueue.body.data.schedules.find((row) => row.id === studentTwoProposal.body.data.schedule.id);
     assert.ok(conflictItem.potentialConflicts.some((conflict) => conflict.studentName === 'Demo Student'));
+    assert.ok(conflictItem.assignmentConflicts.some((conflict) => conflict.code === 'OFFICE_CAPACITY_EXCEEDED'));
+    const blockedApproval = await api.post(`/duty-schedules/review/${studentTwoProposal.body.data.schedule.id}/decision`, { ...as('supervisorA'), body: { decision: 'approve' } });
+    assert.equal(blockedApproval.status, 409, JSON.stringify(blockedApproval.body));
+    assert.equal(blockedApproval.body.error.code, 'SCHEDULE_CONFLICT');
     const suggestion = [{ weekday: 1, startsAt: '12:00', endsAt: '16:00' }];
     const revision = await api.post(`/duty-schedules/review/${studentTwoProposal.body.data.schedule.id}/decision`, { ...as('supervisorA'), body: { decision: 'request_changes', reason: 'Try this later time.', suggestedDays: suggestion } });
     assert.equal(revision.status, 200, JSON.stringify(revision.body));
     const feedback = await api.get('/duty-schedules/mine', as('studentA2'));
     assert.deepEqual(feedback.body.data.terms[0].proposal.suggestedDays.map(({ weekday, startsAt, endsAt }) => ({ weekday, startsAt, endsAt })), suggestion);
+    await api.put(`/duty-schedules/${studentTwoProposal.body.data.schedule.id}`, { ...as('studentA2'), body: { ...input, days: days({ startsAt: '12:00', endsAt: '15:00' }) } });
+    assert.equal((await api.post(`/duty-schedules/${studentTwoProposal.body.data.schedule.id}/submit`, as('studentA2'))).status, 200);
+    const backToBack = await api.post(`/duty-schedules/review/${studentTwoProposal.body.data.schedule.id}/decision`, { ...as('supervisorA'), body: { decision: 'approve' } });
+    assert.equal(backToBack.status, 200, JSON.stringify(backToBack.body));
     const requested = await api.post(`/duty-schedules/review/${change.body.data.schedule.id}/decision`, { ...as('supervisorA'), body: { decision: 'request_changes', reason: 'Please adjust the Monday time.' } });
     assert.equal(requested.body.data.schedule.status, 'change_requested');
     assert.equal(requested.body.data.schedule.reviewReason, 'Please adjust the Monday time.');
@@ -170,5 +182,38 @@ describe('configurable duty requirements and SA schedule preferences', () => {
     const clockOut = await api.post('/attendance/scan', { ...as('studentA'), body: { action: 'time_out', qrPayload: qr } });
     assert.equal(clockOut.status, 201, JSON.stringify(clockOut.body));
     assert.equal((await query('SELECT count(*)::int AS n FROM monthly_dtrs')).rows[0].n, dtrCountBefore, 'schedule preferences must not rewrite or generate monthly DTRs');
+  });
+
+  it('serializes competing approvals and rejects a student overlap after an office transfer', async () => {
+    const context = await api.get(`/duty-schedules/admin/${termId}`, as('admin'));
+    const officePolicy = context.body.data.policies.find((item) => item.scopeType === 'office' && item.scopeId === fx.officeIds.A);
+    assert.equal((await api.put(`/duty-schedules/admin/policies/${officePolicy.id}`, {
+      ...as('admin'), body: policy('office', fx.officeIds.A, { permittedWeekdays: [1, 2, 3] }),
+    })).status, 200);
+    const input = { termId, effectiveStartsOn: '2026-10-01', effectiveEndsOn: '2026-12-31', days: [{ weekday: 3, startsAt: '09:00', endsAt: '12:00' }] };
+    const candidates = await Promise.all(['studentA', 'studentA2'].map((who) => api.post('/duty-schedules', { ...as(who), body: input })));
+    for (const response of candidates) {
+      assert.equal(response.status, 201, JSON.stringify(response.body));
+      assert.equal((await api.post(`/duty-schedules/${response.body.data.schedule.id}/submit`, as(response === candidates[0] ? 'studentA' : 'studentA2'))).status, 200);
+    }
+    const decisions = await Promise.all(candidates.map((response) => api.post(`/duty-schedules/review/${response.body.data.schedule.id}/decision`, {
+      ...as('supervisorA'), body: { decision: 'approve' },
+    })));
+    assert.equal(decisions.filter((response) => response.status === 200).length, 1);
+    assert.equal(decisions.filter((response) => response.status === 409 && response.body.error.code === 'SCHEDULE_CONFLICT').length, 1);
+
+    const winner = decisions.findIndex((response) => response.status === 200);
+    const winningStudent = winner === 0 ? fx.ids.studentA : fx.ids.studentA2;
+    const winningCookie = winner === 0 ? 'studentA' : 'studentA2';
+    await query('UPDATE duty_assignments SET ends_on = $2 WHERE user_id = $1 AND ends_on IS NULL', [winningStudent, '2026-10-01']);
+    await query('INSERT INTO duty_assignments (user_id, office_id, starts_on) VALUES ($1, $2, $3)', [winningStudent, fx.officeIds.A, '2026-10-01']);
+    const moved = await api.post('/duty-schedules', { ...as(winningCookie), body: input });
+    assert.equal(moved.status, 201, JSON.stringify(moved.body));
+    assert.equal((await api.post(`/duty-schedules/${moved.body.data.schedule.id}/submit`, as(winningCookie))).status, 200);
+    const overlap = await api.post(`/duty-schedules/review/${moved.body.data.schedule.id}/decision`, {
+      ...as('supervisorB'), body: { decision: 'approve' },
+    });
+    assert.equal(overlap.status, 409, JSON.stringify(overlap.body));
+    assert.ok(overlap.body.error.details.conflicts.some((conflict) => conflict.code === 'STUDENT_SHIFT_OVERLAP'));
   });
 });

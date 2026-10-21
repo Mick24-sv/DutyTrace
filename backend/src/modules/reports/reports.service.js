@@ -933,6 +933,21 @@ export async function getDashboardStats(user) {
     const hoursData = await hoursReport({ user, officeId, month: monthRange.month, page: 1, limit: 1000 });
     const semesterById = new Map(semesterProgress.students.map((student) => [student.id, student]));
     const monthlyById = new Map(hoursData.items.map((student) => [student.id, student]));
+    const monthColumns = [];
+    if (semesterProgress.term) {
+      const [startYear, startMonth] = semesterProgress.term.startsOn.slice(0, 7).split('-').map(Number);
+      const [endYear, endMonth] = semesterProgress.term.endsOn.slice(0, 7).split('-').map(Number);
+      for (let year = startYear, month = startMonth; year < endYear || (year === endYear && month <= endMonth);) {
+        monthColumns.push(`${year}-${String(month).padStart(2, '0')}`);
+        month += 1;
+        if (month === 13) { month = 1; year += 1; }
+      }
+    }
+    const monthlyHoursByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
+    for (const month of monthColumns) {
+      const monthData = month === monthRange.month ? hoursData : await hoursReport({ user, officeId, month, page: 1, limit: 1000 });
+      for (const student of monthData.items) monthlyHoursByStudent.get(student.id)?.set(month, student.recordedHours);
+    }
     const studentsBelow = semesterProgress.students
       .filter((student) => student.requirementAssigned && student.remainingHours > 0)
       .map((student) => ({
@@ -955,6 +970,11 @@ export async function getDashboardStats(user) {
         semesterCompletionPercentage: semester?.completionPercentage ?? null,
         semesterRequirementAssigned: semester?.requirementAssigned ?? false,
         meetsRequirement: semester?.requirementAssigned ? semester.remainingHours === 0 : null,
+        monthlyHours: Object.fromEntries(monthColumns.map((month) => [month, monthlyHoursByStudent.get(student.id)?.get(month) ?? 0])),
+        totalRecordedTermHours: monthColumns.reduce((total, month) => total + (monthlyHoursByStudent.get(student.id)?.get(month) ?? 0), 0),
+        recordedHoursLeft: semester?.requirementAssigned
+          ? Math.max(0, Math.round((semester.requiredHours - monthColumns.reduce((total, month) => total + (monthlyHoursByStudent.get(student.id)?.get(month) ?? 0), 0)) * 100) / 100)
+          : null,
       };
     });
 
@@ -1018,6 +1038,7 @@ export async function getDashboardStats(user) {
       todayAttendance: todayList,
       studentsBelowRequirement: studentsBelow,
       semesterSummary: termSummary,
+      monthColumns,
       stats: {
         totalAssistants: hoursData.items.length,
         timedInToday: timedInCount,

@@ -4,6 +4,7 @@ import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPost, apiPut } from '../../services/api.js';
+import RecoveryPlanner from '../../components/recovery/RecoveryPlanner.jsx';
 
 const week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const field = 'rounded-lg border border-line bg-surface px-3 py-2 text-sm';
@@ -135,5 +136,6 @@ export default function DutySchedulePage() {
       </form>
     </Card>}
     {!editable && proposal?.status === 'approved' && <Button type="button" onClick={() => setChangeMode(true)}>Request a schedule change</Button>}
+    <div className="mt-5"><RecoveryPlanner termId={item?.term.id} /></div>
   </>;
 }

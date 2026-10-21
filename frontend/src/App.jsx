@@ -21,9 +21,12 @@ import DtrReviewPage from './pages/supervisor/DtrReviewPage.jsx';
 import DtrOverviewPage from './pages/admin/DtrOverviewPage.jsx';
 import PolicySettingsPage from './pages/admin/PolicySettingsPage.jsx';
 import AcademicTermsPage from './pages/admin/AcademicTermsPage.jsx';
+import SemesterTransitionsPage from './pages/admin/SemesterTransitionsPage.jsx';
 import DutyRequirementsPage from './pages/admin/DutyRequirementsPage.jsx';
+import AuditTrailPage from './pages/admin/AuditTrailPage.jsx';
 import DutySchedulePage from './pages/student/DutySchedulePage.jsx';
 import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
+import RecoveryReviewPage from './pages/supervisor/RecoveryReviewPage.jsx';
 import SupervisorQrPage from './pages/supervisor/SupervisorQrPage.jsx';
 import DtrDetailPage from './pages/shared/DtrDetailPage.jsx';
 import MyAbsencesPage from './pages/student/MyAbsencesPage.jsx';
@@ -45,8 +48,8 @@ const DASHBOARDS = {
 // Pages that are really built; every other nav item falls back to <ComingSoon>.
 const BUILT_PAGES = {
   student: { scan: ScanPage, attendance: MyAttendancePage, schedule: DutySchedulePage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
-  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
-  admin: { users: UsersPage, semesters: AcademicTermsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, settings: PolicySettingsPage, reports: ReportsPage },
+  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, 'recovery-review': RecoveryReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
+  admin: { users: UsersPage, semesters: AcademicTermsPage, 'semester-transitions': SemesterTransitionsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).

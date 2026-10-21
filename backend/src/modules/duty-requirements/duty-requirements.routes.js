@@ -90,6 +90,9 @@ route.put('/:scheduleId', requireRole('student'), asyncHandler(async (req, res) 
 route.post('/:scheduleId/submit', requireRole('student'), asyncHandler(async (req, res) => {
   ok(res, { schedule: await duty.submitSchedule({ user: req.user, scheduleId: parseId(req.params.scheduleId), ip: req.ip }) });
 }));
+route.get('/overview', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
+  ok(res, await duty.supervisorScheduleOverview({ actor: req.user }));
+}));
 route.get('/review', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   ok(res, { schedules: await duty.reviewQueue({ actor: req.user, termId: req.query.termId ? parseId(req.query.termId) : null }) });
 }));

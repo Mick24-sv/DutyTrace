@@ -133,22 +133,14 @@ export async function finalizeTerm({ actor, termId, ip }) {
   return withTransaction(async (db) => {
     const current = await requireTerm(termId, actor.institutionId, db);
     if (current.finalized_at) throw new AppError(409, 'TERM_FINALIZED', 'This academic term is already finalized.');
-    const { rows: [row] } = await db.query(
-      `UPDATE academic_terms SET finalized_at = now(), finalized_by = $2 WHERE id = $1 RETURNING *`,
-      [termId, actor.id],
+    const { rows: [settings] } = await db.query(
+      `SELECT semester_transition_policy FROM institution_duty_requirement_settings WHERE institution_id=$1`,
+      [actor.institutionId],
     );
-    row.institution_name = current.institution_name;
-    const after = mapTerm(row);
-    await recordAudit({
-      actorId: actor.id,
-      action: 'academic_term.finalize',
-      targetType: 'academic_term',
-      targetId: row.id,
-      before: { finalizedAt: null },
-      after: { finalizedAt: after.finalizedAt },
-      ip,
-    }, db);
-    return after;
+    if (!settings?.semester_transition_policy) {
+      throw new AppError(409, 'TRANSITION_POLICY_REQUIRED', 'Configure a semester transition policy and finalize this term through the Semester Transition Planner.');
+    }
+    throw new AppError(409, 'TRANSITION_PLANNER_REQUIRED', 'Academic terms can only be closed through a reviewed Semester Transition Planner preview.');
   });
 }
 
@@ -340,6 +332,9 @@ export async function myTerms(user) {
     terms.push({
       ...mapTerm(row),
       ...progress,
+      id: row.id,
+      termId: row.id,
+      studentId: user.id,
       isCurrent,
       requirementAssigned: requirement?.required_hours != null,
       assignedHours: requirement?.required_hours != null ? Number(requirement.required_hours) : null,

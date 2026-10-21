@@ -131,7 +131,7 @@ export default function NotificationCenter({ role }) {
         {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-bad-fg px-1 text-center text-[10px] font-semibold leading-4 text-white">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
       {open && (
-        <section aria-label="Notification center" className="absolute right-0 z-40 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-line bg-surface shadow-card">
+        <section aria-label="Notification center" className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4rem)] z-40 flex max-h-[calc(100dvh-env(safe-area-inset-top)-5rem)] w-auto flex-col overflow-hidden rounded-card border border-line bg-surface shadow-card sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-[min(24rem,calc(100vw-2rem))]">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <div><h2 className="font-semibold text-navy">Notifications</h2><p className="text-xs text-muted">{unreadCount} unread</p></div>
             <button type="button" onClick={markAllRead} disabled={!unreadCount} className="inline-flex items-center gap-1 text-xs font-medium text-teal underline disabled:text-muted disabled:no-underline">
@@ -145,7 +145,7 @@ export default function NotificationCenter({ role }) {
               </button>
             ))}
           </div>
-          <div className="max-h-[min(65vh,28rem)] overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[min(65vh,28rem)] sm:flex-none">
             {loading && items.length === 0 && <p role="status" className="p-5 text-center text-sm text-muted">Loading notifications…</p>}
             {error && <p role="alert" className="m-3 rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}
             {!loading && !error && items.length === 0 && <p className="p-5 text-center text-sm text-muted">No {filter === 'all' ? '' : `${filter} `}notifications.</p>}

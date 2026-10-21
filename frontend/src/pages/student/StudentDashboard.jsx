@@ -11,6 +11,8 @@ import {
   CalendarOff,
   FolderCheck,
   TrendingUp,
+  Compass,
+  AlertTriangle,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
@@ -21,7 +23,7 @@ import SessionBadge from '../../components/attendance/SessionBadge.jsx';
 import DtrStatusBadge from '../../components/dtr/DtrStatusBadge.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { formatDuration, formatHours, formatMonth, formatTime } from '../../utils/format.js';
+import { formatDutyTime, formatDuration, formatHours, formatMonth, formatTime } from '../../utils/format.js';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -30,8 +32,10 @@ export default function StudentDashboard() {
   const month = useApiData('/attendance/me');
   const dtrs = useApiData('/dtrs/mine');
   const semesterTerms = useApiData('/semesters/mine');
+  const dutySchedules = useApiData('/duty-schedules/mine');
   const absences = useApiData('/absences/summary');
   const cases = useApiData('/cases/summary');
+  const forecast = useApiData(selectedTermId ? `/forecast/mine?termId=${selectedTermId}` : '/forecast/mine');
 
   const terms = semesterTerms.data?.terms ?? [];
   const currentTerm = terms.find((term) => term.isCurrent);
@@ -61,9 +65,14 @@ export default function StudentDashboard() {
     : [];
 
   const lastMonth = dtrs.data?.months?.[0];
+  const scheduleTerms = dutySchedules.data?.terms ?? [];
+  const scheduleEntry = scheduleTerms.find((entry) => entry.term.isCurrent)
+    ?? scheduleTerms.find((entry) => entry.term.id === selectedTermId)
+    ?? scheduleTerms[0];
+  const assignedSchedule = scheduleEntry?.approvedSchedule;
 
-  const anyLoading = status.loading || month.loading || dtrs.loading || semesterTerms.loading;
-  const anyError = status.error || month.error || dtrs.error || semesterTerms.error;
+  const anyLoading = status.loading || month.loading || dtrs.loading || semesterTerms.loading || dutySchedules.loading;
+  const anyError = status.error || month.error || dtrs.error || semesterTerms.error || dutySchedules.error;
 
   return (
     <>
@@ -212,6 +221,128 @@ export default function StudentDashboard() {
           {selectedTerm.completionDeadline && <p className="text-xs text-muted">Completion deadline: {selectedTerm.completionDeadline}</p>}
           </div>
         )}
+      </Card>
+
+      {/* Duty Completion Forecast Card */}
+      <Card
+        className="mt-5"
+        title="Duty completion forecast"
+        action={
+          forecast.data?.status && (
+            <Badge tone={forecast.data.statusTone || 'neutral'}>
+              {forecast.data.statusLabel}
+            </Badge>
+          )
+        }
+      >
+        {forecast.loading && (
+          <p className="text-sm text-muted">Calculating completion forecast…</p>
+        )}
+        {forecast.error && (
+          <p className="text-sm text-bad-fg">Unable to load forecast: {forecast.error}</p>
+        )}
+        {!forecast.loading && !forecast.error && forecast.data && (
+          !forecast.data.status ? (
+            <p className="text-sm text-muted">{forecast.data.message || 'No completion forecast available for this term.'}</p>
+          ) : (
+          <div className="space-y-4">
+            {/* 4-stat forecast grid */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-line bg-canvas/60 p-3">
+                <span className="text-xs text-muted block">Projected Completion</span>
+                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+                  {forecast.data.isCompleted
+                    ? 'Requirement Met'
+                    : forecast.data.projectedCompletionDate || '—'}
+                </span>
+                <span className="text-[11px] text-muted">
+                  {forecast.data.isCompleted
+                    ? 'All required hours verified'
+                    : forecast.data.estimatedWeeksRemaining != null
+                    ? `~${forecast.data.estimatedWeeksRemaining} weeks remaining`
+                    : 'Cannot project date'}
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-line bg-canvas/60 p-3">
+                <span className="text-xs text-muted block">Actual Attendance Pace</span>
+                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+                  {forecast.data.actualWeeklyPace > 0
+                    ? `${forecast.data.actualWeeklyPace.toFixed(2)} h/wk`
+                    : '0.00 h/wk'}
+                </span>
+                <span className="text-[11px] text-muted">
+                  Over past {forecast.data.historicalPeriodWeeks || 4}-week period
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-line bg-canvas/60 p-3">
+                <span className="text-xs text-muted block">Required Weekly Pace</span>
+                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+                  {forecast.data.requiredWeeklyPace != null
+                    ? `${forecast.data.requiredWeeklyPace.toFixed(2)} h/wk`
+                    : '—'}
+                </span>
+                <span className="text-[11px] text-muted">
+                  {forecast.data.deadline
+                    ? `To meet deadline of ${forecast.data.deadline}`
+                    : 'No deadline set'}
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-line bg-canvas/60 p-3">
+                <span className="text-xs text-muted block">Confirmed Schedule</span>
+                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+                  {forecast.data.hasConfirmedSchedule
+                    ? `${forecast.data.confirmedWeeklyHours.toFixed(2)} h/wk`
+                    : 'None'}
+                </span>
+                <span className="text-[11px] text-muted">
+                  {forecast.data.hasConfirmedSchedule
+                    ? `${forecast.data.confirmedFutureHours.toFixed(2)} h future shifts`
+                    : 'No approved schedule'}
+                </span>
+              </div>
+            </div>
+
+            {/* Explanation / reason callout */}
+            <div
+              className={`rounded-lg p-3 text-sm flex items-start gap-2.5 ${
+                forecast.data.status === 'completed' || forecast.data.status === 'on_track'
+                  ? 'bg-ok-bg text-ok-fg'
+                  : forecast.data.status === 'at_risk'
+                  ? 'bg-bad-bg text-bad-fg'
+                  : 'bg-warn-bg text-warn-fg'
+              }`}
+            >
+              {forecast.data.status === 'completed' || forecast.data.status === 'on_track' ? (
+                <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              ) : forecast.data.status === 'at_risk' ? (
+                <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              )}
+              <div>
+                <p className="font-semibold">{forecast.data.statusLabel}</p>
+                <p className="mt-0.5 text-xs opacity-95">{forecast.data.reason}</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted">
+              Note: This forecast is calculated from verified attendance pace over recent active weeks and confirmed future shifts. It is distinct from schedule availability estimates.
+            </p>
+          </div>
+        ))}
+      </Card>
+
+      <Card className="mt-5" title="Weekly duty schedule" action={<Link to="/student/schedule" className="text-sm font-medium text-teal hover:underline">Manage preferences</Link>}>
+        {assignedSchedule ? <>
+          <p className="mb-3 text-sm text-muted">Confirmed schedule · {assignedSchedule.effectiveStartsOn} to {assignedSchedule.effectiveEndsOn}</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{assignedSchedule.days.map((day) => <div key={day.weekday} className="rounded-lg border border-line p-3 text-sm">
+            <p className="font-medium">{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day.weekday - 1]}</p>
+            <p className="mt-1 text-muted">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}{day.afternoonStartsAt ? ` · ${formatDutyTime(day.afternoonStartsAt)}–${formatDutyTime(day.afternoonEndsAt)}` : ''}</p>
+          </div>)}</div>
+        </> : <p className="text-sm text-muted">{scheduleEntry?.proposal ? `Preference ${scheduleEntry.proposal.status.replaceAll('_', ' ')}. The supervisor has not confirmed your duty schedule yet.` : 'No confirmed duty schedule for this term. Submit your preferred duty days and times for supervisor review.'}</p>}
       </Card>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

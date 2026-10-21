@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { apiPost } from '../../services/api.js';
 import Button from '../../components/ui/Button.jsx';
 import FullPageMessage from '../../components/layout/FullPageMessage.jsx';
+import AppFooter from '../../components/layout/AppFooter.jsx';
 
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
@@ -76,7 +77,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="flex min-h-screen flex-col bg-canvas">
       <header className="bg-navy px-6 py-4 shadow-sm">
         <div className="mx-auto flex max-w-4xl items-center gap-3">
           <img src="/logo.png" alt="DutyTrace Logo" className="h-9 w-9 rounded-full bg-white object-contain p-0.5 shadow-sm" />
@@ -84,7 +85,7 @@ export default function ResetPasswordPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-md px-6 py-10">
+      <main className="mx-auto w-full max-w-md flex-1 px-6 py-10">
         <div className="mb-6 text-center">
           <img
             src="/logo.png"
@@ -146,6 +147,7 @@ export default function ResetPasswordPage() {
           </p>
         </div>
       </main>
+      <AppFooter context="DutyTrace" />
     </div>
   );
 }

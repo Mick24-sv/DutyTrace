@@ -103,6 +103,13 @@ Every transition runs in one transaction that locks the DTR row (`SELECT ... FOR
 - **Emails are recorded, not read.** Staff record "received by email / in person" receipts by hand. There is no Gmail integration.
 - **History is append-only** (events and documents), reusing the Phase 4 trigger functions.
 
+## Decision: semester transitions
+
+- `semester_transitions` stores an institution-scoped preview, the policy snapshot, source fingerprint, decision status and actor timestamps. A unique source/destination pair prevents duplicate transitions; `semester_transition_students` snapshots each explicitly selected student's source balance, destination target, and review issues.
+- The only configured policy is `keep_original`. It requires an administrator to select continuing students, preserves source verified and remaining hours, and leaves destination requirements unchanged. It never carries old hours forward. A null policy blocks previews. Destination requirements must be configured separately before a student is eligible.
+- Preview/finalization recheck term ownership/order, policy, hours, DTRs, incomplete attendance, destination targets and recovery requests. Finalization requires the source end date to have passed, rejects stale fingerprints, blocks institution-wide open DTR/recovery/incomplete-attendance reviews, and closes the source term and transition atomically. It does not rewrite attendance, DTRs, schedules or requirement assignments.
+- There is no enrollment/continuation status or explanation-letter workflow. The administrator's explicit student selection is the continuation confirmation; unsupported explanation statuses are reported as unavailable rather than inferred.
+
 ## Frontend
 
 - `AuthProvider` (`hooks/useAuth.jsx`) asks `GET /auth/me` on load; `RequireRole` redirects visitors to `/login` or to their own dashboard. These guards are convenience only; the API is the real gate.

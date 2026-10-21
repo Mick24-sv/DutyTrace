@@ -1,4 +1,4 @@
-import { query, withTransaction } from '../../db/pool.js';
+﻿import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
@@ -71,7 +71,7 @@ export async function create({ user, type, startDate, endDate, reason, ip }) {
       relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:submitted`,
     });
     await recordAudit({
-      actorId: user.id, action: 'absence.submitted', targetType: 'absence_notice', targetId: id,
+      actorId: user.id, institutionId: user.institutionId, action: 'absence.submitted', targetType: 'absence_notice', targetId: id,
       after: { type, startDate, endDate, officeId: user.office.id }, ip,
     }, db);
     return getDetail({ user, id }, db);
@@ -152,7 +152,7 @@ async function review({ user, id, to, action, response, ip }) {
       });
     }
     await recordAudit({
-      actorId: user.id, action: `absence.${action}`, targetType: 'absence_notice', targetId: id,
+      actorId: user.id, institutionId: user.institutionId, action: `absence.${action}`, targetType: 'absence_notice', targetId: id,
       before: { status: row.status }, after: { status: to }, ip,
     }, db);
     return getDetail({ user, id }, db);
@@ -179,7 +179,7 @@ export async function respond({ user, id, message, ip }) {
       title: 'Student responded to an absence follow-up', message: 'A Student Assistant responded to a follow-up request.',
       relatedType: 'absence_notice', relatedId: id, important: true, dedupeKey: `absence:${id}:event:${eventId}`,
     });
-    await recordAudit({ actorId: user.id, action: 'absence.student_responded', targetType: 'absence_notice', targetId: id, ip }, db);
+    await recordAudit({ actorId: user.id, institutionId: user.institutionId, action: 'absence.student_responded', targetType: 'absence_notice', targetId: id, ip }, db);
     return getDetail({ user, id }, db);
   });
 }
@@ -202,7 +202,7 @@ export async function addDocument({ user, id, buffer, rawName, ip }) {
       const docId = await insertOnlineDocument(db, { owner: user, absenceId: id, accepted });
       await addEvent(db, { id, action: 'document_added', from: row.status, to: row.status, actor: user, note: `Uploaded ${accepted.originalName}` });
       await recordAudit({
-        actorId: user.id, action: 'document.uploaded', targetType: 'document', targetId: docId,
+        actorId: user.id, institutionId: user.institutionId, action: 'document.uploaded', targetType: 'document', targetId: docId,
         after: { absenceId: id, mime: accepted.mime, sizeBytes: accepted.size, method: 'online' }, ip,
       }, db);
       await notifyOfficeSupervisors(db, {
@@ -241,7 +241,7 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
       note: `Recorded ${method === 'email' ? 'email' : 'in-person'} submission received ${receivedDate} by ${receiver.full_name}`,
     });
     await recordAudit({
-      actorId: user.id, action: 'document.receipt_recorded', targetType: 'document', targetId: docId,
+      actorId: user.id, institutionId: user.institutionId, action: 'document.receipt_recorded', targetType: 'document', targetId: docId,
       after: { absenceId: id, method, receivedDate, receivedBy: receiver.id }, ip,
     }, db);
     return getDetail({ user, id }, db);
@@ -281,3 +281,4 @@ export async function summary(user) {
   const n = (s) => rows.find((r) => r.status === s)?.n ?? 0;
   return { pending: n('pending'), acknowledged: n('acknowledged'), reviewed: n('reviewed'), needsFollowUp: n('needs_follow_up') };
 }
+

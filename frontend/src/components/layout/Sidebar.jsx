@@ -4,27 +4,41 @@ import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 export default function Sidebar({ role, open, onClose }) {
   const config = ROLE_CONFIG[role];
+  const sections = config.nav.reduce((result, item) => {
+    const title = item.section ?? '';
+    const current = result[result.length - 1];
+    if (!current || current.title !== title) result.push({ title, items: [item] });
+    else current.items.push(item);
+    return result;
+  }, []);
 
   const nav = (
     <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4">
-      <ul className="space-y-1">
-        {config.nav.map(({ to, label, icon: Icon }) => (
-          <li key={label}>
-            <NavLink
-              to={to ? `${config.base}/${to}` : config.base}
-              end={!to}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-teal text-white'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'
-                }`
-              }
-            >
-              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {label}
-            </NavLink>
+      <ul className="space-y-4">
+        {sections.map(({ title, items }) => (
+          <li key={title || 'main-navigation'}>
+            {title && <h2 className="mb-1.5 px-3 text-[10px] font-semibold tracking-[0.14em] text-white/50">{title}</h2>}
+            <ul className="space-y-0.5">
+              {items.map(({ to, label, icon: Icon }) => (
+                <li key={label}>
+                  <NavLink
+                    to={to ? `${config.base}/${to}` : config.base}
+                    end={!to}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-teal text-white'
+                          : 'text-white/80 hover:bg-white/10 hover:text-white'
+                      }`
+                    }
+                  >
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
           </li>
         ))}
       </ul>
