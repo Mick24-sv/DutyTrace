@@ -118,3 +118,17 @@ export async function sendResetEmail({ to, resetUrl }) {
   });
   return { sent: true };
 }
+
+/** Sends a concise risk alert after SMTP confirms handoff. */
+export async function sendRiskAlertEmail({ to, title, message, actionUrl, notificationId }) {
+  if (!emailConfigured()) throw new Error('SMTP email is not configured.');
+  const link = actionUrl ? new URL(actionUrl, appUrl).toString() : null;
+  await getTransporter().sendMail({
+    from: smtp.from,
+    to,
+    subject: `DutyTrace alert: ${title}`,
+    ...(notificationId ? { messageId: `<dutytrace-${notificationId}@notifications.dutytrace>` } : {}),
+    text: [`DutyTrace alert`, '', title, '', message, ...(link ? ['', `Open DutyTrace: ${link}`] : []), '', 'DutyTrace'].join('\n'),
+  });
+  return { handedOff: true };
+}

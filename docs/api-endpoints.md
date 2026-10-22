@@ -42,6 +42,37 @@ Authentication is a cookie (`dt_session`, httpOnly). Status codes: `401` = not s
 | `GET /attendance/users/:userId?month=` | supervisor (students in own office), admin (read-only, same institution) | Someone else's history. Students get `403` |
 | `GET /attendance/office/:officeId/summary?month=` | supervisor (own office), admin | Per-assistant monthly totals and current state |
 
+### Attendance discrepancy resolution
+
+| Method and path | Roles | Description |
+|---|---|---|
+| `GET /attendance-discrepancies/summary` | student, supervisor, admin | Scoped unresolved, pending, resolved, and rejected counts; admins also receive office and repeat-record summaries. |
+| `GET /attendance-discrepancies?status=&type=&date=&search=&limit=` | student, supervisor, admin | Lists own, office, or institution records according to the signed-in role. |
+| `GET /attendance-discrepancies/:id` | student, supervisor, admin | Details and append-only resolution history, with ownership and office checks. |
+| `POST /attendance-discrepancies/:id/explanation` | student | `{ explanation }` |
+| `POST /attendance-discrepancies/:id/correction-request` | student | `{ explanation, events: [{ eventType, recordedAt } x2], replacesEventIds: [] }`; times remain proposals until supervisor approval. Rate limited. |
+| `POST /attendance-discrepancies/:id/start-review` | supervisor (own office) | `{ remarks? }` |
+| `POST /attendance-discrepancies/:id/clarification` | supervisor (own office) | `{ remarks }` |
+| `POST /attendance-discrepancies/:id/approve` | supervisor (own office) | `{ remarks }`; revalidates schedule, session, overlap, and event ownership, then atomically writes an adjustment, history, notification, and audit record. |
+| `POST /attendance-discrepancies/:id/reject` / `resolve` | supervisor (own office) | `{ remarks }` |
+| `POST /attendance-discrepancies/reconcile` | deployment scheduler | No session; requires `x-attendance-reconcile-secret` matching `ATTENDANCE_RECONCILE_SECRET`. Reconciles ended, approved shifts across institutions. |
+
+### Duty alerts and notification settings
+
+| Method and path | Roles | Description |
+|---|---|---|
+| `GET /notifications?filter=&limit=&cursor=` | signed in | Own in-app alerts, paginated (1–100); supports `all`, `unread`, `important`, `informational`, `warning`, and `critical`. |
+| `GET /notifications/oversight?officeId=&category=&severity=&status=&limit=&cursor=` | supervisor (own office), admin (own institution) | Authorized alert records with recipient/office context. Supports category, severity, active/resolved/dismissed status, office filters and pagination. |
+| `GET /notifications/summary` | student, supervisor, admin | Unread/active totals and scoped discrepancy, recovery, and transition counts. Admins also receive institution office activity trends. |
+| `PATCH /notifications/:id/read`, `PATCH /notifications/read-all`, `PATCH /notifications/:id/dismiss` | signed in | Read and dismissal state is restricted to the signed-in user's own alerts. |
+| `GET /notifications/preferences`, `PUT /notifications/preferences` | signed in | Personal email opt-in and upcoming-shift reminder toggle. Institution-mandated in-app alerts cannot be disabled. |
+| `GET /notifications/policy`, `PUT /notifications/policy` | admin | Institution-scoped thresholds, reminder timing, cooldown, categories, email rules and escalation timing. |
+| `POST /notifications/sweep` | deployment scheduler | No session; requires `x-attendance-reconcile-secret`. Runs idempotent risk/deadline/approved-shift detection, email delivery retries and attendance discrepancy reconciliation across institutions. Configure a Render Cron Job (for example every 6 hours); the app does not rely on an in-process timer. |
+
+Email alert handoff requires SMTP (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) and institution/user opt-in. If SMTP is not configured, in-app alerts remain available and email delivery is recorded as skipped. The scheduler endpoint should be configured as a deployment requirement.
+
+Administrator access is institution-wide and read-only; administrator overrides are not enabled. Automated checks use institution timing policy values edited at `PATCH /institutions/me/attendance-policy` by an administrator: `{ discrepancyGraceMinutes, earlyToleranceMinutes, lateToleranceMinutes }`.
+
 Scan error codes: `400 INVALID_QR` (not ours, tampered, unknown), `400 QR_REVOKED`, `403 WRONG_OFFICE`, `403 NOT_ASSIGNED`, `403 OFFICE_INACTIVE`, `409 ALREADY_TIMED_IN`, `409 NO_ACTIVE_SESSION`. Session `status` values: `complete`, `in_progress`, `missing_time_out`, `orphan_time_out`, `needs_review`.
 
 ### Monthly DTR and policy (Phase 4)
@@ -148,6 +179,23 @@ All endpoints require an authenticated session. Institution, office, term, stude
 | `GET /duty-schedules/review` / `GET /duty-schedules/review/:scheduleId` | admin, supervisor (own office) | List or inspect pending proposals within the authorized institution/office |
 | `POST /duty-schedules/review/:scheduleId/decision` | admin, supervisor (own office) | Approve, reject with reason, or request revision with reason and optional policy-valid suggested duty times |
 
+## Institution policy templates
+
+Policy templates are scoped to the authenticated administrator's institution. Published versions are immutable. Applying a version creates a dated, append-only institution, office, or student assignment with a configuration snapshot; overlaps at the same scope are rejected. Student, supervisor, and administrator effective-policy views return merged values and their source.
+
+| Method and path | Role | Purpose |
+| --- | --- | --- |
+| `GET /policy-templates` | admin | List this institution's templates and latest version status |
+| `POST /policy-templates` | admin | Create a template and initial draft version |
+| `GET /policy-templates/:templateId` | admin | Read version history and applied assignments for an institution-owned template |
+| `PUT /policy-templates/:templateId/draft` | admin | Save a draft or create a new draft from the latest published version |
+| `POST /policy-templates/:templateId/duplicate` | admin | Duplicate a chosen version into a new template draft |
+| `POST /policy-templates/:templateId/versions/:versionId/publish` | admin | Publish an immutable draft version |
+| `POST /policy-templates/:templateId/versions/:versionId/apply` | admin | Apply a published version to a term, scope, and effective date range |
+| `POST /policy-templates/:templateId/archive` | admin | Archive a template while retaining versions and assignments |
+| `GET /policy-templates/terms` | admin, supervisor, student | List academic terms for the signed-in user's institution |
+| `GET /policy-templates/effective/:termId?date=` | admin, supervisor, student | Resolve policy values for the user's institution/office/student scope and date |
+
 Policy precedence is student exception, office policy, then institution policy. Existing per-student term-hour assignments remain the total-hour source unless an explicit student exception policy overrides them. A policy cannot overlap another policy at the same scope. Preferences allow one non-overnight interval per ISO weekday; dates and times use the term's IANA timezone. The capacity estimate assumes every policy-valid interval is worked; it compares available recurring hours before the deadline with remaining verified hours and is advisory. Reviewers see overlapping approved preferences in the same office as possible conflicts and can suggest alternative times without changing the student's proposal. Attendance outside an approved preference is reported as monitoring information only.
 | `GET /reports/semester-hours?termId=&officeId=&format=` | admin, supervisor (own office) | Recorded/verified semester totals, individual targets, remaining hours and capped completion percentage; supports CSV |
 
@@ -157,9 +205,11 @@ Error codes added: `400 VALIDATION_ERROR` (including unsupported or mismatched f
 
 | Method & path | Who | Description |
 | --- | --- | --- |
-| `GET /notifications?filter=all\|unread\|important` | any authenticated user | Up to 100 newest notifications for the signed-in recipient and institution, plus unread count |
+| `GET /notifications?filter=&limit=&cursor=` | any authenticated user | Recipient-scoped, paginated notifications and unread count; supports severity and unread filters |
 | `PATCH /notifications/:id/read` | notification recipient | Mark one own notification read |
 | `PATCH /notifications/read-all` | authenticated user | Mark all own notifications read |
+| `PATCH /notifications/:id/dismiss` | notification recipient | Dismiss an alert while retaining its history |
+| `POST /notifications/sweep` | deployment scheduler | Secret-protected cross-institution alert, reminder, delivery-retry, and attendance reconciliation sweep |
 
 Notifications are created transactionally with supported workflow changes. Reminder sweeps check each academic term's timezone, assigned hours, approved DTR snapshots and completion deadline. Notification ownership and institution are both checked on every read/write.
 

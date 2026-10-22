@@ -54,7 +54,7 @@ const FLAG_TEXT = {
 // frozen content of one DTR revision. Incomplete sessions are listed as FLAGS and
 // never counted. Verified hours are deliberately NOT part of a snapshot: they only
 // exist after a supervisor approves.
-export function buildSnapshot({ history, student, office, requiredHours, generatedAt }) {
+export function buildSnapshot({ history, student, office, requiredHours, generatedAt, policy = null }) {
   const flags = [];
   for (const day of history.days) {
     for (const s of day.sessions) {
@@ -71,6 +71,7 @@ export function buildSnapshot({ history, student, office, requiredHours, generat
     maxSessionHours: history.maxSessionHours,
     generatedAt: generatedAt.toISOString(),
     template: { official: false, name: 'DutyTrace provisional DTR template' },
+    policy,
     student: { id: student.id, fullName: student.fullName, email: student.email },
     office: { id: office.id, code: office.code, name: office.name },
     days: history.days,

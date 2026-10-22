@@ -4,6 +4,7 @@ import { AppError } from '../../utils/response.js';
 import { buildSessions, summarizeMonth, localDateKey, STATUS } from '../attendance/calc.js';
 import { isMonth } from '../attendance/attendance.service.js';
 import { allInstitutionProgress, currentTerm, officeProgress } from '../semesters/semesters.service.js';
+import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 
 const maxSessionSeconds = () => env.maxSessionHours * 3600;
 
@@ -117,27 +118,7 @@ export async function attendanceReport({ user, officeId, userId, from, to, month
   }
 
   // Fetch events covering the date window plus 2 days for midnight crossings
-  const { rows: events } = await query(
-    `SELECT e.user_id, e.id, e.event_type, e.recorded_at, o.id AS office_id, o.name AS office_name, o.code AS office_code
-     FROM attendance_events e
-     JOIN offices o ON o.id = e.office_id
-     WHERE e.user_id = ANY($1::uuid[])
-       AND e.recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-       AND e.recorded_at <  (($3::date + 2)::timestamp AT TIME ZONE $4)
-     ORDER BY e.user_id, e.recorded_at, e.seq`,
-    [studentIds, dateStart, dateEnd, env.timezone],
-  );
-
-  const eventsByUser = new Map(studentIds.map((id) => [id, []]));
-  for (const ev of events) {
-    eventsByUser.get(ev.user_id)?.push({
-      id: ev.id,
-      eventType: ev.event_type,
-      recordedAt: ev.recorded_at,
-      officeId: ev.office_id,
-      officeName: ev.office_name,
-    });
-  }
+  const eventsByUser = await effectiveEvents(studentIds,{startDate:dateStart,nextDate:dateEnd,timezone:env.timezone});
 
   // Build sessions per student using standard calc logic
   const allSessions = [];
@@ -265,19 +246,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   }
 
   // Fetch events for students
-  const { rows: events } = await query(
-    `SELECT user_id, id, event_type, recorded_at FROM attendance_events
-     WHERE user_id = ANY($1::uuid[])
-       AND recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-       AND recorded_at <  (($3::date + 2)::timestamp AT TIME ZONE $4)
-     ORDER BY user_id, recorded_at, seq`,
-    [studentIds, monthRange.startDate, monthRange.nextDate, env.timezone],
-  );
-
-  const eventsByUser = new Map(studentIds.map((id) => [id, []]));
-  for (const ev of events) {
-    eventsByUser.get(ev.user_id)?.push({ id: ev.id, eventType: ev.event_type, recordedAt: ev.recorded_at });
-  }
+  const eventsByUser = await effectiveEvents(studentIds,{startDate:monthRange.startDate,nextDate:monthRange.nextDate,timezone:env.timezone});
 
   // Fetch monthly DTRs for verified hours and status
   const { rows: dtrs } = await query(
@@ -286,6 +255,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
     [studentIds, monthRange.month],
   );
   const dtrByUser = new Map(dtrs.map((d) => [d.user_id, d]));
+  const adjustedVerified=await verifiedAdjustmentSeconds(studentIds,monthRange.month,monthRange.month);
 
   let totalRecordedSeconds = 0;
   let totalVerifiedSeconds = 0;
@@ -309,7 +279,8 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
 
     const dtr = dtrByUser.get(s.id);
     const isApproved = dtr?.status === 'approved';
-    const verifiedSecs = isApproved && dtr.verified_seconds != null ? dtr.verified_seconds : 0;
+    const adjustmentSeconds = isApproved ? (adjustedVerified.get(s.id) ?? 0) : 0;
+    const verifiedSecs = isApproved && dtr.verified_seconds != null ? Number(dtr.verified_seconds) + adjustmentSeconds : 0;
     const verifiedHours = Math.round((verifiedSecs / 3600) * 100) / 100;
     if (isApproved) {
       totalVerifiedSeconds += verifiedSecs;
@@ -333,6 +304,8 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
       requiredHours: studentRequiredHours,
       recordedHours,
       verifiedHours,
+      adjustmentHours: Math.round((adjustmentSeconds / 3600) * 100) / 100,
+      adjusted: adjustmentSeconds !== 0,
       remainingHours,
       variance,
       meetsRequirement,
@@ -456,6 +429,7 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
 
   const { rows } = await query(
     `SELECT d.id, d.month, d.status, d.current_revision, d.verified_seconds,
+            CASE WHEN d.status='approved' THEN d.verified_seconds+COALESCE((SELECT sum(a.verified_delta_seconds) FROM attendance_adjustments a WHERE a.student_id=d.user_id AND a.dtr_month=d.month),0) ELSE NULL END AS effective_verified_seconds,
             d.decided_at, d.created_at, d.updated_at,
             u.id AS user_id, u.full_name AS student_name, u.email AS student_email,
             o.id AS office_id, o.code AS office_code, o.name AS office_name,
@@ -475,7 +449,7 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
   const items = rows.map((r) => {
     if (statusCounts[r.status] !== undefined) statusCounts[r.status]++;
     const recHours = Number(r.recorded_hours || 0);
-    const verHours = r.verified_seconds != null ? Math.round((r.verified_seconds / 3600) * 100) / 100 : 0;
+    const verHours = r.effective_verified_seconds != null ? Math.round((Number(r.effective_verified_seconds) / 3600) * 100) / 100 : 0;
 
     return {
       id: r.id,
@@ -484,6 +458,8 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
       currentRevision: r.current_revision,
       recordedHours: recHours,
       verifiedHours: verHours,
+      adjusted: r.effective_verified_seconds != null && Number(r.effective_verified_seconds)!==Number(r.verified_seconds),
+      adjustmentHours: r.effective_verified_seconds != null ? Math.round(((Number(r.effective_verified_seconds)-Number(r.verified_seconds))/3600)*100)/100 : 0,
       studentName: r.student_name,
       studentEmail: r.student_email,
       officeName: r.office_name,
@@ -792,12 +768,14 @@ export async function getDashboardStats(user) {
 
     // 3. Attendance today & active timed-in
     const { rows: timedInRows } = await query(
-      `SELECT count(*)::int AS timed_in FROM (
-         SELECT DISTINCT ON (e.user_id) e.event_type FROM attendance_events e
-         JOIN users u ON u.id = e.user_id
-         WHERE u.institution_id = $1
-         ORDER BY e.user_id, e.recorded_at DESC, e.seq DESC
-       ) last WHERE last.event_type = 'time_in'`,
+      `SELECT count(*) FILTER(WHERE last.event_type='time_in')::int AS timed_in FROM users u
+       LEFT JOIN LATERAL (SELECT event_type FROM (
+         SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
+           AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
+         UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
+           FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+       ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1) last ON true
+       WHERE u.institution_id=$1 AND u.role='student'`,
       [user.institutionId],
     );
 
@@ -819,6 +797,9 @@ export async function getDashboardStats(user) {
       if (dtrCurrentMonthCounts[r.status] !== undefined) dtrCurrentMonthCounts[r.status] = r.count_current_month;
       currentMonthVerifiedSecs += Number(r.verified_seconds_current_month || 0);
     }
+    const {rows:adjustments}=await query(`SELECT coalesce(sum(verified_delta_seconds),0)::bigint AS seconds
+      FROM attendance_adjustments WHERE institution_id=$1 AND dtr_month=$2`,[user.institutionId,monthRange.month]);
+    currentMonthVerifiedSecs+=Number(adjustments[0]?.seconds??0);
 
     // 5. System recorded vs verified hours for current month
     const hoursData = await hoursReport({ user, month: monthRange.month, page: 1, limit: 10000 });
@@ -985,8 +966,12 @@ export async function getDashboardStats(user) {
        FROM duty_assignments d
        JOIN users u ON u.id = d.user_id AND u.role = 'student' AND u.status = 'active'
        LEFT JOIN LATERAL (
-         SELECT event_type, recorded_at FROM attendance_events e
-         WHERE e.user_id = u.id ORDER BY recorded_at DESC, seq DESC LIMIT 1
+         SELECT event_type,recorded_at FROM (
+           SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
+             AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
+           UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
+             FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+         ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1
        ) last ON true
        WHERE d.office_id = $1 AND d.ends_on IS NULL
        ORDER BY u.full_name`,

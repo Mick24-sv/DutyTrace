@@ -24,6 +24,7 @@ import { formatHours, formatMonth } from '../../utils/format.js';
 export default function AdminDashboard() {
   const { data, loading, error } = useApiData('/reports/dashboard-stats');
   const forecastData = useApiData('/forecast/institution');
+  const discrepancySummary = useApiData('/attendance-discrepancies/summary');
 
   const users = data?.users ?? { total: 0, active: 0, students: 0, supervisors: 0 };
   const offices = data?.offices ?? { total: 0, active: 0 };
@@ -107,55 +108,70 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      <Card title="Attendance discrepancy monitoring" className="mb-6" action={<Link to="/admin/discrepancies" className="text-sm font-medium text-teal hover:underline">Open institution review</Link>}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[['Open',discrepancySummary.data?.open],['Pending supervisor review',discrepancySummary.data?.pendingReview],['Resolved',discrepancySummary.data?.resolved],['Rejected',discrepancySummary.data?.rejected]].map(([label,value])=><div key={label} className="rounded-lg bg-canvas p-3"><div className="text-xs text-muted">{label}</div><div className="mt-1 text-xl font-semibold text-ink">{discrepancySummary.loading?'…':value??0}</div></div>)}
+        </div>
+        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Unable to load discrepancy monitoring: {discrepancySummary.error}</p>}
+      </Card>
+
       {/* Row 1: High Level System KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          compact
           label="Total Users"
           value={loading ? '…' : users.total}
           hint={loading ? '…' : `${users.students} students, ${users.supervisors} supervisors`}
           icon={Users}
         />
         <StatCard
+          compact
           label="Active Offices"
           value={loading ? '…' : `${offices.active} / ${offices.total}`}
           hint="Participating campus units"
           icon={Building2}
         />
         <StatCard
+          compact
           label="Active Attendance"
           value={loading ? '…' : `${attendance.timedInNow} timed in`}
           hint="Live duty assistants right now"
           icon={Timer}
         />
         <StatCard
+          compact
           label="Open Compliance Cases"
           value={loading ? '…' : cases.activeTotal}
-          hint={loading ? '…' : `${cases.needsCorrection} need correction`}
+          hint={loading ? '…' : `${cases.needs_correction ?? 0} need correction`}
           icon={FolderCheck}
         />
       </div>
 
       {/* Row 2: Hours & Queue KPIs */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          compact
           label="Recorded Hours (This Month)"
           value={loading ? '…' : formatHours(hours.totalRecordedHours)}
           hint="System-wide attendance recorded"
           icon={Clock}
         />
         <StatCard
+          compact
           label="Verified Hours (Approved DTRs)"
           value={loading ? '…' : formatHours(hours.totalVerifiedHours)}
           hint="Officially credited duty hours"
           icon={FileText}
         />
         <StatCard
+          compact
           label="Students Below Semester Requirement"
           value={loading ? '…' : semester.studentsBelowRequirement}
           hint={loading ? '…' : semester.term ? `${semester.term.academicYear} · ${semester.term.semester}` : 'No active academic term'}
           icon={TrendingDown}
         />
         <StatCard
+          compact
           label="DTRs Awaiting Review"
           value={loading ? '…' : dtrs.pendingReview}
           hint="Across all academic offices"
@@ -174,12 +190,34 @@ export default function AdminDashboard() {
             </Link>
           }
         >
-          <DataTable
-            columns={dtrColumns}
-            rows={dtrStatusRows}
-            caption="Monthly DTR counts grouped by review status"
-            empty={loading ? 'Loading status…' : 'No DTRs recorded in the database.'}
-          />
+          <div className="space-y-2 sm:hidden">
+            {dtrStatusRows.map((row) => (
+              <article key={row.id} className="rounded-lg border border-line p-3">
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <h3 className="min-w-0 text-sm font-medium leading-snug text-ink">{row.label}</h3>
+                  <Badge tone={row.tone}>{row.label.split(' ')[0]}</Badge>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-2">
+                  <div>
+                    <dt className="text-xs text-muted">This month</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">{row.current}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted">All-time total</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-ink">{row.total}</dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+          <div className="hidden sm:block">
+            <DataTable
+              columns={dtrColumns}
+              rows={dtrStatusRows}
+              caption="Monthly DTR counts grouped by review status"
+              empty={loading ? 'Loading status…' : 'No DTRs recorded in the database.'}
+            />
+          </div>
         </Card>
 
         {/* Recorded vs. Verified Hours Summary */}

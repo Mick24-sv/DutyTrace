@@ -2,6 +2,10 @@ import { query, withTransaction } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
 import { verifiedSecondsForTerm } from '../semesters/semester.rules.js';
+import { effectiveEvents } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { localDateKey } from '../attendance/calc.js';
+import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
+import { resolveEffectivePolicy } from '../policy-templates/policy-templates.service.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const notFound = () => new AppError(404, 'NOT_FOUND', 'Duty schedule or requirement not found.');
@@ -30,6 +34,8 @@ function publicPolicy(row) {
     requiredTermHours: hours(row.required_term_hours),
     minimumDailyHours: hours(row.minimum_daily_hours),
     maximumDailyHours: hours(row.maximum_daily_hours),
+    maximumWeeklyHours: hours(row.maximum_weekly_hours),
+    templateVersionId: row.template_version_id ?? null,
     permittedWeekdays: row.permitted_weekdays.map(Number),
     permittedTimeWindows: row.permitted_time_windows,
     exceptionReason: row.exception_reason,
@@ -58,6 +64,8 @@ function publicSchedule(row, days = []) {
     reviewedAt: row.reviewed_at,
     reviewReason: row.review_reason,
     suggestedDays: row.suggested_days ?? [],
+    policyVersionId: row.policy_version_id ?? null,
+    policySnapshot: row.policy_snapshot ?? null,
     updatedAt: row.updated_at,
   };
 }
@@ -101,6 +109,8 @@ async function policiesFor(termId, institutionId, db = { query }) {
 }
 
 async function requirementFor({ user, term, officeId, startsOn, endsOn, db = { query } }) {
+  const templatePolicy = await resolveEffectivePolicy({institutionId:user.institutionId,termId:term.id,date:startsOn,officeId,studentId:user.id,db});
+  const templateDuty=templatePolicy.configuration.duty??{};
   const policies = await policiesFor(term.id, user.institutionId, db);
   const active = policies.filter((policy) =>
     policy.effective_starts_on <= startsOn && policy.effective_ends_on >= endsOn);
@@ -118,19 +128,25 @@ async function requirementFor({ user, term, officeId, startsOn, endsOn, db = { q
   const individualPolicyHours = policy?.scope_type === 'student' && policy.required_term_hours != null
     ? hours(policy.required_term_hours)
     : null;
-  const requiredTermHours = individualPolicyHours ?? assignedHours ?? hours(policy?.required_term_hours);
+  const templateRequiredHours=hours(templateDuty.requiredTermHours);
+  const requiredTermHours = individualPolicyHours ?? assignedHours ?? hours(policy?.required_term_hours) ?? templateRequiredHours;
   return {
     policy: publicPolicy(policy),
+    policyVersion: policy?.template_version_id ? { id:policy.template_version_id, source:policy.scope_type } :
+      templatePolicy.assignments.at(-1) ? {id:templatePolicy.assignments.at(-1).versionId,source:templatePolicy.assignments.at(-1).scopeType} : null,
     defaultMinimumDailyHours,
     requiredTermHours,
     totalHoursSource: requiredTermHours == null
       ? null
       : individualPolicyHours != null ? 'individual_exception'
-        : assignedHours != null ? 'individual_assignment' : policy?.scope_type ?? null,
-    minimumDailyHours: hours(policy?.minimum_daily_hours) ?? defaultMinimumDailyHours,
-    maximumDailyHours: hours(policy?.maximum_daily_hours),
-    permittedWeekdays: (policy?.permitted_weekdays ?? []).map(Number).filter((weekday) => weekday <= 6),
-    permittedTimeWindows: policy?.permitted_time_windows ?? [],
+        : assignedHours != null ? 'individual_assignment' : policy?.scope_type ?? (templateRequiredHours!=null?'policy_template':null),
+    minimumDailyHours: hours(policy?.minimum_daily_hours) ?? hours(templateDuty.minimumDailyHours) ?? defaultMinimumDailyHours,
+    maximumDailyHours: hours(policy?.maximum_daily_hours) ?? hours(templateDuty.maximumDailyHours),
+    maximumWeeklyHours: hours(policy?.maximum_weekly_hours) ?? hours(templateDuty.maximumWeeklyHours),
+    permittedWeekdays: (policy?.permitted_weekdays?.length ? policy.permitted_weekdays : templateDuty.permittedWeekdays ?? []).map(Number).filter((weekday) => weekday <= 7),
+    permittedTimeWindows: policy?.permitted_time_windows?.length ? policy.permitted_time_windows : templateDuty.permittedTimeWindows ?? [],
+    source:policy?.template_version_id ? 'policy_template' : policy?.scope_type ?? (templatePolicy.assignments.at(-1)?.scopeType ?? null),
+    effectivePolicy:templatePolicy,
     completionDeadline: term.completion_deadline,
     term: {
       id: term.id,
@@ -158,7 +174,7 @@ export async function termRequirementForStudent({ studentId, termId, institution
 
 function scheduleIssues(days, requirement) {
   const issues = [];
-  if (!requirement.policy) {
+  if (!requirement.policy && !requirement.effectivePolicy?.assignments?.length) {
     return [{ code: 'NO_POLICY', message: 'No duty policy covers this schedule period. Ask an administrator to configure one.' }];
   }
   if (requirement.requiredTermHours == null) {
@@ -192,6 +208,10 @@ function scheduleIssues(days, requirement) {
         issues.push({ code: 'OUTSIDE_TIME_WINDOW', weekday: day.weekday, period: period.label, message: `The proposed ${period.label} time on weekday ${day.weekday} must fit within one permitted time window.` });
       }
     }
+  }
+  const weeklyHours=days.reduce((total,day)=>total+dayHours(day),0);
+  if(requirement.maximumWeeklyHours!=null&&weeklyHours>requirement.maximumWeeklyHours){
+    issues.push({code:'ABOVE_MAXIMUM_WEEKLY_HOURS',message:`The proposed schedule is ${weeklyHours.toFixed(2)} hours per week, above the ${requirement.maximumWeeklyHours} hour weekly limit.`});
   }
   return issues;
 }
@@ -269,6 +289,7 @@ export async function savePolicy({ actor, policyId, input, ip }) {
         input.termId, actor.institutionId, input.scopeType, scopeId,
         input.effectiveStartsOn, input.effectiveEndsOn, input.requiredTermHours ?? null,
         input.minimumDailyHours ?? null, input.maximumDailyHours ?? null,
+        input.maximumWeeklyHours ?? null,
         input.permittedWeekdays, JSON.stringify(input.permittedTimeWindows),
         input.scopeType === 'student' ? input.exceptionReason?.trim() || null : null, actor.id,
       ];
@@ -277,18 +298,18 @@ export async function savePolicy({ actor, policyId, input, ip }) {
         ({ rows: [row] } = await db.query(
           `UPDATE duty_requirement_policies SET
              term_id=$2, scope_type=$3, scope_id=$4, effective_starts_on=$5, effective_ends_on=$6,
-             required_term_hours=$7, minimum_daily_hours=$8, maximum_daily_hours=$9, permitted_weekdays=$10,
-             permitted_time_windows=$11::jsonb, exception_reason=$12, updated_by=$13
+             required_term_hours=$7, minimum_daily_hours=$8, maximum_daily_hours=$9, maximum_weekly_hours=$10, permitted_weekdays=$11,
+             permitted_time_windows=$12::jsonb, exception_reason=$13, updated_by=$14
            WHERE id=$1 RETURNING *`,
-          [policyId, values[0], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], actor.id],
+          [policyId, values[0], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[11], values[12], actor.id],
         ));
       } else {
         ({ rows: [row] } = await db.query(
           `INSERT INTO duty_requirement_policies
              (term_id, institution_id, scope_type, scope_id, effective_starts_on, effective_ends_on,
-             required_term_hours, minimum_daily_hours, maximum_daily_hours, permitted_weekdays, permitted_time_windows,
+             required_term_hours, minimum_daily_hours, maximum_daily_hours, maximum_weekly_hours, permitted_weekdays, permitted_time_windows,
               exception_reason, created_by, updated_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$13) RETURNING *`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$14) RETURNING *`,
           values,
         ));
       }
@@ -343,18 +364,14 @@ async function latestForStudent(termId, studentId, db = { query }) {
 
 async function attendanceMonitoring(schedule, days, term, db = { query }) {
   if (!schedule || schedule.status !== 'approved') return null;
-  const { rows } = await db.query(
-    `SELECT event_type, (recorded_at AT TIME ZONE $4)::date::text AS local_date,
-            extract(isodow FROM recorded_at AT TIME ZONE $4)::int AS weekday,
-            to_char(recorded_at AT TIME ZONE $4, 'HH24:MI') AS local_time
-     FROM attendance_events
-     WHERE user_id = $1 AND office_id = $2 AND recorded_at >= $3::date::timestamp AT TIME ZONE $4
-       AND recorded_at < ($5::date + 1)::timestamp AT TIME ZONE $4
-       AND (recorded_at AT TIME ZONE $4)::date BETWEEN $6::date AND $7::date
-     ORDER BY recorded_at`,
-    [schedule.student_id, schedule.office_id, schedule.effective_starts_on, term.timezone,
-      schedule.effective_ends_on, schedule.effective_starts_on, schedule.effective_ends_on],
-  );
+  const {rows:dateRange}=await db.query(`SELECT ($1::date+1)::text AS next_date`,[schedule.effective_ends_on]);
+  const effective=await effectiveEvents([schedule.student_id],{startDate:schedule.effective_starts_on,nextDate:dateRange[0].next_date,timezone:term.timezone,db});
+  const rows=(effective.get(schedule.student_id)??[]).filter(event=>event.officeId===schedule.office_id).map(event=>{
+    const localDate=localDateKey(event.recordedAt,term.timezone);const weekday=(new Date(`${localDate}T00:00:00Z`).getUTCDay()+6)%7+1;
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:term.timezone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(event.recordedAt);
+    const p=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+    return {event_type:event.eventType,local_date:localDate,weekday,local_time:`${p.hour}:${p.minute}`};
+  }).filter(event=>event.local_date>=schedule.effective_starts_on&&event.local_date<=schedule.effective_ends_on);
   const byDay = new Map(days.map((day) => [day.weekday, day]));
   const outside = rows.filter((event) => {
     const planned = byDay.get(event.weekday);
@@ -532,7 +549,7 @@ async function confirmedAssignmentConflicts(schedule, days, db = { query }) {
        AND s.version = (SELECT max(active.version) FROM student_duty_schedules active
                         WHERE active.student_id = s.student_id AND active.term_id = s.term_id AND active.status = 'approved')
        AND daterange(s.effective_starts_on, s.effective_ends_on, '[]')
-           && daterange($5::date, $6::date, '[]')`,
+           && daterange($4::date, $5::date, '[]')`,
     [schedule.institution_id, schedule.term_id, schedule.id,
       schedule.effective_starts_on, schedule.effective_ends_on],
   );
@@ -552,13 +569,13 @@ async function confirmedAssignmentConflicts(schedule, days, db = { query }) {
       const studentOverlap = overlapping.find((row) => row.student_id === schedule.student_id && row.office_id !== schedule.office_id);
       if (studentOverlap) {
         conflicts.push({ code: 'STUDENT_SHIFT_OVERLAP', weekday: day.weekday, startsAt: period.startsAt, endsAt: period.endsAt,
-          message: `This shift overlaps ${studentOverlap.student_name}'s confirmed schedule in another approved version or office.` });
+          affectedStudentIds:[studentOverlap.student_id],message: `This shift overlaps ${studentOverlap.student_name}'s confirmed schedule in another approved version or office.` });
       }
       const officeAssignments = new Set(overlapping.filter((row) => row.office_id === schedule.office_id && row.student_id !== schedule.student_id).map((row) => row.student_id));
       const capacity = Number(overlapping.find((row) => row.office_id === schedule.office_id)?.schedule_capacity ?? 1);
       if (officeAssignments.size >= capacity) {
         conflicts.push({ code: 'OFFICE_CAPACITY_EXCEEDED', weekday: day.weekday, startsAt: period.startsAt, endsAt: period.endsAt,
-          capacity, assigned: officeAssignments.size,
+          capacity, assigned: officeAssignments.size,affectedStudentIds:[...officeAssignments],
           message: `This shift exceeds the office capacity of ${capacity} student${capacity === 1 ? '' : 's'} for an overlapping time slot.` });
       }
     }
@@ -659,14 +676,32 @@ export async function submitSchedule({ user, scheduleId, ip }) {
     });
     const issues = scheduleIssues(days, requirement);
     if (issues.length) throw new AppError(400, 'SCHEDULE_VALIDATION_FAILED', issues.map((issue) => issue.message).join(' '), { issues });
+    const conflicts=await confirmedAssignmentConflicts(row,days,db);
     const { rows: [submitted] } = await db.query(
       `UPDATE student_duty_schedules SET status='pending_review', submitted_at=now(),
-         reviewed_by=NULL, reviewed_at=NULL, review_reason=NULL, suggested_days='[]'::jsonb WHERE id=$1 RETURNING *`, [scheduleId],
+         reviewed_by=NULL, reviewed_at=NULL, review_reason=NULL, suggested_days='[]'::jsonb,
+         policy_version_id=$2, policy_snapshot=$3::jsonb WHERE id=$1 RETURNING *`,
+      [scheduleId, requirement.effectivePolicy?.assignments?.at(-1)?.versionId ?? null,
+        JSON.stringify(requirement.effectivePolicy ?? {})],
     );
     await recordAudit({
       actorId: user.id, action: 'duty_schedule.submitted', targetType: 'student_duty_schedule', targetId: scheduleId,
       before: { status: row.status }, after: { status: submitted.status, version: row.version, requestKind: row.request_kind }, ip,
     }, db);
+    if(conflicts.length){
+      const detail=conflicts.map(conflict=>conflict.message).join(' ');
+      const key=`duty-schedule-conflict:${scheduleId}:${conflicts.map(c=>`${c.code}-${c.weekday}-${c.startsAt}`).sort().join('|')}`;
+      await createNotification(db,{recipientId:user.id,institutionId:user.institutionId,type:'schedule_conflict',
+        title:'Schedule preference conflicts with an approved assignment',message:`Your submitted availability overlaps an approved schedule or exceeds office capacity. ${detail}`,
+        relatedType:'duty_schedule',relatedId:scheduleId,important:true,severity:'warning',actionUrl:'/student/schedule',dedupeKey:key});
+      const affectedIds=[...new Set(conflicts.flatMap(conflict=>conflict.affectedStudentIds??[]))].filter(id=>id!==user.id);
+      for(const studentId of affectedIds) await createNotification(db,{recipientId:studentId,institutionId:user.institutionId,type:'schedule_conflict',
+        title:'Another submitted preference may affect your approved schedule',message:'A new schedule preference overlaps an approved schedule or office capacity in one of your duty periods. Your current assignment has not been changed.',
+        relatedType:'duty_schedule',relatedId:scheduleId,important:true,severity:'warning',actionUrl:'/student/schedule',dedupeKey:`${key}:student:${studentId}`});
+      await notifyOfficeSupervisors(db,{officeId:row.office_id,institutionId:user.institutionId,type:'schedule_conflict_review',
+        title:'Submitted schedule preference needs conflict review',message:`A Student Assistant submitted availability that overlaps an approved schedule or exceeds office capacity. ${detail}`,
+        relatedType:'duty_schedule',relatedId:scheduleId,important:true,severity:'warning',actionUrl:'/supervisor/schedule-review',dedupeKey:key});
+    }
     return publicSchedule(submitted, days);
   });
 }
@@ -788,6 +823,8 @@ export async function decideSchedule({ actor, scheduleId, decision, reason, sugg
       `UPDATE student_duty_schedules SET status=$2, reviewed_by=$3, reviewed_at=now(), review_reason=$4, suggested_days=$5::jsonb
        WHERE id=$1 RETURNING *`, [scheduleId, next, actor.id, reason?.trim() || null, JSON.stringify(suggestedDays)],
     );
+    await db.query(`UPDATE notifications SET resolved_at=COALESCE(resolved_at,now()),updated_at=now()
+      WHERE related_type='duty_schedule' AND related_id=$1 AND type='schedule_conflict'`,[scheduleId]);
     await recordAudit({
       actorId: actor.id, action: `duty_schedule.${decision === 'request_changes' ? 'changes_requested' : decision === 'approve' ? 'approved' : 'rejected'}`,
       targetType: 'student_duty_schedule', targetId: scheduleId,

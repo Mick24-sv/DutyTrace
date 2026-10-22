@@ -37,6 +37,22 @@ export const getPool = () => {
 
 export const query = (text, params) => getPool().query(text, params);
 
+// Holds a database-scoped advisory lock on one connection while work can use
+// the shared pool; unlike an in-process mutex this coordinates Render instances.
+export async function withAdvisoryLock(key, fn) {
+  const client = await getPool().connect();
+  let locked = false;
+  try {
+    const { rows } = await client.query('SELECT pg_try_advisory_lock(hashtext($1)) AS locked', [key]);
+    locked = rows[0].locked;
+    if (!locked) return { skipped: true, reason: 'already_running' };
+    return await fn();
+  } finally {
+    if (locked) await client.query('SELECT pg_advisory_unlock(hashtext($1))', [key]);
+    client.release();
+  }
+}
+
 // Run several statements atomically.
 export async function withTransaction(fn) {
   const client = await getPool().connect();

@@ -10,11 +10,14 @@ import { formatDateTime } from '../../utils/format.js';
 // generated after the change; existing revisions keep their original snapshot.
 export default function PolicySettingsPage() {
   const { data, loading, error } = useApiData('/dtrs/policy');
+  const attendanceSettings=useApiData('/institutions/me');
   const [policy, setPolicy] = useState(null);
   const [hours, setHours] = useState('');
   const [reviewSlaHours, setReviewSlaHours] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null); // { ok, text }
+  const [attendancePolicy,setAttendancePolicy]=useState({discrepancyGraceMinutes:30,earlyToleranceMinutes:15,lateToleranceMinutes:15});
+  const [attendanceBusy,setAttendanceBusy]=useState(false);const [attendanceMessage,setAttendanceMessage]=useState(null);
 
   useEffect(() => {
     if (data) {
@@ -23,6 +26,10 @@ export default function PolicySettingsPage() {
       setReviewSlaHours(data.reviewSlaHours == null ? '' : String(data.reviewSlaHours));
     }
   }, [data]);
+
+  useEffect(()=>{const i=attendanceSettings.data?.institution;if(i)setAttendancePolicy({
+    discrepancyGraceMinutes:i.attendanceDiscrepancyGraceMinutes,earlyToleranceMinutes:i.attendanceEarlyToleranceMinutes,lateToleranceMinutes:i.attendanceLateToleranceMinutes,
+  });},[attendanceSettings.data]);
 
   async function save(e) {
     e.preventDefault();
@@ -38,6 +45,13 @@ export default function PolicySettingsPage() {
       setMessage({ ok: false, text: err.details?.requiredMonthlyHours ?? err.message });
     } finally { setBusy(false); }
   }
+
+  async function saveAttendancePolicy(e){e.preventDefault();setAttendanceBusy(true);setAttendanceMessage(null);try{
+    const updated=await apiPut('/institutions/me/attendance-policy',attendancePolicy);
+    setAttendancePolicy({discrepancyGraceMinutes:updated.institution.attendanceDiscrepancyGraceMinutes,
+      earlyToleranceMinutes:updated.institution.attendanceEarlyToleranceMinutes,lateToleranceMinutes:updated.institution.attendanceLateToleranceMinutes});
+    setAttendanceMessage({ok:true,text:'Attendance policy saved.'});
+  }catch(err){setAttendanceMessage({ok:false,text:err.details?.discrepancyGraceMinutes??err.message});}finally{setAttendanceBusy(false);}}
 
   return (
     <>
@@ -75,6 +89,16 @@ export default function PolicySettingsPage() {
           </form>
         </Card>
       )}
+      <Card title="Attendance discrepancy timing" className="mt-6 max-w-xl">
+        <p className="mb-4 text-sm text-muted">Set when automated shift checks run and how much timing variation is accepted. These settings apply to future reconciliation checks for this institution.</p>
+        {attendanceSettings.loading&&<p className="text-sm text-muted">Loading attendance policy…</p>}
+        {attendanceSettings.error&&<p role="alert" className="mb-3 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{attendanceSettings.error}</p>}
+        {!attendanceSettings.loading&&attendanceSettings.data&&<form onSubmit={saveAttendancePolicy} className="space-y-4">
+          {[['discrepancyGraceMinutes','Grace period after shift ends','minutes'],['earlyToleranceMinutes','Allowed early clock-in tolerance','minutes'],['lateToleranceMinutes','Allowed late clock-out tolerance','minutes']].map(([key,label,unit])=><label key={key} className="block text-sm font-medium text-ink">{label}<div className="mt-1 flex items-center gap-2"><input type="number" min="0" max="1440" step="1" required value={attendancePolicy[key]} onChange={e=>setAttendancePolicy(p=>({...p,[key]:Number(e.target.value)}))} className="w-32 rounded-lg border border-line bg-surface px-3 py-2"/><span className="text-sm text-muted">{unit}</span></div></label>)}
+          {attendanceMessage&&<p role={attendanceMessage.ok?'status':'alert'} className={`rounded-lg px-3 py-2 text-sm ${attendanceMessage.ok?'bg-ok-bg text-ok-fg':'bg-bad-bg text-bad-fg'}`}>{attendanceMessage.text}</p>}
+          <Button type="submit" disabled={attendanceBusy}>{attendanceBusy?'Saving…':'Save attendance policy'}</Button>
+        </form>}
+      </Card>
       <Card title="Other settings" className="mt-6 max-w-xl">
         <ul className="space-y-1 text-sm text-muted">
           <li>Time zone: <strong className="text-ink">{policy?.timezone ?? '…'}</strong> (set by APP_TIMEZONE on the server)</li>

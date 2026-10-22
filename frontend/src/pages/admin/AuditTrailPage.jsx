@@ -367,7 +367,21 @@ export default function AuditTrailPage() {
           </EmptyState>
         ) : (
           <div className="space-y-4">
-            <div className="overflow-x-auto">
+            <div className="space-y-3 md:hidden">
+              {events.map((ev) => (
+                <MobileEventCard
+                  key={ev.id}
+                  event={ev}
+                  timeZone={timeZone}
+                  isExpanded={expandedId === ev.id}
+                  onToggle={() => toggleExpand(ev.id)}
+                  roleTone={ROLE_TONES[ev.actor?.role] || 'neutral'}
+                  catTone={CATEGORY_TONES[ev.category] || 'neutral'}
+                />
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-line text-xs uppercase tracking-wider text-muted">
@@ -442,6 +456,64 @@ export default function AuditTrailPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+function MobileEventCard({ event, timeZone, isExpanded, onToggle, roleTone, catTone }) {
+  const hasDetails = Boolean(event.beforeData || event.afterData || event.targetId);
+
+  return (
+    <article className="overflow-hidden rounded-lg border border-line bg-surface">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!hasDetails}
+        aria-expanded={isExpanded}
+        className={`flex w-full min-w-0 items-start gap-3 p-3 text-left ${hasDetails ? 'hover:bg-canvas/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal' : 'cursor-default'}`}
+      >
+        <span className="mt-0.5 shrink-0 text-muted" aria-hidden="true">
+          {hasDetails ? isExpanded ? <ChevronDown className="h-4 w-4 text-teal" /> : <ChevronRight className="h-4 w-4" /> : <span className="block h-4 w-4" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block break-words font-mono text-xs text-ink">{formatDateTime(event.createdAt, timeZone)}</span>
+          <span className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="min-w-0 break-words text-sm font-semibold text-ink">{event.actor?.name || 'System / Anonymous'}</span>
+            <Badge tone={roleTone}>{event.actor?.role ? formatRole(event.actor.role) : 'System'}</Badge>
+          </span>
+          {event.actor?.email && <span className="mt-0.5 block break-all text-xs text-muted">{event.actor.email}</span>}
+          <span className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="break-words text-sm font-medium text-ink">{event.label}</span>
+            <Badge tone={catTone}>{event.category}</Badge>
+          </span>
+          <code className="mt-0.5 block break-all text-[11px] text-muted">{event.action}</code>
+          <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+            {event.targetType && <span>Resource: <span className="font-medium text-ink">{event.targetType}</span></span>}
+            {event.ipAddress && <span>IP: <span className="font-mono text-ink">{event.ipAddress}</span></span>}
+            {!event.targetType && !event.ipAddress && <span>No resource or IP recorded</span>}
+          </span>
+          {event.targetId && <span className="mt-1 block break-all font-mono text-[11px] text-muted">#{event.targetId}</span>}
+        </span>
+      </button>
+
+      {isExpanded && hasDetails && (
+        <div className="space-y-3 border-t border-line bg-canvas/40 p-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            <span>Action: <strong className="break-all text-ink">{event.action}</strong></span>
+            <span>IP: <strong className="font-mono text-ink">{event.ipAddress || 'Not recorded'}</strong></span>
+          </div>
+          <div className="grid gap-3">
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase text-muted">Previous state</p>
+              {event.beforeData ? <pre className="max-h-52 overflow-auto break-all rounded border border-line bg-surface p-2 text-[11px] text-ink">{JSON.stringify(event.beforeData, null, 2)}</pre> : <p className="rounded border border-dashed border-line p-2 text-xs text-muted">No previous state recorded.</p>}
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase text-teal">New state / result</p>
+              {event.afterData ? <pre className="max-h-52 overflow-auto break-all rounded border border-teal/30 bg-surface p-2 text-[11px] text-ink">{JSON.stringify(event.afterData, null, 2)}</pre> : <p className="rounded border border-dashed border-line p-2 text-xs text-muted">No state payload recorded.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 

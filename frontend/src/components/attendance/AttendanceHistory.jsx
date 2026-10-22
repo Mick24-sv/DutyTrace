@@ -33,12 +33,12 @@ export default function AttendanceHistory({ endpoint }) {
             </p>
           )}
         </div>
-        <div>
+        <div className="w-full sm:w-auto">
           <label htmlFor="month" className="mb-1 block text-xs font-medium text-muted">Month</label>
           <input
             id="month" type="month" value={month || data?.month || ''}
             onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-auto"
+            className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:w-auto"
           />
         </div>
       </div>
@@ -48,15 +48,17 @@ export default function AttendanceHistory({ endpoint }) {
 
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Recorded hours" value={formatHours(data.totals.recordedHours)} hint="From completed sessions" icon={Clock} />
-            <StatCard label="Completed sessions" value={data.totals.countedSessions} icon={CalendarCheck} />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+            <StatCard compact label="Recorded hours" value={formatHours(data.totals.recordedHours)} hint="From completed sessions" icon={Clock} />
+            <StatCard compact label="Completed sessions" value={data.totals.countedSessions} icon={CalendarCheck} />
             <StatCard
+              compact
               label="Need attention" value={data.totals.incompleteCount}
               hint={data.totals.inProgress ? 'Plus one in progress' : 'Incomplete or flagged'}
               icon={CircleAlert}
             />
             <StatCard
+              compact
               label="Verified hours" value={formatHours(data.totals.verifiedHours)}
               hint={data.totals.verificationAvailable ? 'From the approved DTR for this month' : 'No approved DTR for this month yet'}
               icon={ShieldQuestion}

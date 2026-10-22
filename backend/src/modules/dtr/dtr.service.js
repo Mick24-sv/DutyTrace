@@ -5,6 +5,7 @@ import { recordAudit } from '../audit/audit.service.js';
 import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { monthHistory } from '../attendance/attendance.service.js';
 import { buildSnapshot, canTransition, endedMonths, isMonthEnded, secondsToHours } from './dtr.rules.js';
+import { effectivePolicyForDate } from '../policy-templates/policy-templates.service.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 
@@ -69,7 +70,10 @@ const mapDtr = (r) => ({
   student: { id: r.user_id, fullName: r.student_name, email: r.student_email },
   office: { id: r.office_id, code: r.office_code, name: r.office_name },
   // Verified time exists ONLY for approved DTRs.
-  verifiedHours: r.status === 'approved' ? secondsToHours(r.verified_seconds) : null,
+  verifiedHours: r.status === 'approved' ? secondsToHours(r.effective_verified_seconds ?? r.verified_seconds) : null,
+  originalVerifiedHours: r.status === 'approved' ? secondsToHours(r.verified_seconds) : null,
+  adjusted: r.status === 'approved' && Number(r.effective_verified_seconds ?? r.verified_seconds) !== Number(r.verified_seconds),
+  adjustmentHours: r.status === 'approved' ? secondsToHours(Number(r.effective_verified_seconds ?? r.verified_seconds)-Number(r.verified_seconds)) : 0,
   verifiedRevision: r.status === 'approved' ? r.verified_revision : null,
   decidedAt: r.decided_at,
   createdAt: r.created_at,
@@ -82,7 +86,10 @@ const mapDtr = (r) => ({
 
 const DTR_SELECT = `
   SELECT d.*, s.full_name AS student_name, s.email AS student_email,
-         o.code AS office_code, o.name AS office_name, rv.snapshot -> 'totals' AS snap_totals
+         o.code AS office_code, o.name AS office_name, rv.snapshot -> 'totals' AS snap_totals,
+         CASE WHEN d.status='approved' THEN d.verified_seconds + COALESCE((SELECT sum(a.verified_delta_seconds)
+           FROM attendance_adjustments a WHERE a.student_id=d.user_id AND a.dtr_month=d.month),0)
+           ELSE NULL END AS effective_verified_seconds
   FROM monthly_dtrs d
   JOIN users s ON s.id = d.user_id
   JOIN offices o ON o.id = d.office_id
@@ -120,10 +127,16 @@ async function requireMonthEnded(month, now) {
 async function liveSnapshot(user, month, now) {
   await requireMonthEnded(month, now);
   if (!user.office) throw new AppError(403, 'NOT_ASSIGNED', 'You are not assigned to an office. Ask an administrator.');
-  const [history, policy] = await Promise.all([monthHistory(user.id, month), getPolicy(user.institutionId)]);
-  const effectiveRequiredHours = user.requiredHours != null ? Number(user.requiredHours) : policy.requiredMonthlyHours;
+  const [history, policy,templatePolicy] = await Promise.all([
+    monthHistory(user.id, month),getPolicy(user.institutionId),
+    effectivePolicyForDate({institutionId:user.institutionId,date:`${month}-01`,officeId:user.office.id,studentId:user.id}),
+  ]);
+  const templateDtr=templatePolicy?.configuration?.dtr??{};
+  const effectiveRequiredHours = user.requiredHours != null ? Number(user.requiredHours) :
+    templateDtr.requiredMonthlyHours??policy.requiredMonthlyHours;
   return buildSnapshot({
     history, student: user, office: user.office, requiredHours: effectiveRequiredHours, generatedAt: now,
+    policy:{configuration:templatePolicy?.configuration??{},origins:templatePolicy?.origins??{},assignments:templatePolicy?.assignments??[]},
   });
 }
 
@@ -137,7 +150,7 @@ export async function myOverview(user) {
   const now = await dbNow();
   const { rows } = await query(`${DTR_SELECT} WHERE d.user_id = $1`, [user.id]);
   const byMonth = new Map(rows.map((r) => [r.month, mapDtr(r)]));
-  const verified = rows.filter((r) => r.status === 'approved').reduce((sum, r) => sum + r.verified_seconds, 0);
+  const verified = rows.filter((r) => r.status === 'approved').reduce((sum, r) => sum + Number(r.effective_verified_seconds ?? r.verified_seconds), 0);
   const policy = await getPolicy(user.institutionId);
   const effectivePolicy = {
     ...policy,

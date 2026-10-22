@@ -40,7 +40,10 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 | `academic_terms` | Institution-specific academic year, semester, date range, deadline and timezone (0008) | Term ranges cannot overlap within an institution; finalization freezes the calendar and prevents later requirement changes |
 | `semester_requirement_assignments` | Individual required hours and office assignment for one student and term (0008) | Immutable version rows; each change preserves the previous assignment, validated to keep the term, student and office within one institution |
 | `institution_dtr_policies` | Monthly DTR target and optional review SLA (0009, 0011) | One policy per institution; review SLA is nullable and from 1–720 hours; semester requirements are individually assigned |
-| `notifications` | In-app notifications (0011) | Recipient and institution scoped; unique `(recipient_id, dedupe_key)` prevents duplicate event/reminder notifications; nullable `read_at` tracks unread state |
+| `notifications` | In-app alerts and risks (0011, 0023) | Recipient and institution scoped; stable dedupe/risk keys, severity, action URL, read, dismissed and resolved state |
+| `institution_alert_policies` | Alert rules per institution (0023) | Configurable forecast thresholds, reminder windows, cooldown, enabled categories, email minimum severity and escalation timing |
+| `notification_preferences` | Personal alert preferences (0023) | User-scoped email opt-in and upcoming approved-shift reminder toggle |
+| `notification_deliveries` | Per-channel outbox (0023) | Unique notification/channel records with retry count, handoff state, and failure details |
 | `monthly_dtrs` | One DTR per (user, month) (0003) with `status` (`dtr_status` enum), `current_revision`, `office_id` (office at generation) | `UNIQUE (user_id, month)`. `verified_seconds` is **only** allowed when `status = 'approved'` (CHECK) and is required then. `decided_by <> user_id` (CHECK, no self-decision). A trigger refuses: DELETE, TRUNCATE, any change to an approved row, changing owner/month, and invalid status moves (`draft->submitted`, `submitted->under_review`, `under_review->approved/needs_correction`, `needs_correction->draft/submitted`) |
 | `dtr_revisions` | Frozen JSON snapshot of each generation (0003): daily sessions, flags, totals, required hours used, timezone | `UNIQUE (dtr_id, revision_no)`. **Append-only**: triggers block UPDATE, DELETE and TRUNCATE (0004). Contains recorded hours only, never verified hours |
 | `dtr_events` | History (0003): `generated, regenerated, submitted, review_started, approved, returned` with actor, from/to status, `reason`, time | **Append-only** like revisions. CHECK: a `returned` event must have a non-blank reason |
@@ -66,6 +69,8 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 - Never edit an applied migration; add the next numbered file (e.g. `0003_….sql`). The runner stores a checksum and refuses edited files.
 
 Duty requirement precedence is student exception, office policy, then institution policy. An existing per-student `semester_requirement_assignments` total remains authoritative unless an explicit student exception overrides it. Approved preferences are for monitoring only and do not authorize or block attendance scans. Monthly DTR revisions and finalized academic terms remain unchanged by later policy edits.
+
+Migration 0024 adds institution-owned `institution_policy_templates`, immutable published rows in `institution_policy_template_versions`, and append-only dated `institution_policy_assignments` with JSON configuration snapshots. The resolver merges institution, office, and student scopes. Template versions, assignments, attendance-event snapshots, and submitted schedule snapshots retain the policy context used when those records were created. `duty_requirement_policies.maximum_weekly_hours` enforces a configured weekly cap in submitted schedule validation.
 
 ## Not yet in the schema
 

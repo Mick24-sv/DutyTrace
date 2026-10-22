@@ -15,8 +15,13 @@ export default function RecoveryPlanner({ termId }) {
   return <Card title="Missed-hours recovery planner">
     {data.loading&&<p className="text-sm text-muted">Finding available recovery times…</p>}{data.error&&<p role="alert" className="text-sm text-bad-fg">{data.error}</p>}
     {data.data&&<>
-      <p className="text-sm text-muted">Required <strong>{data.data.forecast?.requiredHours??'—'} h</strong> · Verified <strong>{data.data.forecast?.completedHours??'—'} h</strong> · Remaining <strong>{data.data.remaining??data.data.forecast?.remainingHours??'—'} h</strong> · Deadline <strong>{data.data.forecast?.deadline??'Not configured'}</strong></p>
-      <p className="mt-1 text-xs text-muted">{data.data.forecast?.statusLabel}: {data.data.forecast?.reason}</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <p className="min-w-0 rounded-md border border-line bg-canvas p-2 text-xs text-muted">Required<span className="mt-1 block break-words text-sm font-semibold text-ink">{data.data.forecast?.requiredHours??'—'} h</span></p>
+        <p className="min-w-0 rounded-md border border-line bg-canvas p-2 text-xs text-muted">Verified<span className="mt-1 block break-words text-sm font-semibold text-ink">{data.data.forecast?.completedHours??'—'} h</span></p>
+        <p className="min-w-0 rounded-md border border-line bg-canvas p-2 text-xs text-muted">Remaining<span className="mt-1 block break-words text-sm font-semibold text-ink">{data.data.remaining??data.data.forecast?.remainingHours??'—'} h</span></p>
+        <p className="min-w-0 rounded-md border border-line bg-canvas p-2 text-xs text-muted">Deadline<span className="mt-1 block break-words text-sm font-semibold text-ink">{data.data.forecast?.deadline??'Not configured'}</span></p>
+      </div>
+      <div className="mt-3 rounded-md bg-warn-bg p-3 text-xs leading-relaxed text-warn-fg"><p className="font-semibold">{data.data.forecast?.statusLabel}</p><p className="mt-1 break-words">{data.data.forecast?.reason}</p></div>
       {slots.length>0?<><div className="mt-3 max-h-64 space-y-2 overflow-auto">{slots.map(s=>{const key=`${s.date}|${s.startsAt}|${s.endsAt}`;return <label key={key} className="flex items-start gap-2 rounded-lg border border-line p-3 text-sm"><input type="checkbox" checked={selected.includes(key)} onChange={e=>setSelected(x=>e.target.checked?[...x,key]:x.filter(k=>k!==key))}/><span><strong>{s.date}</strong> · {s.startsAt}–{s.endsAt} · {s.durationHours.toFixed(2)} h</span></label>})}</div>
         <p className="mt-2 text-sm">Selected {selectedSlots.reduce((n,s)=>n+s.durationHours,0).toFixed(2)} h · projected shortfall after selection {Math.max(0,(data.data.remaining??0)-selectedSlots.reduce((n,s)=>n+s.durationHours,0)).toFixed(2)} h</p>
         <Button className="mt-3" disabled={!selected.length||busy} onClick={submit}>Request selected shifts</Button></>:<p className="mt-3 text-sm text-muted">{data.data.reasons?.join(' ')||'No recovery shifts are currently available.'} Remaining shortfall: {data.data.shortfallHours??data.data.remaining??0} h.</p>}

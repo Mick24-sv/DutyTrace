@@ -61,7 +61,7 @@ export const env = {
   // A completed session longer than this is NOT counted as hours and is flagged
   // for review (likely a forgotten time-out).
   maxSessionHours: toInt(process.env.MAX_SESSION_HOURS, 12, { max: 24 }),
-  reminderIntervalMinutes: toInt(process.env.REMINDER_INTERVAL_MINUTES, 360, { max: 10080 }),
+  attendanceReconcileSecret: process.env.ATTENDANCE_RECONCILE_SECRET ?? '',
 
   // Private document storage (Phase 5). Never served statically; files are only reachable through
   // authenticated, access-checked API routes. Keep this directory OUT of git and any web root.

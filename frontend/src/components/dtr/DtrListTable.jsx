@@ -12,7 +12,7 @@ export default function DtrListTable({ dtrs, linkLabel, showOffice = false }) {
     { key: 'month', header: 'Month', render: (d) => formatMonth(d.month) },
     { key: 'status', header: 'Status', render: (d) => <DtrStatusBadge status={d.status} /> },
     { key: 'recorded', header: 'Recorded', render: (d) => formatHours(d.recordedHours) },
-    { key: 'verified', header: 'Verified', render: (d) => (d.verifiedHours != null ? formatHours(d.verifiedHours) : <span className="text-muted">Not verified</span>) },
+    { key: 'verified', header: 'Verified', render: (d) => (d.verifiedHours != null ? <>{formatHours(d.verifiedHours)}{d.adjusted&&<Badge tone="info">Adjusted</Badge>}</> : <span className="text-muted">Not verified</span>) },
     { key: 'flags', header: 'Flagged', render: (d) => (d.incompleteCount > 0 ? <Badge tone="rejected">{d.incompleteCount} flagged</Badge> : <span className="text-muted">None</span>) },
     { key: 'open', header: '', render: (d) => <Link to={d.id} className="font-medium text-teal underline">{linkLabel}</Link> },
   ];

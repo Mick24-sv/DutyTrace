@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
-import { apiDelete, apiGet, apiPatch } from '../../services/api.js';
+import { Bell, Check, CheckCheck, Settings2, Trash2 } from 'lucide-react';
+import { apiGet, apiPatch, apiPut } from '../../services/api.js';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'unread', label: 'Unread' },
-  { id: 'important', label: 'Important' },
+  { id: 'warning', label: 'Warning' },
+  { id: 'critical', label: 'Critical' },
 ];
 
 function notificationPath(role, item) {
+  if (typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') && !item.actionUrl.startsWith('//')) return item.actionUrl;
   const { relatedType, relatedId } = item;
   if (relatedType === 'monthly_dtr') {
     if (role === 'student') return `/student/dtr/${relatedId}`;
@@ -20,6 +22,9 @@ function notificationPath(role, item) {
   if (relatedType === 'compliance_case') return `/${role}/cases/${relatedId}`;
   if (relatedType === 'academic_term') return role === 'admin' ? '/admin/semesters' : `/${role}`;
   if (relatedType === 'student') return role === 'admin' ? '/admin/users' : `/${role}/assistants/${relatedId}`;
+  if (relatedType === 'duty_schedule') return '/student/schedule';
+  if (relatedType === 'duty_recovery_plan') return role === 'student' ? '/student/schedule' : '/supervisor/recovery-review';
+  if (relatedType === 'attendance_discrepancy') return `/${role}/discrepancies`;
   return `/${role}`;
 }
 
@@ -31,6 +36,9 @@ export default function NotificationCenter({ role }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [preferences, setPreferences] = useState(null);
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const wrapRef = useRef(null);
   const filterRef = useRef('all');
   const navigate = useNavigate();
@@ -74,8 +82,24 @@ export default function NotificationCenter({ role }) {
   };
 
   const toggle = () => {
-    if (!open) load(filter);
+    if (!open) {
+      load(filter);
+      if (role === 'student') apiGet('/notifications/preferences').then(setPreferences).catch((err) => setError(err.message));
+    }
     setOpen((value) => !value);
+  };
+
+  const updatePreference = async (key, value) => {
+    const next = { ...preferences, [key]: value };
+    setPreferences(next);
+    setSavingPreferences(true);
+    try {
+      setPreferences(await apiPut('/notifications/preferences', next));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingPreferences(false);
+    }
   };
 
   const openNotification = async (item) => {
@@ -108,7 +132,7 @@ export default function NotificationCenter({ role }) {
     setError('');
     setDeletingId(item.id);
     try {
-      await apiDelete(`/notifications/${item.id}`);
+      await apiPatch(`/notifications/${item.id}/dismiss`, {});
       setItems((current) => current.filter((row) => row.id !== item.id));
       if (!item.readAt) setUnreadCount((count) => Math.max(0, count - 1));
     } catch (err) {
@@ -138,13 +162,33 @@ export default function NotificationCenter({ role }) {
               <CheckCheck className="h-4 w-4" /> Mark all read
             </button>
           </div>
-          <div className="flex gap-1 border-b border-line px-3 py-2" role="tablist" aria-label="Filter notifications">
+          <div className="flex flex-wrap gap-1 border-b border-line px-3 py-2" role="tablist" aria-label="Filter notifications">
             {FILTERS.map((option) => (
               <button key={option.id} type="button" role="tab" aria-selected={filter === option.id} onClick={() => chooseFilter(option.id)} className={`rounded-full px-3 py-1 text-xs ${filter === option.id ? 'bg-teal text-white' : 'text-muted hover:bg-canvas'}`}>
                 {option.label}
               </button>
             ))}
           </div>
+          {role === 'student' && (
+            <div className="border-b border-line px-3 py-2">
+              <button type="button" aria-expanded={showPreferences} onClick={() => setShowPreferences((value) => !value)} className="inline-flex items-center gap-1 text-xs font-medium text-teal">
+                <Settings2 className="h-3.5 w-3.5" /> Reminder settings
+              </button>
+              {showPreferences && preferences && (
+                <div className="mt-2 grid gap-2 rounded-lg bg-canvas p-3 text-xs">
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox" disabled={savingPreferences || !preferences.emailAvailable} checked={preferences.emailReminders} onChange={(event) => updatePreference('emailReminders', event.target.checked)} />
+                    <span>Email alerts for institution-enabled high-priority notices{!preferences.emailAvailable && <span className="block text-muted">Email is unavailable until SMTP is configured.</span>}</span>
+                  </label>
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox" disabled={savingPreferences} checked={preferences.upcomingShiftReminders} onChange={(event) => updatePreference('upcomingShiftReminders', event.target.checked)} />
+                    <span>Upcoming approved shift reminders</span>
+                  </label>
+                </div>
+              )}
+              {showPreferences && !preferences && <p role="status" className="mt-2 text-xs text-muted">Loading reminder settings…</p>}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto sm:max-h-[min(65vh,28rem)] sm:flex-none">
             {loading && items.length === 0 && <p role="status" className="p-5 text-center text-sm text-muted">Loading notifications…</p>}
             {error && <p role="alert" className="m-3 rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}
@@ -156,8 +200,8 @@ export default function NotificationCenter({ role }) {
                     <span className="flex items-start gap-2">
                       {!item.readAt ? <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-teal" aria-label="Unread" /> : <span className="w-2 shrink-0" />}
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1 text-sm font-semibold text-ink">{item.title}{item.important && <span className="rounded bg-warn-bg px-1.5 py-0.5 text-[10px] font-medium text-warn-fg">Important</span>}</span>
-                        <span className="mt-0.5 block text-xs text-muted">{item.message}</span>
+                        <span className="flex flex-wrap items-center gap-1 text-sm font-semibold text-ink">{item.title}<span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${item.severity === 'critical' ? 'bg-bad-bg text-bad-fg' : item.severity === 'warning' ? 'bg-warn-bg text-warn-fg' : 'bg-info-bg text-info-fg'}`}>{item.severity ?? (item.important ? 'warning' : 'informational')}</span></span>
+                        <span className="mt-0.5 block break-words text-xs text-muted">{item.message}</span>
                         <time className="mt-1 block text-[11px] text-muted" dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString()}</time>
                       </span>
                       {!item.readAt && <Check className="mt-1 h-4 w-4 shrink-0 text-teal" aria-hidden="true" />}
@@ -165,8 +209,8 @@ export default function NotificationCenter({ role }) {
                   </button>
                   <button
                     type="button"
-                    aria-label={`Delete notification: ${item.title}`}
-                    title="Delete notification"
+                    aria-label={`Dismiss notification: ${item.title}`}
+                    title="Dismiss notification"
                     disabled={deletingId === item.id}
                     onClick={(event) => deleteNotification(event, item)}
                     className="m-2 rounded-lg p-2 text-muted hover:bg-bad-bg hover:text-bad-fg disabled:opacity-50"

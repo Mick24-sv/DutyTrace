@@ -86,23 +86,35 @@ export default function DutySchedulePage() {
     <PageHeader title="My Duty Preferences" description="These are preferences for review. They do not authorize attendance or prevent a valid office QR scan." />
     <div className="mb-4"><label className="text-sm text-muted">Academic term<select className={`mt-1 block ${field}`} value={item.term.id} onChange={(e) => setTermId(e.target.value)}>{entries.map(({ term }) => <option key={term.id} value={term.id}>{term.academicYear} · {term.semester}{term.isCurrent ? ' (Current)' : ''}</option>)}</select></label></div>
     <Card className="mb-5" title="Applicable requirement and progress">
-      {requirement?.policy ? <div className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <p>Required: <strong>{requirement.requiredTermHours ?? 'Unassigned'} h</strong><span className="block text-xs text-muted">{requirement.totalHoursSource ?? 'No total requirement source'}</span></p>
-        <p>Verified: <strong>{progress?.verifiedHours ?? 0} h</strong><span className="block text-xs text-muted">Approved DTR hours</span></p>
-        <p>Recorded: <strong>{progress?.recordedHours ?? 0} h</strong><span className="block text-xs text-muted">Attendance records; not necessarily verified</span></p>
-        <p>Remaining: <strong>{requirement.requiredTermHours == null ? '—' : `${Math.max(0, requirement.requiredTermHours - (progress?.verifiedHours ?? 0)).toFixed(2)} h`}</strong><span className="block text-xs text-muted">Verified hours are subtracted from required hours</span></p>
-        <p>Minimum per duty day: <strong>{requirement.minimumDailyHours} h</strong><span className="block text-xs text-muted">Maximum: {requirement.maximumDailyHours == null ? 'not set' : `${requirement.maximumDailyHours} h`}</span></p><p>Permitted days: <strong>{requirement.permittedWeekdays.map((day) => week[day - 1]).join(', ') || 'Not configured'}</strong></p>
-        <p>Permitted windows: <strong>{requirement.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ') || 'Not configured'}</strong></p><p>Completion deadline: <strong>{requirement.completionDeadline ?? 'Not configured'}</strong></p>
+      {requirement?.policy ? <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <p className="min-w-0 rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Required: <strong>{requirement.requiredTermHours ?? 'Unassigned'} h</strong><span className="block break-words text-xs text-muted">{requirement.totalHoursSource ?? 'No total requirement source'}</span></p>
+        <p className="min-w-0 rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Verified: <strong>{progress?.verifiedHours ?? 0} h</strong><span className="block break-words text-xs text-muted">Approved DTR hours</span></p>
+        <p className="min-w-0 rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Recorded: <strong>{progress?.recordedHours ?? 0} h</strong><span className="block break-words text-xs text-muted">Attendance records; not necessarily verified</span></p>
+        <p className="min-w-0 rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Remaining: <strong>{requirement.requiredTermHours == null ? '—' : `${Math.max(0, requirement.requiredTermHours - (progress?.verifiedHours ?? 0)).toFixed(2)} h`}</strong><span className="block break-words text-xs text-muted">Verified hours are subtracted from required hours</span></p>
+        <p className="min-w-0 rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Minimum per duty day: <strong>{requirement.minimumDailyHours} h</strong><span className="block break-words text-xs text-muted">Maximum: {requirement.maximumDailyHours == null ? 'not set' : `${requirement.maximumDailyHours} h`}</span></p>
+        <p className="min-w-0 break-words rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Permitted days: <strong>{requirement.permittedWeekdays.map((day) => week[day - 1]).join(', ') || 'Not configured'}</strong></p>
+        <p className="min-w-0 break-words rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Permitted windows: <strong>{requirement.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ') || 'Not configured'}</strong></p>
+        <p className="min-w-0 break-words rounded-md bg-canvas p-2 sm:bg-transparent sm:p-0">Completion deadline: <strong>{requirement.completionDeadline ?? 'Not configured'}</strong></p>
       </div> : <p className="text-sm text-muted">No effective duty policy is configured for this term and office yet. Contact the administrator.</p>}
     </Card>
     {feasibility && <Card className="mb-5" title="Schedule capacity estimate">
-      <p className="text-sm">Estimated schedule capacity before {feasibility.deadline}: <strong>{feasibility.estimatedCapacityHours.toFixed(2)} h</strong> across {feasibility.eligibleOccurrences} remaining proposed duty days.</p>
-      <p className="mt-1 text-sm">Estimated remaining requirement: <strong>{feasibility.remainingHours == null ? 'not configured' : `${feasibility.remainingHours.toFixed(2)} h`}</strong>{feasibility.estimatedShortfallHours > 0 && <> · Estimated shortfall: <strong>{feasibility.estimatedShortfallHours.toFixed(2)} h</strong></>}</p>
-      {feasibility.guidance.map((note) => <p key={note} className="mt-2 text-sm text-muted">{note}</p>)}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <p className="min-w-0 break-words rounded-md border border-line bg-canvas p-3 text-sm leading-relaxed">Estimated schedule capacity before <strong>{feasibility.deadline}</strong><span className="mt-1 block text-base font-semibold text-ink">{feasibility.estimatedCapacityHours.toFixed(2)} h</span><span className="block text-xs text-muted">Across {feasibility.eligibleOccurrences} remaining proposed duty days</span></p>
+        <p className="min-w-0 break-words rounded-md border border-line bg-canvas p-3 text-sm leading-relaxed">Estimated remaining requirement<span className="mt-1 block text-base font-semibold text-ink">{feasibility.remainingHours == null ? 'Not configured' : `${feasibility.remainingHours.toFixed(2)} h`}</span>{feasibility.estimatedShortfallHours > 0 && <span className="mt-1 block text-xs text-muted">Estimated shortfall: {feasibility.estimatedShortfallHours.toFixed(2)} h</span>}</p>
+      </div>
+      {feasibility.guidance.map((note) => <p key={note} className="mt-2 break-words text-sm leading-relaxed text-muted">{note}</p>)}
       {!!item.validationIssues?.length && <ul className="mt-3 list-inside list-disc text-sm text-bad-fg">{item.validationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}</ul>}
       <p className="mt-3 text-xs text-muted">{feasibility.note} Proposed hours are not worked, recorded, or verified hours.</p>
     </Card>}
-    {proposal && <Card className="mb-5"><p className="font-medium">{statuses[proposal.status]} · version {proposal.version}</p>{proposal.reviewReason && <p className="mt-1 text-sm text-muted">Reviewer feedback: {proposal.reviewReason}</p>}{proposal.suggestedDays?.length > 0 && <div className="mt-2"><p className="text-sm font-medium">Supervisor suggested alternatives (your preference is unchanged):</p><ul className="mt-1 list-inside list-disc text-sm text-muted">{proposal.suggestedDays.map((day) => <li key={day.weekday}>{week[day.weekday - 1]}: {day.startsAt}–{day.endsAt}{day.afternoonStartsAt && day.afternoonEndsAt ? ` · afternoon ${day.afternoonStartsAt}–${day.afternoonEndsAt}` : ''}</li>)}</ul></div>}{item.attendanceMonitoring && <p className="mt-2 text-sm text-muted">Attendance monitoring: {item.attendanceMonitoring.outsidePreferenceEvents} of {item.attendanceMonitoring.measuredEvents} attendance events were outside the approved preference. This is informational and never blocks scanning.</p>}</Card>}
+    {proposal && <Card className="mb-5">
+      <p className="font-medium">{statuses[proposal.status]} · version {proposal.version}</p>
+      {proposal.reviewReason && <p className="mt-2 break-words text-sm leading-relaxed text-muted"><span className="font-medium text-ink">Reviewer feedback:</span> {proposal.reviewReason}</p>}
+      {proposal.suggestedDays?.length > 0 && <div className="mt-3">
+        <p className="text-sm font-medium">Supervisor suggested alternatives (your preference is unchanged):</p>
+        <ul className="mt-1 list-inside list-disc space-y-1 break-words text-sm leading-relaxed text-muted">{proposal.suggestedDays.map((day) => <li key={day.weekday}>{week[day.weekday - 1]}: {day.startsAt}–{day.endsAt}{day.afternoonStartsAt && day.afternoonEndsAt ? ` · afternoon ${day.afternoonStartsAt}–${day.afternoonEndsAt}` : ''}</li>)}</ul>
+      </div>}
+      {item.attendanceMonitoring && <p className="mt-3 break-words rounded-md bg-canvas p-3 text-xs leading-relaxed text-muted">Attendance monitoring: {item.attendanceMonitoring.outsidePreferenceEvents} of {item.attendanceMonitoring.measuredEvents} attendance events were outside the approved preference. This is informational and never blocks scanning.</p>}
+    </Card>}
     {error && <p role="alert" className="mb-3 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}{message && <p role="status" className="mb-3 text-sm text-teal">{message}</p>}
     {editable && <Card title="Propose weekly duty times">
       <form onSubmit={save}>

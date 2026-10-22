@@ -35,6 +35,10 @@ import AbsenceDetailPage from './pages/shared/AbsenceDetailPage.jsx';
 import CasesListPage from './pages/shared/CasesListPage.jsx';
 import CaseDetailPage from './pages/shared/CaseDetailPage.jsx';
 import ReportsPage from './pages/shared/ReportsPage.jsx';
+import AttendanceDiscrepanciesPage from './pages/shared/AttendanceDiscrepanciesPage.jsx';
+import DutyAlertsPage from './pages/shared/DutyAlertsPage.jsx';
+import PolicyTemplatesPage from './pages/admin/PolicyTemplatesPage.jsx';
+import EffectivePolicyPage from './pages/shared/EffectivePolicyPage.jsx';
 import RequireRole from './routes/RequireRole.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { ROLE_CONFIG } from './routes/navConfig.js';
@@ -47,9 +51,9 @@ const DASHBOARDS = {
 
 // Pages that are really built; every other nav item falls back to <ComingSoon>.
 const BUILT_PAGES = {
-  student: { scan: ScanPage, attendance: MyAttendancePage, schedule: DutySchedulePage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
-  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, 'recovery-review': RecoveryReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
-  admin: { users: UsersPage, semesters: AcademicTermsPage, 'semester-transitions': SemesterTransitionsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage },
+  student: { scan: ScanPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, schedule: DutySchedulePage, policies: EffectivePolicyPage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
+  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, 'recovery-review': RecoveryReviewPage, policies: EffectivePolicyPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage, 'duty-alerts': DutyAlertsPage },
+  admin: { users: UsersPage, semesters: AcademicTermsPage, 'semester-transitions': SemesterTransitionsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, discrepancies: AttendanceDiscrepanciesPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage, 'duty-alerts': DutyAlertsPage, 'policy-templates': PolicyTemplatesPage, 'effective-policies': EffectivePolicyPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).

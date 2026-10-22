@@ -11,7 +11,7 @@ institutionsRouter.use(requireAuth);
 
 institutionsRouter.get('/me', asyncHandler(async (req, res) => {
   const { rows } = await query(
-    'SELECT id, name, timezone, created_at FROM institutions WHERE id = $1',
+    'SELECT id, name, timezone, attendance_discrepancy_grace_minutes, attendance_early_tolerance_minutes, attendance_late_tolerance_minutes, created_at FROM institutions WHERE id = $1',
     [req.user.institutionId],
   );
   if (!rows[0]) throw new AppError(404, 'NOT_FOUND', 'Institution not found.');
@@ -20,9 +20,37 @@ institutionsRouter.get('/me', asyncHandler(async (req, res) => {
       id: rows[0].id,
       name: rows[0].name,
       timezone: rows[0].timezone,
+      attendanceDiscrepancyGraceMinutes: rows[0].attendance_discrepancy_grace_minutes,
+      attendanceEarlyToleranceMinutes: rows[0].attendance_early_tolerance_minutes,
+      attendanceLateToleranceMinutes: rows[0].attendance_late_tolerance_minutes,
       createdAt: rows[0].created_at,
     },
   });
+}));
+
+institutionsRouter.patch('/me/attendance-policy', requireRole('admin'), asyncHandler(async (req,res)=>{
+  const input=parse(z.object({
+    discrepancyGraceMinutes:z.number().int().min(0).max(1440),
+    earlyToleranceMinutes:z.number().int().min(0).max(1440),
+    lateToleranceMinutes:z.number().int().min(0).max(1440),
+  }),req.body??{});
+  const institution=await withTransaction(async db=>{
+    const {rows:[before]}=await db.query(`SELECT * FROM institutions WHERE id=$1 FOR UPDATE`,[req.user.institutionId]);
+    if(!before) throw new AppError(404,'NOT_FOUND','Institution not found.');
+    const {rows:[updated]}=await db.query(`UPDATE institutions SET attendance_discrepancy_grace_minutes=$2,
+      attendance_early_tolerance_minutes=$3,attendance_late_tolerance_minutes=$4 WHERE id=$1
+      RETURNING id,name,timezone,attendance_discrepancy_grace_minutes,attendance_early_tolerance_minutes,attendance_late_tolerance_minutes`,
+    [req.user.institutionId,input.discrepancyGraceMinutes,input.earlyToleranceMinutes,input.lateToleranceMinutes]);
+    await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'institution.attendance_policy_update',
+      targetType:'institution',targetId:updated.id,before:{discrepancyGraceMinutes:before.attendance_discrepancy_grace_minutes,
+        earlyToleranceMinutes:before.attendance_early_tolerance_minutes,lateToleranceMinutes:before.attendance_late_tolerance_minutes},
+      after:input,ip:req.ip},db);
+    return updated;
+  });
+  ok(res,{institution:{id:institution.id,name:institution.name,timezone:institution.timezone,
+    attendanceDiscrepancyGraceMinutes:institution.attendance_discrepancy_grace_minutes,
+    attendanceEarlyToleranceMinutes:institution.attendance_early_tolerance_minutes,
+    attendanceLateToleranceMinutes:institution.attendance_late_tolerance_minutes}});
 }));
 
 institutionsRouter.put('/me', requireRole('admin'), asyncHandler(async (req, res) => {

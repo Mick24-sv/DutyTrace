@@ -59,6 +59,7 @@ const policySchema = z.object({
   requiredTermHours: z.number().positive().max(10000).nullable().optional(),
   minimumDailyHours: z.number().positive().max(24).nullable().optional(),
   maximumDailyHours: z.number().positive().max(24).nullable().optional(),
+  maximumWeeklyHours: z.number().positive().max(168).nullable().optional(),
   permittedWeekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7)
     .refine((values) => new Set(values).size === values.length, 'Weekdays must be unique.'),
   permittedTimeWindows: z.array(z.object({ startTime: time, endTime: time })
@@ -66,6 +67,7 @@ const policySchema = z.object({
   exceptionReason: z.string().trim().min(5).max(1000).optional(),
 }).refine((item) => item.effectiveEndsOn >= item.effectiveStartsOn, { path: ['effectiveEndsOn'], message: 'End date must follow start date.' })
   .refine((item) => item.maximumDailyHours == null || item.minimumDailyHours == null || item.maximumDailyHours >= item.minimumDailyHours, { path: ['maximumDailyHours'], message: 'Maximum daily hours must be at least the minimum.' })
+  .refine((item) => item.maximumWeeklyHours == null || item.minimumDailyHours == null || item.maximumWeeklyHours >= item.minimumDailyHours, { path: ['maximumWeeklyHours'], message: 'Maximum weekly hours must allow at least one minimum-length duty day.' })
   .refine((item) => item.scopeType === 'institution' || Boolean(item.scopeId), { path: ['scopeId'], message: 'Choose an office or student.' })
   .refine((item) => item.permittedTimeWindows.every((window, i, all) => all.slice(i + 1).every((other) => window.endTime <= other.startTime || other.endTime <= window.startTime)), { path: ['permittedTimeWindows'], message: 'Permitted time windows cannot overlap.' });
 

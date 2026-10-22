@@ -28,6 +28,7 @@ export default function SupervisorDashboard() {
   const scheduleOverview = useApiData('/duty-schedules/overview');
   const forecastData = useApiData(user?.office?.id ? `/forecast/office/${user.office.id}` : null);
   const recoveryData = useApiData('/recovery/review');
+  const discrepancySummary = useApiData('/attendance-discrepancies/summary');
 
   const stats = data?.stats ?? {
     totalAssistants: 0,
@@ -191,27 +192,37 @@ export default function SupervisorDashboard() {
         {!scheduleOverview.loading && !scheduleOverview.error && !scheduleOverview.data?.schedules?.length && <p className="text-sm text-muted">No submitted or approved preferences for the current term.</p>}
       </Card>
 
+      <Card title="Attendance discrepancy review" className="mb-6" action={<Link to="/supervisor/discrepancies" className="text-sm font-medium text-teal hover:underline">Open review queue</Link>}>
+        <p className="text-sm text-muted">Review student explanations and correction requests for your office. Original QR records stay unchanged.</p>
+        <div className="mt-3 flex flex-wrap gap-2 text-sm"><Badge tone="pending">{discrepancySummary.data?.pendingReview??0} pending review</Badge><Badge tone="neutral">{discrepancySummary.data?.open??0} unresolved</Badge></div>
+        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Could not load discrepancy counts: {discrepancySummary.error}</p>}
+      </Card>
+
       {/* KPI Stats Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
+          compact
           label="Assigned Assistants"
           value={loading ? '…' : stats.totalAssistants}
           hint={user?.office ? user.office.name : undefined}
           icon={Users}
         />
         <StatCard
+          compact
           label="Today's Attendance"
           value={loading ? '…' : `${stats.timedInToday} / ${stats.totalAssistants}`}
           hint={stats.timedInToday > 0 ? `${stats.timedInToday} currently timed in` : 'None timed in yet today'}
           icon={Timer}
         />
         <StatCard
+          compact
           label="Incomplete Records"
           value={loading ? '…' : stats.incompleteSessions}
           hint="Missing time-out or over length limit"
           icon={AlertTriangle}
         />
         <StatCard
+          compact
           label="Pending DTR Reviews"
           value={loading ? '…' : stats.pendingDtrs}
           hint="Awaiting your review or revision check"
@@ -219,20 +230,23 @@ export default function SupervisorDashboard() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:gap-4 lg:grid-cols-3">
         <StatCard
+          compact
           label="Below Duty Requirement"
           value={loading ? '…' : stats.studentsBelowRequirement}
           hint={data?.semesterSummary?.term ? `${data.semesterSummary.term.academicYear} · ${data.semesterSummary.term.semester} requirements not met` : 'No active academic term'}
           icon={TrendingDown}
         />
         <StatCard
+          compact
           label="Absence Notices Attention"
           value={loading ? '…' : stats.absencesAwaitingReview}
           hint="Pending review or awaiting follow-up"
           icon={CalendarOff}
         />
         <StatCard
+          compact
           label="Open Compliance Cases"
           value={loading ? '…' : stats.openCases}
           hint="Active cases in your office"

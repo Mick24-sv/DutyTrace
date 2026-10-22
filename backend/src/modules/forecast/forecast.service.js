@@ -3,6 +3,7 @@ import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { verifiedSecondsForTerm } from '../semesters/semester.rules.js';
+import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 import {
   calculateHistoricalAttendancePace,
   calculateConfirmedScheduleHours,
@@ -163,25 +164,12 @@ async function computeForecastsForStudents({
   for (const dtr of approvedDtrs) {
     dtrsByStudent.get(dtr.user_id).push(dtr);
   }
+  const startMonth=String(term.starts_on).slice(0,7), endMonth=String(term.ends_on).slice(0,7);
+  const adjustedVerified=await verifiedAdjustmentSeconds(studentIds,startMonth,endMonth,db,
+    {fromDate:term.starts_on,toDate:term.ends_on,timezone:term.timezone});
 
   // 3. Raw attendance events in term for total recorded hours and in historical window for pace
-  const { rows: eventRows } = await db.query(
-    `SELECT user_id, id, event_type, recorded_at
-     FROM attendance_events
-     WHERE user_id = ANY($1::uuid[])
-       AND recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-       AND recorded_at < (($3::date + 2)::timestamp AT TIME ZONE $4)
-     ORDER BY user_id, recorded_at, seq`,
-    [studentIds, term.starts_on, term.ends_on, term.timezone],
-  );
-  const eventsByStudent = new Map(studentIds.map((id) => [id, []]));
-  for (const ev of eventRows) {
-    eventsByStudent.get(ev.user_id).push({
-      id: ev.id,
-      eventType: ev.event_type,
-      recordedAt: ev.recorded_at,
-    });
-  }
+  const eventsByStudent = await effectiveEvents(studentIds, {startDate:term.starts_on,nextDate:term.ends_on,timezone:term.timezone,db});
 
   // 4. Confirmed duty schedules
   const confirmedSchedules = await loadConfirmedSchedules(studentIds, term.id, db);
@@ -203,7 +191,8 @@ async function computeForecastsForStudents({
     const confirmedSched = confirmedSchedules.get(student.id) ?? null;
 
     // Total validated hours from approved DTRs
-    const verifiedSecs = verifiedSecondsForTerm(studentDtrs, term.starts_on, term.ends_on, term.timezone);
+    const verifiedSecs = verifiedSecondsForTerm(studentDtrs, term.starts_on, term.ends_on, term.timezone)
+      + (adjustedVerified.get(student.id) ?? 0);
     const validatedCompletedHours = Math.round((verifiedSecs / 3600) * 100) / 100;
 
     // Total valid recorded hours in the term
@@ -416,7 +405,7 @@ export async function getOfficeForecasts(officeId, { termId = null, actor, db = 
 /**
  * Returns institution-wide forecasts (admin only).
  */
-export async function getInstitutionForecasts({ termId = null, actor, db = { query } }) {
+export async function getInstitutionForecasts({ termId = null, actor, db = { query }, limit = 1000, offset = 0 }) {
   if (actor.role !== 'admin') {
     throw new AppError(403, 'FORBIDDEN', 'Only administrators may view institution-wide forecasts.');
   }
@@ -432,8 +421,9 @@ export async function getInstitutionForecasts({ termId = null, actor, db = { que
      LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
      LEFT JOIN offices o ON o.id = d.office_id
      WHERE u.institution_id = $1 AND u.role = 'student' AND u.status = 'active'
-     ORDER BY o.name NULLS LAST, u.full_name`,
-    [actor.institutionId],
+     ORDER BY o.name NULLS LAST, u.full_name
+     LIMIT $2 OFFSET $3`,
+    [actor.institutionId,limit,offset],
   );
 
   const historicalWeeks = await getForecastHistoricalWeeks(actor.institutionId, db);

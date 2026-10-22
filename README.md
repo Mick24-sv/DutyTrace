@@ -4,7 +4,7 @@
 
 An academic capstone project. DutyTrace aims to digitize Student Assistant (SA) attendance, duty-hour compliance, monthly DTRs, supervisor verification, absence notices, and compliance-case tracking.
 
-> **Status: Phases 1–7, with Phase 8 security hardening and QA updates.** Academic terms and individually assigned semester-hour targets are configurable per institution. Student semester completion uses approved DTR hours, while monthly DTR generation and review continue on their existing month-end workflow. In-app notifications cover supported DTR, absence, case, document and semester requirement events; reminders use each term's configured timezone and assigned verified-hour progress. Administrators can optionally set an institution review SLA for DTRs, absence notices and cases. No school calendar or semester-hour target is assumed. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
+> **Status: Phases 1–8, with security hardening and QA updates.** DutyTrace includes institution-scoped in-app notifications and a configurable risk-alert service for completion forecasts, upcoming approved duty shifts, recovery review, schedule conflicts, attendance discrepancies, deadlines, and finalized term transitions. External scheduled processing is required for time-based detection and email retries. Academic terms, requirement thresholds, notification rules, and reminder timing are institution-configurable. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
 
 Duty-hour rules can be configured by term for an institution, office, or an authorized individual exception, including minimum and optional maximum daily hours. The default minimum is 3 hours per duty day and can be changed by an administrator; it is not a universal requirement. Student Assistants can submit preferred weekly hours for office-supervisor review. The interface estimates whether proposed recurring hours could cover remaining verified hours by the deadline; this estimate is advisory. Supervisors can view overlapping approved preferences and suggest alternative times. Approved preferences support monitoring only and do not authorize or block the existing office QR attendance flow. See [docs/api-endpoints.md](docs/api-endpoints.md#duty-requirements-and-sa-schedule-preferences).
 
@@ -40,7 +40,7 @@ There is **no demo data and no hardcoded account** in the app. Everything on scr
    - `DATABASE_URL=<your Supabase connection string>` and `DATABASE_SSL=true`
    - `QR_SIGNING_SECRET=<long random string>` (`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`). Changing it invalidates printed QR codes.
    - `CLIENT_ORIGIN`, `APP_TIMEZONE` (fallback timezone for the existing monthly DTR workflow)
-   - `REMINDER_INTERVAL_MINUTES` (optional; reminder sweep interval, default `360` minutes)
+   - `ATTENDANCE_RECONCILE_SECRET` (required to secure the external alert and attendance scheduler endpoint)
 4. **Create/update the tables:** `npm run db:migrate`. This applies `database/migrations/*.sql` in order and is safe to re-run (a checksum stops edited migrations). Run it after deploying code that adds a migration, using the same `DATABASE_URL` as the API. For a hosted API, run the command in the deployment environment with its database secret, then restart/redeploy the API. The API does not apply schema changes automatically.
 5. **Create your first administrator** (nothing is preloaded):
 
@@ -50,6 +50,8 @@ There is **no demo data and no hardcoded account** in the app. Everything on scr
 
    Set the institution name and IANA timezone for this administrator's tenant. Each institution is managed by its own administrator account. To bootstrap a separate institution, run this command with that institution's unique admin email, name and institution name. Sign in, add offices under *Offices*, create accounts under *Users & Roles*, configure academic years and semester dates under *Academic Terms*, assign individual hour requirements, and generate office QR codes.
 6. **Run:** `npm run dev` (API on http://localhost:4000, app on http://localhost:5173).
+
+7. **Schedule alerts in production:** Configure a Render Cron Job to `POST https://<api-host>/api/notifications/sweep` every 6 hours (or at the cadence appropriate for the institution) with the `x-attendance-reconcile-secret` header set to `ATTENDANCE_RECONCILE_SECRET`. This sweep also reconciles missed approved shifts. Configure `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASS` to enable opted-in email alerts; in-app notifications work without SMTP.
 
 Notes for Supabase:
 

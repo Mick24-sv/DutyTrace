@@ -28,6 +28,7 @@ export default function DutyRequirementsPage() {
   const [hours, setHours] = useState('');
   const [minimum, setMinimum] = useState('');
   const [maximum, setMaximum] = useState('');
+  const [maximumWeekly, setMaximumWeekly] = useState('');
   const [defaultMinimum, setDefaultMinimum] = useState('3');
   const [days, setDays] = useState([1, 2, 3, 4, 5]);
   const [windows, setWindows] = useState([{ startTime: '08:00', endTime: '17:00' }]);
@@ -42,7 +43,7 @@ export default function DutyRequirementsPage() {
   const context = contextQuery.data;
   const filteredPolicies = (context?.policies ?? []).filter((policy) => [
     names[policy.scopeType], policy.scopeName, policy.effectiveStartsOn, policy.effectiveEndsOn,
-    policy.requiredTermHours, policy.minimumDailyHours, policy.maximumDailyHours,
+    policy.requiredTermHours, policy.minimumDailyHours, policy.maximumDailyHours, policy.maximumWeeklyHours,
     policy.permittedWeekdays.map((day) => week[day - 1]).join(' '),
     policy.permittedTimeWindows.map((window) => `${window.startTime} ${window.endTime}`).join(' '),
     policy.exceptionReason,
@@ -68,12 +69,13 @@ export default function DutyRequirementsPage() {
         effectiveStartsOn: starts, effectiveEndsOn: ends, requiredTermHours: hours.trim() ? Number(hours) : null,
         minimumDailyHours: minimum === '' ? null : Number(minimum), permittedWeekdays: days,
         maximumDailyHours: maximum === '' ? null : Number(maximum),
+        maximumWeeklyHours: maximumWeekly === '' ? null : Number(maximumWeekly),
         permittedTimeWindows: windows,
         ...(scopeType === 'student' && reason.trim() ? { exceptionReason: reason.trim() } : {}),
       };
       if (editingPolicyId) await apiPut(`/duty-schedules/admin/policies/${editingPolicyId}`, policy);
       else await apiPost('/duty-schedules/admin/policies', policy);
-      setPolicyMessage(editingPolicyId ? 'Duty requirement updated and audited.' : 'Duty requirement saved and audited.'); setTick((n) => n + 1); setHours(''); setReason(''); setEditingPolicyId('');
+      setPolicyMessage(editingPolicyId ? 'Duty requirement updated and audited.' : 'Duty requirement saved and audited.'); setTick((n) => n + 1); setHours(''); setReason(''); setMaximumWeekly(''); setEditingPolicyId('');
     } catch (err) { setPolicyError(err.message); } finally { setBusy(false); }
   }
   function editPolicy(policy) {
@@ -81,6 +83,7 @@ export default function DutyRequirementsPage() {
     setStarts(policy.effectiveStartsOn); setEnds(policy.effectiveEndsOn); setHours(policy.requiredTermHours == null ? '' : String(policy.requiredTermHours));
     setMinimum(policy.minimumDailyHours == null ? '' : String(policy.minimumDailyHours));
     setMaximum(policy.maximumDailyHours == null ? '' : String(policy.maximumDailyHours));
+    setMaximumWeekly(policy.maximumWeeklyHours == null ? '' : String(policy.maximumWeeklyHours));
     setDays(policy.permittedWeekdays); setWindows(policy.permittedTimeWindows.map((window) => ({ startTime: window.startTime.slice(0, 5), endTime: window.endTime.slice(0, 5) })));
     setReason(policy.exceptionReason ?? '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -115,6 +118,7 @@ export default function DutyRequirementsPage() {
             <label className="text-sm text-muted">Required total term hours (optional)<input className={`mt-1 block w-full ${field}`} type="number" min="0.25" max="10000" step="0.25" placeholder="Assign individually under Academic Terms" value={hours} onChange={(e) => setHours(e.target.value)} /><span className="mt-1 block text-xs text-muted">Leave blank when students have different totals; their Academic Terms assignments will be used.</span></label>
             <label className="text-sm text-muted">Minimum hours per duty day<input className={`mt-1 block w-full ${field}`} type="number" min="0.25" max="24" step="0.25" placeholder={`Default ${context.defaultMinimumDailyHours}`} value={minimum} onChange={(e) => setMinimum(e.target.value)} /></label>
             <label className="text-sm text-muted">Maximum hours per duty day (optional)<input className={`mt-1 block w-full ${field}`} type="number" min="0.25" max="24" step="0.25" placeholder="No maximum" value={maximum} onChange={(e) => setMaximum(e.target.value)} /></label>
+            <label className="text-sm text-muted">Maximum hours per week (optional)<input className={`mt-1 block w-full ${field}`} type="number" min="0.25" max="168" step="0.25" placeholder="No maximum" value={maximumWeekly} onChange={(e) => setMaximumWeekly(e.target.value)} /></label>
             <fieldset className="md:col-span-2"><legend className="mb-2 text-sm text-muted">Permitted duty days</legend><div className="flex flex-wrap gap-3">{week.map((name, i) => <label key={name} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={days.includes(i + 1)} onChange={(e) => setDays((old) => e.target.checked ? [...old, i + 1].sort() : old.filter((day) => day !== i + 1))} />{name}</label>)}</div></fieldset>
             <fieldset className="md:col-span-2"><legend className="mb-2 text-sm text-muted">Permitted time windows</legend><div className="space-y-2">{windows.map((window, index) => <div key={index} className="flex flex-wrap items-end gap-3"><label className="text-sm text-muted">Window starts<input className={`mt-1 block ${field}`} type="time" required value={window.startTime} onChange={(e) => setWindows((items) => items.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} /></label><label className="text-sm text-muted">Window ends<input className={`mt-1 block ${field}`} type="time" required value={window.endTime} onChange={(e) => setWindows((items) => items.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} /></label>{windows.length > 1 && <Button type="button" onClick={() => setWindows((items) => items.filter((_, i) => i !== index))}>Remove window</Button>}</div>)}</div>{windows.length < 8 && <Button type="button" className="mt-2" onClick={() => setWindows((items) => [...items, { startTime: '12:00', endTime: '13:00' }])}>Add time window</Button>}</fieldset>
             <p className="self-end text-sm text-muted">Summer terms use the existing academic term type. Deadline: {context.term.completionDeadline ?? 'not configured'} (edit in Academic Terms).</p>
@@ -135,8 +139,8 @@ export default function DutyRequirementsPage() {
           {filteredPolicies.length ? <>
             <div className="hidden overflow-x-auto sm:block">
               <table className="w-full text-left text-sm">
-                <thead><tr className="border-b border-line text-muted"><th className="p-2">Scope</th><th className="p-2">Effective dates</th><th className="p-2">Required hours</th><th className="p-2">Min / max per day</th><th className="p-2">Days / windows</th><th className="p-2">Exception authorization</th><th className="p-2"></th></tr></thead>
-                <tbody>{filteredPolicies.map((p) => <tr key={p.id} className="border-b border-line"><td className="p-2">{names[p.scopeType]} · {p.scopeName}</td><td className="p-2">{p.effectiveStartsOn} – {p.effectiveEndsOn}</td><td className="p-2">{p.requiredTermHours == null ? 'Individual assignment' : `${p.requiredTermHours} h`}</td><td className="p-2">{p.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {p.maximumDailyHours ?? 'no cap'}</td><td className="p-2">{p.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {p.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ')}</td><td className="p-2">{p.exceptionReason ?? '—'}</td><td className="p-2"><Button type="button" onClick={() => editPolicy(p)}>Edit</Button></td></tr>)}</tbody>
+                <thead><tr className="border-b border-line text-muted"><th className="p-2">Scope</th><th className="p-2">Effective dates</th><th className="p-2">Required hours</th><th className="p-2">Min / max per day</th><th className="p-2">Max weekly</th><th className="p-2">Days / windows</th><th className="p-2">Exception authorization</th><th className="p-2"></th></tr></thead>
+                <tbody>{filteredPolicies.map((p) => <tr key={p.id} className="border-b border-line"><td className="p-2">{names[p.scopeType]} · {p.scopeName}</td><td className="p-2">{p.effectiveStartsOn} – {p.effectiveEndsOn}</td><td className="p-2">{p.requiredTermHours == null ? 'Individual assignment' : `${p.requiredTermHours} h`}</td><td className="p-2">{p.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {p.maximumDailyHours ?? 'no cap'}</td><td className="p-2">{p.maximumWeeklyHours == null ? 'No cap' : `${p.maximumWeeklyHours} h`}</td><td className="p-2">{p.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {p.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ')}</td><td className="p-2">{p.exceptionReason ?? '—'}</td><td className="p-2"><Button type="button" onClick={() => editPolicy(p)}>Edit</Button></td></tr>)}</tbody>
               </table>
             </div>
             <div className="divide-y divide-line sm:hidden">
@@ -147,6 +151,7 @@ export default function DutyRequirementsPage() {
                     <div><dt className="text-muted">Effective dates</dt><dd className="mt-0.5 break-words text-ink">{policy.effectiveStartsOn} – {policy.effectiveEndsOn}</dd></div>
                     <div><dt className="text-muted">Required hours</dt><dd className="mt-0.5 text-ink">{policy.requiredTermHours == null ? 'Individual assignment' : `${policy.requiredTermHours} h`}</dd></div>
                     <div><dt className="text-muted">Min / max per day</dt><dd className="mt-0.5 text-ink">{policy.minimumDailyHours ?? context.defaultMinimumDailyHours} h / {policy.maximumDailyHours ?? 'No cap'}</dd></div>
+                    <div><dt className="text-muted">Maximum weekly hours</dt><dd className="mt-0.5 text-ink">{policy.maximumWeeklyHours == null ? 'No cap' : `${policy.maximumWeeklyHours} h`}</dd></div>
                     <div className="col-span-2"><dt className="text-muted">Days / windows</dt><dd className="mt-0.5 break-words text-ink">{policy.permittedWeekdays.map((day) => week[day - 1].slice(0, 3)).join(', ')} · {policy.permittedTimeWindows.map((window) => `${window.startTime}–${window.endTime}`).join(', ')}</dd></div>
                     {policy.exceptionReason && <div className="col-span-2"><dt className="text-muted">Exception authorization</dt><dd className="mt-0.5 break-words text-ink">{policy.exceptionReason}</dd></div>}
                   </dl>

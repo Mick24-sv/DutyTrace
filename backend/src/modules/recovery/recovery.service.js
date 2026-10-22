@@ -2,6 +2,7 @@ import { query, withTransaction } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
 import { getStudentForecast } from '../forecast/forecast.service.js';
+import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 
 const notFound = () => new AppError(404, 'NOT_FOUND', 'Recovery plan not found.');
 const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -135,6 +136,9 @@ export async function submit({ user, termId, slots, ip }) {
       await db.query(`INSERT INTO duty_recovery_shifts (plan_id,institution_id,student_id,office_id,shift_date,starts_at,ends_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7)`, [plan.id,user.institutionId,user.id,assignment.office_id,slot.date,slot.startsAt,slot.endsAt]);
     }
+    await notifyOfficeSupervisors(db,{officeId:assignment.office_id,institutionId:user.institutionId,type:'recovery_plan_pending_review',
+      title:'Recovery plan needs review',message:'A Student Assistant submitted a missed-hours recovery plan for review.',
+      relatedType:'duty_recovery_plan',relatedId:plan.id,important:true,dedupeKey:`recovery-plan:${plan.id}:pending-review`});
     await recordAudit({ actorId:user.id, institutionId:user.institutionId, action:'recovery_plan.submitted', targetType:'duty_recovery_plan', targetId:plan.id,
       after:{ shiftCount:slots.length, proposedHours:total }, ip }, db);
     return planDetail(plan.id, db);
@@ -166,7 +170,7 @@ export async function queue(actor) {
 }
 
 export async function decide({ actor, id, decision, reason, ip }) {
-  return withTransaction(async (db) => {
+  try { return await withTransaction(async (db) => {
     const { rows: [plan] } = await db.query(`SELECT * FROM duty_recovery_plans WHERE id=$1 FOR UPDATE`, [id]);
     if (!plan || plan.institution_id !== actor.institutionId || (actor.role==='supervisor' && plan.office_id !== actor.office?.id)) throw notFound();
     if (plan.status !== 'pending_review') throw new AppError(409,'INVALID_TRANSITION','This recovery request is no longer pending review.');
@@ -181,9 +185,30 @@ export async function decide({ actor, id, decision, reason, ip }) {
       await db.query(`UPDATE duty_recovery_shifts SET status='approved' WHERE plan_id=$1`,[id]);
     } else await db.query(`UPDATE duty_recovery_shifts SET status='rejected' WHERE plan_id=$1`,[id]);
     await db.query(`UPDATE duty_recovery_plans SET status=$2,reviewed_by=$3,reviewed_at=now(),review_reason=$4 WHERE id=$1`,[id,decision==='approve'?'approved':'rejected',actor.id,reason||null]);
+    await db.query(`UPDATE notifications SET resolved_at=COALESCE(resolved_at,now()),updated_at=now()
+      WHERE related_type='duty_recovery_plan' AND related_id=$1 AND type IN('recovery_plan_pending_review','recovery_plan_conflict','recovery_plan_modification_required')`,[id]);
+    await createNotification(db,{recipientId:plan.student_id,institutionId:plan.institution_id,type:`recovery_plan_${decision==='approve'?'approved':'rejected'}`,
+      title:decision==='approve'?'Recovery plan approved':'Recovery plan rejected',
+      message:reason|| (decision==='approve'?'Your recovery shifts are approved. Attendance is still required for the hours to count.':'Your recovery plan was not approved. Review supervisor feedback and submit an updated proposal if appropriate.'),
+      relatedType:'duty_recovery_plan',relatedId:id,important:true,dedupeKey:`recovery-plan:${id}:${decision}`});
     await recordAudit({actorId:actor.id,institutionId:actor.institutionId,action:`recovery_plan.${decision==='approve'?'approved':'rejected'}`,targetType:'duty_recovery_plan',targetId:id,before:{status:plan.status},after:{status:decision==='approve'?'approved':'rejected',reason:reason||null},ip},db);
     return planDetail(id,db);
-  });
+  }); } catch(error) {
+    if(error.code==='RECOVERY_CONFLICT'){
+      const {rows:[plan]}=await query('SELECT id,student_id,institution_id,office_id FROM duty_recovery_plans WHERE id=$1 AND institution_id=$2',[id,actor.institutionId]);
+      if(plan) await withTransaction(async db=>{
+        const message='Your proposed recovery periods no longer fit the approved schedule or office capacity. Withdraw this request and submit revised shifts for review.';
+        await createNotification(db,{recipientId:plan.student_id,institutionId:plan.institution_id,type:'recovery_plan_modification_required',
+          title:'Recovery shifts need modification',message,relatedType:'duty_recovery_plan',relatedId:id,important:true,severity:'warning',
+          actionUrl:'/student/schedule',dedupeKey:`recovery-plan:${id}:modification-required`});
+        await notifyOfficeSupervisors(db,{officeId:plan.office_id,institutionId:plan.institution_id,type:'recovery_plan_conflict',
+          title:'Recovery plan needs updated availability',message:'An approved recovery proposal no longer fits the duty schedule or office capacity. The request remains unchanged.',
+          relatedType:'duty_recovery_plan',relatedId:id,important:true,severity:'warning',actionUrl:'/supervisor/recovery-review',
+          dedupeKey:`recovery-plan:${id}:conflict-review`});
+      });
+    }
+    throw error;
+  }
 }
 
 export async function withdraw({user,id,ip}) {
@@ -193,6 +218,8 @@ export async function withdraw({user,id,ip}) {
     if(plan.status!=='pending_review') throw new AppError(409,'INVALID_TRANSITION','Only a pending request can be withdrawn.');
     await db.query(`UPDATE duty_recovery_plans SET status='withdrawn' WHERE id=$1`,[id]);
     await db.query(`UPDATE duty_recovery_shifts SET status='cancelled' WHERE plan_id=$1`,[id]);
+    await db.query(`UPDATE notifications SET resolved_at=COALESCE(resolved_at,now()),updated_at=now()
+      WHERE related_type='duty_recovery_plan' AND related_id=$1 AND type IN('recovery_plan_pending_review','recovery_plan_conflict','recovery_plan_modification_required')`,[id]);
     await recordAudit({actorId:user.id,institutionId:user.institutionId,action:'recovery_plan.withdrawn',targetType:'duty_recovery_plan',targetId:id,before:{status:plan.status},after:{status:'withdrawn'},ip},db);
     return planDetail(id,db);
   });

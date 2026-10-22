@@ -6,6 +6,8 @@ import { recordAudit } from '../audit/audit.service.js';
 import { buildSessions } from '../attendance/calc.js';
 import { getStudentForecast, getInstitutionForecasts } from '../forecast/forecast.service.js';
 import { termRequirementForStudent } from '../duty-requirements/duty-requirements.service.js';
+import { effectiveEvents } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { createNotification } from '../notifications/notifications.service.js';
 
 const POLICY = 'keep_original';
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to access this transition.');
@@ -34,11 +36,7 @@ async function sourceDtrIssues(studentIds, term, db) {
 async function institutionIncompleteSessions(institutionId,term,db){
   const {rows:students}=await db.query(`SELECT id FROM users WHERE institution_id=$1 AND role='student'`,[institutionId]);
   const ids=students.map(s=>s.id); if(!ids.length)return 0;
-  const {rows}=await db.query(`SELECT user_id,id,event_type,recorded_at FROM attendance_events
-    WHERE user_id=ANY($1::uuid[]) AND recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-      AND recorded_at < (($3::date + 2)::timestamp AT TIME ZONE $4) ORDER BY user_id,recorded_at,seq`,[ids,term.starts_on,term.ends_on,term.timezone]);
-  const events=new Map(ids.map(id=>[id,[]]));
-  for(const e of rows)events.get(e.user_id).push({id:e.id,eventType:e.event_type,recordedAt:e.recorded_at});
+  const events=await effectiveEvents(ids,{startDate:term.starts_on,nextDate:term.ends_on,timezone:term.timezone,db});
   const now=(await db.query('SELECT now() AS now')).rows[0].now;
   let count=0;
   for(const id of ids)count+=buildSessions(events.get(id),{now,timeZone:term.timezone,maxSessionSeconds:env.maxSessionHours*3600})
@@ -63,14 +61,8 @@ async function transitionRows({actor,sourceTerm,destinationTerm,studentIds,db}) 
       WHERE u.id=ANY($1::uuid[]) AND u.institution_id=$2 AND u.role='student'`,[ids,actor.institutionId]);
   if(students.length!==ids.length) throw forbidden();
   const dtrIssues=await sourceDtrIssues(ids,sourceTerm,db);
-  const {rows:events}=await db.query(
-    `SELECT user_id,id,event_type,recorded_at FROM attendance_events
-      WHERE user_id=ANY($1::uuid[]) AND recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-        AND recorded_at < (($3::date + 2)::timestamp AT TIME ZONE $4)
-      ORDER BY user_id,recorded_at,seq`,[ids,sourceTerm.starts_on,sourceTerm.ends_on,sourceTerm.timezone]);
-  const eventFingerprint=events.map(e=>[e.user_id,e.id,e.event_type,e.recorded_at]);
-  const eventsByStudent=new Map(ids.map(id=>[id,[]]));
-  for(const event of events) eventsByStudent.get(event.user_id).push({id:event.id,eventType:event.event_type,recordedAt:event.recorded_at});
+  const eventsByStudent=await effectiveEvents(ids,{startDate:sourceTerm.starts_on,nextDate:sourceTerm.ends_on,timezone:sourceTerm.timezone,db});
+  const eventFingerprint=ids.flatMap(studentId=>(eventsByStudent.get(studentId)??[]).map(e=>[studentId,e.id,e.eventType,e.recordedAt]));
   const now=(await db.query('SELECT now() AS now')).rows[0].now;
   const sessionIssues=new Map();
   for(const studentId of ids){
@@ -260,6 +252,15 @@ export async function finalize({actor,id,ip}){
     const {rows:[closed]}=await db.query(`UPDATE academic_terms SET finalized_at=now(),finalized_by=$2 WHERE id=$1 AND finalized_at IS NULL RETURNING finalized_at`,[source.id,actor.id]);
     if(!closed)throw new AppError(409,'SOURCE_TERM_FINALIZED','The source term was finalized by another request.');
     await db.query(`UPDATE semester_transitions SET status='finalized',finalized_by=$2,finalized_at=now() WHERE id=$1`,[id,actor.id]);
+    const destinationStudents=await db.query(`SELECT student_id,destination_required_hours,student_status
+      FROM semester_transition_students WHERE transition_id=$1 ORDER BY student_id`,[id]);
+    for(const student of destinationStudents.rows){
+      const requirement=student.destination_required_hours==null?'No destination-term duty-hour requirement was assigned in this transition.':
+        `Your destination-term duty-hour requirement is ${Number(student.destination_required_hours).toFixed(2)} hours.`;
+      await createNotification(db,{recipientId:student.student_id,institutionId:actor.institutionId,type:'semester_transition_finalized',
+        title:'Semester transition finalized',message:`The transition to ${destination.academic_year} ${destination.semester} was finalized. ${requirement} Outstanding source-term hours remain separate and were not transferred.`,
+        relatedType:'academic_term',relatedId:destination.id,important:true,severity:'informational',actionUrl:'/student',dedupeKey:`semester-transition:${id}:finalized:${student.student_id}`});
+    }
     await recordAudit({actorId:actor.id,institutionId:actor.institutionId,action:'semester_transition.finalized',targetType:'semester_transition',targetId:id,before:{status:transition.status},after:{status:'finalized',sourceTermId:source.id,destinationTermId:destination.id,summary:transition.preview_data.summary},ip},db);
     return {id,status:'finalized',finalizedAt:closed.finalized_at,summary:transition.preview_data.summary};
   });

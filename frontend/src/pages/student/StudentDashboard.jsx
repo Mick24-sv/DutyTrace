@@ -36,6 +36,7 @@ export default function StudentDashboard() {
   const absences = useApiData('/absences/summary');
   const cases = useApiData('/cases/summary');
   const forecast = useApiData(selectedTermId ? `/forecast/mine?termId=${selectedTermId}` : '/forecast/mine');
+  const discrepancySummary = useApiData('/attendance-discrepancies/summary');
 
   const terms = semesterTerms.data?.terms ?? [];
   const currentTerm = terms.find((term) => term.isCurrent);
@@ -110,9 +111,11 @@ export default function StudentDashboard() {
         </div>
       )}
 
+
       {/* Primary KPI Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
+          compact
           label="Today's status"
           value={status.loading ? '…' : timedIn ? 'Timed in' : 'Not timed in'}
           hint={
@@ -123,12 +126,14 @@ export default function StudentDashboard() {
           icon={Timer}
         />
         <StatCard
+          compact
           label="Recorded hours"
           value={selectedTerm ? formatHours(recordedSemesterHours) : semesterTerms.loading ? '…' : '—'}
           hint={selectedTerm ? `${selectedTerm.academicYear} · ${selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}` : 'Semester attendance hours'}
           icon={Hourglass}
         />
         <StatCard
+          compact
           label="Verified hours"
           value={selectedTerm ? formatHours(verifiedSemesterHours) : semesterTerms.loading ? '…' : '—'}
           hint={
@@ -139,6 +144,7 @@ export default function StudentDashboard() {
           icon={CheckCircle2}
         />
         <StatCard
+          compact
           label="Remaining semester hours"
           value={
             !selectedTerm && semesterTerms.loading
@@ -158,6 +164,11 @@ export default function StudentDashboard() {
         />
       </div>
 
+      <Link to="/student/discrepancies" className="mt-5 flex min-w-0 items-start justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-card transition hover:border-teal/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:flex-row sm:items-center sm:p-4">
+        <span className="min-w-0"><b className="block text-sm text-ink">Attendance discrepancies</b><span className="mt-1 block text-xs leading-relaxed text-muted sm:text-sm">Review flagged records, submit explanations, and track supervisor decisions.</span></span>
+        <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-warn-bg px-2.5 py-1 text-xs font-medium text-warn-fg sm:px-3 sm:text-sm">{discrepancySummary.loading?'…':`${discrepancySummary.data?.open??0} unresolved`}</span>
+      </Link>
+
       <Card
         className="mt-6"
         title="Semester progress"
@@ -166,7 +177,7 @@ export default function StudentDashboard() {
             aria-label="Academic term"
             value={selectedTermId}
             onChange={(event) => setSelectedTermId(event.target.value)}
-            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+            className="h-10 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:w-auto"
           >
             <option value="">Select academic term</option>
             {terms.map((term) => (
@@ -192,15 +203,15 @@ export default function StudentDashboard() {
           </div>
         )}
         {selectedTerm?.requirementAssigned && (
-          <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 space-y-3">
+          <div className="flex min-w-0 flex-col items-start gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
               <TrendingUp className="h-4 w-4 text-teal" />
-              <span className="font-medium text-ink">
+              <span className="min-w-0 break-words font-medium text-ink">
                 {selectedTerm.academicYear} · {selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge tone={progressPercent >= 100 ? 'approved' : progressPercent >= 50 ? 'info' : 'pending'}>
                 {progressPercent}% Complete
               </Badge>
@@ -245,17 +256,17 @@ export default function StudentDashboard() {
           !forecast.data.status ? (
             <p className="text-sm text-muted">{forecast.data.message || 'No completion forecast available for this term.'}</p>
           ) : (
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {/* 4-stat forecast grid */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-line bg-canvas/60 p-3">
-                <span className="text-xs text-muted block">Projected Completion</span>
-                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
+                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Projected Completion</span>
+                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
                   {forecast.data.isCompleted
                     ? 'Requirement Met'
                     : forecast.data.projectedCompletionDate || '—'}
                 </span>
-                <span className="text-[11px] text-muted">
+                <span className="block break-words text-[11px] leading-snug text-muted">
                   {forecast.data.isCompleted
                     ? 'All required hours verified'
                     : forecast.data.estimatedWeeksRemaining != null
@@ -264,40 +275,40 @@ export default function StudentDashboard() {
                 </span>
               </div>
 
-              <div className="rounded-lg border border-line bg-canvas/60 p-3">
-                <span className="text-xs text-muted block">Actual Attendance Pace</span>
-                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
+                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Actual Attendance Pace</span>
+                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
                   {forecast.data.actualWeeklyPace > 0
                     ? `${forecast.data.actualWeeklyPace.toFixed(2)} h/wk`
                     : '0.00 h/wk'}
                 </span>
-                <span className="text-[11px] text-muted">
+                <span className="block break-words text-[11px] leading-snug text-muted">
                   Over past {forecast.data.historicalPeriodWeeks || 4}-week period
                 </span>
               </div>
 
-              <div className="rounded-lg border border-line bg-canvas/60 p-3">
-                <span className="text-xs text-muted block">Required Weekly Pace</span>
-                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
+                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Required Weekly Pace</span>
+                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
                   {forecast.data.requiredWeeklyPace != null
                     ? `${forecast.data.requiredWeeklyPace.toFixed(2)} h/wk`
                     : '—'}
                 </span>
-                <span className="text-[11px] text-muted">
+                <span className="block break-words text-[11px] leading-snug text-muted">
                   {forecast.data.deadline
                     ? `To meet deadline of ${forecast.data.deadline}`
                     : 'No deadline set'}
                 </span>
               </div>
 
-              <div className="rounded-lg border border-line bg-canvas/60 p-3">
-                <span className="text-xs text-muted block">Confirmed Schedule</span>
-                <span className="mt-1 text-base font-semibold text-ink block font-mono">
+              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
+                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Confirmed Schedule</span>
+                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
                   {forecast.data.hasConfirmedSchedule
                     ? `${forecast.data.confirmedWeeklyHours.toFixed(2)} h/wk`
                     : 'None'}
                 </span>
-                <span className="text-[11px] text-muted">
+                <span className="block break-words text-[11px] leading-snug text-muted">
                   {forecast.data.hasConfirmedSchedule
                     ? `${forecast.data.confirmedFutureHours.toFixed(2)} h future shifts`
                     : 'No approved schedule'}
@@ -307,7 +318,7 @@ export default function StudentDashboard() {
 
             {/* Explanation / reason callout */}
             <div
-              className={`rounded-lg p-3 text-sm flex items-start gap-2.5 ${
+              className={`flex min-w-0 items-start gap-2.5 rounded-lg p-3 text-sm ${
                 forecast.data.status === 'completed' || forecast.data.status === 'on_track'
                   ? 'bg-ok-bg text-ok-fg'
                   : forecast.data.status === 'at_risk'
@@ -322,9 +333,9 @@ export default function StudentDashboard() {
               ) : (
                 <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               )}
-              <div>
+              <div className="min-w-0">
                 <p className="font-semibold">{forecast.data.statusLabel}</p>
-                <p className="mt-0.5 text-xs opacity-95">{forecast.data.reason}</p>
+                <p className="mt-0.5 break-words text-xs leading-relaxed opacity-95">{forecast.data.reason}</p>
               </div>
             </div>
 
@@ -338,14 +349,17 @@ export default function StudentDashboard() {
       <Card className="mt-5" title="Weekly duty schedule" action={<Link to="/student/schedule" className="text-sm font-medium text-teal hover:underline">Manage preferences</Link>}>
         {assignedSchedule ? <>
           <p className="mb-3 text-sm text-muted">Confirmed schedule · {assignedSchedule.effectiveStartsOn} to {assignedSchedule.effectiveEndsOn}</p>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{assignedSchedule.days.map((day) => <div key={day.weekday} className="rounded-lg border border-line p-3 text-sm">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{assignedSchedule.days.map((day) => <div key={day.weekday} className="min-w-0 rounded-lg border border-line p-3 text-sm">
             <p className="font-medium">{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day.weekday - 1]}</p>
-            <p className="mt-1 text-muted">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}{day.afternoonStartsAt ? ` · ${formatDutyTime(day.afternoonStartsAt)}–${formatDutyTime(day.afternoonEndsAt)}` : ''}</p>
+            <div className={`mt-2 grid gap-2 ${day.afternoonStartsAt ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              <div className="min-w-0 rounded-md bg-canvas p-2"><span className="block text-[10px] font-medium uppercase tracking-wide text-muted">Morning</span><span className="mt-0.5 block break-words text-[11px] leading-snug text-ink">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</span></div>
+              {day.afternoonStartsAt && <div className="min-w-0 rounded-md bg-canvas p-2"><span className="block text-[10px] font-medium uppercase tracking-wide text-muted">Afternoon</span><span className="mt-0.5 block break-words text-[11px] leading-snug text-ink">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</span></div>}
+            </div>
           </div>)}</div>
         </> : <p className="text-sm text-muted">{scheduleEntry?.proposal ? `Preference ${scheduleEntry.proposal.status.replaceAll('_', ' ')}. The supervisor has not confirmed your duty schedule yet.` : 'No confirmed duty schedule for this term. Submit your preferred duty days and times for supervisor review.'}</p>}
       </Card>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid gap-4 lg:grid-cols-3 lg:gap-6">
         {/* Recent Sessions & Incomplete Alerts */}
         <Card
           title="Recent attendance sessions"
@@ -365,19 +379,17 @@ export default function StudentDashboard() {
           {recent.length > 0 && (
             <ul className="divide-y divide-line">
               {recent.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-ink">{s.date}</span>
-                    <span className="text-muted text-xs">
-                      ({formatTime(s.timeIn, tz)} – {formatTime(s.timeOut, tz)})
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted font-mono">
-                      {s.counted ? formatDuration(s.seconds) : '—'}
-                    </span>
-                    <SessionBadge status={s.status} />
-                  </div>
+                <li key={s.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink">{s.date}</span>
+                      <span className="mt-0.5 block break-words text-xs text-muted">{formatTime(s.timeIn, tz)} – {formatTime(s.timeOut, tz)}</span>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="font-mono text-xs text-muted sm:text-sm">
+                        {s.counted ? formatDuration(s.seconds) : '—'}
+                      </span>
+                      <SessionBadge status={s.status} />
+                    </div>
                 </li>
               ))}
             </ul>
@@ -401,7 +413,7 @@ export default function StudentDashboard() {
         </Card>
 
         {/* Right column: DTR, Absences, Compliance */}
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6">
           <Card
             title="Monthly DTR status"
             action={
@@ -439,7 +451,7 @@ export default function StudentDashboard() {
 
           <Card title="Notices & Compliance">
             <ul className="space-y-3 text-sm">
-              <li className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-canvas transition">
+              <li className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-canvas transition">
                 <div className="flex items-center gap-2">
                   <CalendarOff className="h-4 w-4 text-muted" />
                   <Link to="/student/absences" className="font-medium text-ink hover:text-teal">
@@ -458,7 +470,7 @@ export default function StudentDashboard() {
                   )}
                 </div>
               </li>
-              <li className="flex items-center justify-between gap-2 p-2 rounded-md hover:bg-canvas transition">
+              <li className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-canvas transition">
                 <div className="flex items-center gap-2">
                   <FolderCheck className="h-4 w-4 text-muted" />
                   <Link to="/student/cases" className="font-medium text-ink hover:text-teal">

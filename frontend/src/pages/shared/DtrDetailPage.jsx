@@ -94,7 +94,8 @@ export default function DtrDetailPage() {
       )}
       {dtr.status === 'approved' && (
         <p role="status" className="mb-4 rounded-card bg-ok-bg px-4 py-3 text-sm text-ok-fg">
-          Approved. Supervisor-verified hours (revision {dtr.verifiedRevision}): <strong>{dtr.verifiedHours.toFixed(2)} h</strong>. This record is locked.
+          Approved. Effective verified hours (revision {dtr.verifiedRevision}): <strong>{dtr.verifiedHours.toFixed(2)} h</strong>. This record is locked.
+          {dtr.adjusted&&<> An approved attendance adjustment of {dtr.adjustmentHours.toFixed(2)} h is linked separately; the finalized DTR snapshot remains unchanged.</>}
         </p>
       )}
       {!isCurrent && (
@@ -128,7 +129,7 @@ export default function DtrDetailPage() {
 
       <DtrDocument
         snapshot={snap}
-        verifiedHours={dtr.verifiedHours}
+        verifiedHours={dtr.originalVerifiedHours ?? dtr.verifiedHours}
         isApprovedRevision={dtr.status === 'approved' && dtr.verifiedRevision === dtr.revision.number}
       />
 

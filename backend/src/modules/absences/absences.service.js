@@ -2,6 +2,7 @@
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { effectivePolicyForDate } from '../policy-templates/policy-templates.service.js';
 import { createNotification, notifyInstitutionAdmins, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { assertCanView, forbidden, isOfficeSupervisor, isOwner } from '../common/access.js';
 import {
@@ -57,11 +58,15 @@ export async function create({ user, type, startDate, endDate, reason, ip }) {
   if (Object.keys(errors).length) throw new AppError(400, 'VALIDATION_ERROR', 'Please check the highlighted fields.', errors);
 
   return withTransaction(async (db) => {
+    const effectivePolicy=await effectivePolicyForDate({institutionId:user.institutionId,date:startDate,officeId:user.office.id,studentId:user.id,db});
+    const policySnapshot=effectivePolicy?{term:effectivePolicy.term,effectiveDate:effectivePolicy.effectiveDate,
+      configuration:effectivePolicy.configuration,origins:effectivePolicy.origins,assignments:effectivePolicy.assignments}:null;
+    const policyVersionId=effectivePolicy?.assignments?.at(-1)?.versionId??null;
     // submitted_at is the database clock (column default); the request cannot supply it.
     const { rows } = await db.query(
-      `INSERT INTO absence_notices (user_id, office_id, absence_type, start_date, end_date, reason)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [user.id, user.office.id, type, startDate, endDate, reason],
+      `INSERT INTO absence_notices (user_id, office_id, absence_type, start_date, end_date, reason,policy_version_id,policy_snapshot)
+       VALUES ($1, $2, $3, $4, $5, $6,$7,$8::jsonb) RETURNING id`,
+      [user.id, user.office.id, type, startDate, endDate, reason,policyVersionId,policySnapshot?JSON.stringify(policySnapshot):null],
     );
     const id = rows[0].id;
     await addEvent(db, { id, action: 'submitted', from: null, to: 'pending', actor: user });
@@ -135,6 +140,10 @@ async function review({ user, id, to, action, response, ip }) {
     if (!isOfficeSupervisor(user, row)) throw forbidden();
     if (!canMoveAbsence(row.status, to)) {
       throw new AppError(409, 'INVALID_TRANSITION', `A notice that is "${row.status.replace('_', ' ')}" cannot become "${to.replace('_', ' ')}".`);
+    }
+    if(['acknowledged','reviewed'].includes(to)&&row.policy_snapshot?.configuration?.absence?.supportingDocumentRequired===true){
+      const {rows:[docs]}=await db.query('SELECT count(*)::int AS count FROM documents WHERE absence_id=$1',[id]);
+      if(!Number(docs.count))throw new AppError(409,'POLICY_DOCUMENT_REQUIRED','This institution policy requires a supporting document before an absence notice can be acknowledged or reviewed.');
     }
     await db.query(
       `UPDATE absence_notices SET status = $2, response = COALESCE($3, response),

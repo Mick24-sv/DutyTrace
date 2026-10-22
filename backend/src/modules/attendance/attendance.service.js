@@ -4,6 +4,9 @@ import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
 import { readPayload } from '../qr/qr.service.js';
 import { buildSessions, summarizeMonth } from './calc.js';
+import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { reconcile as reconcileDiscrepancies } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { effectivePolicyForCurrentDate } from '../policy-templates/policy-templates.service.js';
 
 const maxSessionSeconds = () => env.maxSessionHours * 3600;
 
@@ -11,8 +14,14 @@ const maxSessionSeconds = () => env.maxSessionHours * 3600;
 // Current state is decided by the user's most recent event.
 export async function getState(userId, db = { query }) {
   const { rows } = await db.query(
-    `SELECT event_type, recorded_at FROM attendance_events
-     WHERE user_id = $1 ORDER BY recorded_at DESC, seq DESC LIMIT 1`,
+    `SELECT event_type,recorded_at FROM (
+       SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=$1
+         AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
+       UNION ALL
+       SELECT x.value->>'eventType', (x.value->>'recordedAt')::timestamptz, NULL::bigint
+         FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value)
+         WHERE a.student_id=$1
+     ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1`,
     [userId],
   );
   const last = rows[0];
@@ -28,7 +37,7 @@ const reject = (status, code, message) => new AppError(status, code, message);
 // The timestamp is the database clock (default now()); the request cannot supply one.
 export async function scan({ user, action, qrPayload, ip, userAgent }) {
   try {
-    return await withTransaction(async (db) => {
+    const result = await withTransaction(async (db) => {
       // 1. The QR code must be genuine (signed by us) ...
       const qrId = readPayload(qrPayload);
       if (!qrId) throw reject(400, 'INVALID_QR', 'This is not a valid DutyTrace QR code.');
@@ -62,10 +71,30 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
         throw reject(409, 'NO_ACTIVE_SESSION', 'You are not timed in, so there is nothing to time out of.');
       }
 
+      const effectivePolicy=await effectivePolicyForCurrentDate({institutionId:user.institutionId,officeId:qr.office_id,studentId:user.id,db});
+      const attendanceRules=effectivePolicy?.configuration?.attendance??{};
+      if(action==='time_in'&&attendanceRules.attendanceOutsideApprovedShift==='block'){
+        const hasApprovedWindow=await db.query(`SELECT EXISTS(
+          SELECT 1 FROM student_duty_schedules s JOIN academic_terms t ON t.id=s.term_id
+          JOIN student_duty_schedule_days d ON d.schedule_id=s.id
+          WHERE s.student_id=$1 AND s.institution_id=$2 AND s.office_id=$3 AND s.status='approved'
+            AND s.effective_starts_on<=(now() AT TIME ZONE t.timezone)::date
+            AND (s.effective_ends_on IS NULL OR s.effective_ends_on>=(now() AT TIME ZONE t.timezone)::date)
+            AND d.weekday=extract(isodow FROM (now() AT TIME ZONE t.timezone)::date)
+            AND ((now() AT TIME ZONE t.timezone)::time BETWEEN d.starts_at-($4*interval '1 minute') AND d.ends_at+($5*interval '1 minute')
+              OR (d.afternoon_starts_at IS NOT NULL AND (now() AT TIME ZONE t.timezone)::time BETWEEN d.afternoon_starts_at-($4*interval '1 minute') AND d.afternoon_ends_at+($5*interval '1 minute')))
+        ) AS allowed`,[user.id,user.institutionId,qr.office_id,
+          attendanceRules.earlyClockInToleranceMinutes??0,attendanceRules.lateClockOutToleranceMinutes??0]);
+        if(!hasApprovedWindow.rows[0]?.allowed)throw reject(403,'OUTSIDE_APPROVED_SHIFT','This institution policy only allows attendance scans during an approved duty shift.');
+      }
+      const versionId=effectivePolicy?.assignments?.at(-1)?.versionId??null;
+      const policySnapshot=effectivePolicy?{term:effectivePolicy.term,effectiveDate:effectivePolicy.effectiveDate,
+        configuration:effectivePolicy.configuration,origins:effectivePolicy.origins,assignments:effectivePolicy.assignments}:null;
+
       const { rows } = await db.query(
-        `INSERT INTO attendance_events (user_id, office_id, event_type, qr_code_id, source, ip_address, user_agent)
-         VALUES ($1, $2, $3, $4, 'qr', $5, $6) RETURNING id, recorded_at`,
-        [user.id, qr.office_id, action, qr.id, ip, userAgent?.slice(0, 300) ?? null],
+        `INSERT INTO attendance_events (user_id, office_id, event_type, qr_code_id, source, ip_address, user_agent,policy_version_id,policy_snapshot)
+         VALUES ($1, $2, $3, $4, 'qr', $5, $6,$7,$8::jsonb) RETURNING id, recorded_at`,
+        [user.id, qr.office_id, action, qr.id, ip, userAgent?.slice(0, 300) ?? null,versionId,policySnapshot?JSON.stringify(policySnapshot):null],
       );
       const event = rows[0];
 
@@ -87,6 +116,10 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
         session,
       };
     });
+    // Scan processing also reconciles this student's ended approved shifts. A separate
+    // deployment cron endpoint handles missed shifts when nobody scans later that day.
+    await reconcileDiscrepancies({institutionId:user.institutionId,studentId:user.id}).catch(()=>{});
+    return result;
   } catch (err) {
     // Log refused scans (outside the rolled-back transaction) so odd patterns are visible.
     if (err instanceof AppError && err.status < 500) {
@@ -118,19 +151,7 @@ async function resolveMonth(requested) {
 // month boundary still pairs up correctly. Only sessions that START in the
 // month are reported for it.
 async function fetchEvents(userIds, { startDate, nextDate }) {
-  const { rows } = await query(
-    `SELECT user_id, id, event_type, recorded_at FROM attendance_events
-     WHERE user_id = ANY($1::uuid[])
-       AND recorded_at >= (($2::date - 2)::timestamp AT TIME ZONE $4)
-       AND recorded_at <  (($3::date + 2)::timestamp AT TIME ZONE $4)
-     ORDER BY user_id, recorded_at, seq`,
-    [userIds, startDate, nextDate, env.timezone],
-  );
-  const byUser = new Map(userIds.map((id) => [id, []]));
-  for (const r of rows) {
-    byUser.get(r.user_id).push({ id: r.id, eventType: r.event_type, recordedAt: r.recorded_at });
-  }
-  return byUser;
+  return effectiveEvents(userIds, { startDate, nextDate, timezone: env.timezone });
 }
 
 const summarize = (events, range) =>
@@ -149,7 +170,10 @@ async function verifiedSeconds(userIds, month) {
      WHERE user_id = ANY($1::uuid[]) AND month = $2 AND status = 'approved'`,
     [userIds, month],
   );
-  return new Map(rows.map((r) => [r.user_id, r.verified_seconds]));
+  const result=new Map(rows.map((r) => [r.user_id, r.verified_seconds]));
+  const adjustments=await verifiedAdjustmentSeconds(userIds,month,month);
+  for(const [id,seconds] of adjustments) if(result.has(id)) result.set(id,Number(result.get(id))+seconds);
+  return result;
 }
 
 const withVerified = (summary, secs) =>
@@ -177,8 +201,13 @@ export async function officeSummary(officeId, requestedMonth) {
   const ids = students.map((s) => s.id);
   const events = await fetchEvents(ids, range);
   const { rows: last } = await query(
-    `SELECT DISTINCT ON (user_id) user_id, event_type, recorded_at FROM attendance_events
-     WHERE user_id = ANY($1::uuid[]) ORDER BY user_id, recorded_at DESC, seq DESC`,
+    `SELECT u.id AS user_id,last.event_type,last.recorded_at FROM users u
+     LEFT JOIN LATERAL (SELECT event_type,recorded_at FROM (
+       SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
+         AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
+       UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
+         FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+     ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1) last ON true WHERE u.id=ANY($1::uuid[])`,
     [ids],
   );
   const lastBy = new Map(last.map((r) => [r.user_id, r]));
