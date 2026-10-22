@@ -4,7 +4,12 @@
 // The session lives in an httpOnly cookie, so the browser sends it for us
 // (credentials: 'include'); JavaScript never sees the token.
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+// Production traffic must use the frontend origin so Vercel can proxy /api to
+// Render and the browser can retain the same-site session cookie. The Vite
+// override remains available for local development.
+const BASE_URL = import.meta.env.PROD
+  ? '/api'
+  : (import.meta.env.VITE_API_BASE_URL ?? '/api');
 
 export class ApiError extends Error {
   constructor(message, code, status, details) {
