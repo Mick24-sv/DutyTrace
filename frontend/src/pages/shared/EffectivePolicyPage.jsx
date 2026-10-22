@@ -1,0 +1,32 @@
+import { useEffect, useMemo, useState } from 'react';
+import PageHeader from '../../components/ui/PageHeader.jsx';
+import Card from '../../components/ui/Card.jsx';
+import { apiGet } from '../../services/api.js';
+
+const field='rounded-lg border border-line bg-surface px-3 py-2 text-sm';
+const labels={
+  duty:{requiredTermHours:'Required term hours',minimumDailyHours:'Minimum daily hours',maximumDailyHours:'Maximum daily hours',maximumWeeklyHours:'Maximum weekly hours',permittedWeekdays:'Permitted weekdays',permittedTimeWindows:'Permitted duty windows',completionDeadline:'Completion deadline'},
+  attendance:{earlyClockInToleranceMinutes:'Early clock-in tolerance (minutes)',lateClockOutToleranceMinutes:'Late clock-out tolerance (minutes)',missingClockOutGraceMinutes:'Missing clock-out grace (minutes)',duplicateScanHandling:'Duplicate scan handling',attendanceOutsideApprovedShift:'Outside-shift attendance',approvedOvertimeAllowed:'Approved overtime',correctionApproval:'Correction approval',supervisorReviewRequired:'Supervisor review',discrepancyEscalationHours:'Discrepancy escalation (hours)'},
+  absence:{advanceExplanationRequired:'Advance explanation required',submissionDeadlineHours:'Submission deadline (hours)',supervisorReviewRequired:'Supervisor review',supportingDocumentRequired:'Supporting document required',incompleteDutyExplanationRequired:'Incomplete duty explanation',endOfSemesterOutstandingHourReviewRequired:'End-of-term outstanding-hours review',administratorApprovalRequired:'Administrator approval',notifyStudent:'Notify student'},
+  dtr:{requiredMonthlyHours:'Required monthly hours',reviewSlaHours:'Review time limit (hours)',institutionName:'Institution name',headerText:'Header text',dateFormat:'Date format',timeFormat:'Time format',includeStudentInformation:'Student information',includeOfficeSupervisorInformation:'Office and supervisor information',includeReportingPeriod:'Reporting period',includeAttendanceColumns:'Attendance columns',includeDailyTotals:'Daily totals',includeMonthlyTotals:'Monthly totals',includeVerifiedAdjustments:'Verified adjustments',signatureFields:'Approval fields'},
+  transition:{outstandingHoursPolicy:'Outstanding-hours handling',requireStudentConfirmation:'Student confirmation',administratorApprovalRequired:'Administrator approval'},
+  risk:{completionWarningDays:'Completion warning (days)',criticalCompletionDays:'Critical completion (days)',deadlineReminderDays:'Deadline reminders (days before)',upcomingShiftReminderHours:'Upcoming shift reminder (hours)',escalationAfterHours:'Escalation delay (hours)'},
+};
+const sectionNames={duty:'Duty requirements and scheduling',attendance:'Attendance',absence:'Absence procedures',dtr:'Monthly DTR',transition:'Semester transition',risk:'Risk alerts'};
+function show(value){if(Array.isArray(value))return value.length?value.join(', '):'Not configured';if(typeof value==='boolean')return value?'Yes':'No';if(value&&typeof value==='object')return JSON.stringify(value);return value==null||value===''?'Not configured':String(value);}
+
+export default function EffectivePolicyPage(){
+  const [terms,setTerms]=useState([]);const [termId,setTermId]=useState('');const [policy,setPolicy]=useState(null);const [loading,setLoading]=useState(true);const [error,setError]=useState('');
+  useEffect(()=>{apiGet('/policy-templates/terms').then((data)=>{const items=data.terms??[];setTerms(items);const current=items.find((t)=>!t.finalized_at)||items[0];if(current)setTermId(current.id);else setLoading(false);}).catch((e)=>{setError(e.message);setLoading(false);});},[]);
+  useEffect(()=>{if(!termId)return;setLoading(true);setError('');apiGet(`/policy-templates/effective/${termId}`).then(setPolicy).catch((e)=>setError(e.message)).finally(()=>setLoading(false));},[termId]);
+  const grouped=useMemo(()=>Object.entries(policy?.configuration??{}).map(([section,values])=>({section,items:Object.entries(values??{})})).filter(({items})=>items.length),[policy]);
+  return <>
+    <PageHeader title="Effective Policy Templates" description="Published template settings assigned to your institution, office, or student account. More specific assignments override only the values they configure." />
+    <div className="mb-4 flex flex-wrap items-end gap-3"><label className="text-sm text-muted">Academic term<select className={`mt-1 block ${field}`} value={termId} onChange={(e)=>setTermId(e.target.value)}><option value="">Select term</option>{terms.map((term)=><option key={term.id} value={term.id}>{term.academic_year} · {term.semester}{term.finalized_at?' · finalized':''}</option>)}</select></label>{policy&&<span className="pb-2 text-xs text-muted">Effective date: {policy.effectiveDate}</span>}</div>
+    {error&&<p role="alert" className="mb-4 rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}{loading&&<p role="status" className="text-sm text-muted">Loading effective policies…</p>}
+    {!loading&&policy&&<>
+      <Card className="mb-4" title="Policy precedence"><p className="text-sm text-muted">Applicable values are combined from institution, office, and student policies. A more specific scope overrides only the fields it configures; other values inherit from broader scopes.</p><ol className="mt-3 flex flex-wrap gap-2 text-xs">{policy.assignments.map((item)=><li key={item.id} className="rounded-full bg-canvas px-3 py-1.5"><strong>{item.scopeType}</strong> · {item.templateName} v{item.version} · {item.effectiveStartsOn} to {item.effectiveEndsOn}</li>)}{!policy.assignments.length&&<li>No policy template assignments are active for this date.</li>}</ol></Card>
+      {grouped.length?grouped.map(({section,items})=><Card key={section} className="mb-4" title={sectionNames[section]??section}><dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">{items.map(([key,value])=><div key={key} className="min-w-0 border-b border-line pb-2"><dt className="text-xs text-muted">{labels[section]?.[key]??key}</dt><dd className="mt-1 break-words text-sm">{show(value)}</dd><dd className="mt-1 break-words text-[11px] text-muted">{policy.origins?.[`${section}.${key}`]?`${policy.origins[`${section}.${key}`].scopeType} · ${policy.origins[`${section}.${key}`].templateName} v${policy.origins[`${section}.${key}`].version}`:'Inherited configuration'}</dd></div>)}</dl></Card>):<Card><p className="text-sm text-muted">No policy template assignments are active for this term and date.</p></Card>}
+    </>}
+  </>;
+}
