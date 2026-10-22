@@ -32,8 +32,12 @@ export const requireRole = (...roles) => (req, _res, next) => {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export const originCheck = (req, _res, next) => {
   const origin = req.headers.origin;
-  if (!SAFE_METHODS.has(req.method) && origin && origin !== env.clientOrigin) {
-    return next(new AppError(403, 'BAD_ORIGIN', 'Request origin is not allowed.'));
+  if (!SAFE_METHODS.has(req.method)) {
+    const hasSessionCookie = Boolean(req.cookies?.[env.sessionCookieName]);
+    const originMissingForSession = env.nodeEnv === 'production' && hasSessionCookie && !origin;
+    if (originMissingForSession || (origin && origin !== env.clientOrigin)) {
+      return next(new AppError(403, 'BAD_ORIGIN', 'Request origin is not allowed.'));
+    }
   }
   return next();
 };

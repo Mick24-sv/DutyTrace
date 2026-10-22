@@ -107,15 +107,18 @@ function SuccessState({ devResetUrl, emailConfigured }) {
       <div className="mb-4 flex items-start gap-3 rounded-lg bg-ok-bg px-4 py-3">
         <span className="mt-0.5 text-ok-fg" aria-hidden="true">✓</span>
         <p className="text-sm text-ok-fg">
-          {emailConfigured
-            ? 'If an account is associated with that email address, a password reset link has been sent. Please check your inbox (and spam folder).'
-            : 'Password reset email is not configured on this server. Contact your administrator for help.'}
+          {devResetUrl
+            ? 'Email delivery is not configured. Use the development-only reset link below.'
+            : emailConfigured
+              ? 'If an active account matches this address and email delivery succeeds, reset instructions will arrive. Check your inbox and spam folder.'
+              : 'Email-based password recovery is unavailable, and no reset link was created. Contact your institution administrator to confirm its approved recovery process.'}
         </p>
       </div>
-      <p className="text-sm text-muted">
-        The link will expire in <strong>30 minutes</strong>. If you don&apos;t receive it, you can
-        request another one after a few minutes.
-      </p>
+      {(emailConfigured || devResetUrl) && (
+        <p className="text-sm text-muted">
+          A delivered reset link expires in <strong>30 minutes</strong>. If no message arrives, the email service may be unavailable.
+        </p>
+      )}
 
       {devResetUrl && (
         <div className="mt-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">

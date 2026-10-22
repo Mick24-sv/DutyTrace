@@ -136,6 +136,10 @@ test('semester reminders use each assigned requirement, respect term timezone, a
     [fixtures.ids.studentB, fixtures.officeIds.B, dayRows[0].today.slice(0, 7)],
   );
   await query(
+    'INSERT INTO dtr_revisions (dtr_id, revision_no, snapshot, generated_by) VALUES ($1, 1, $2::jsonb, $3)',
+    [createdDtr.rows[0].id, JSON.stringify({ days: [], policy: {} }), fixtures.ids.studentB],
+  );
+  await query(
     `INSERT INTO dtr_events (dtr_id, revision_no, action, from_status, to_status, actor_id, created_at)
      VALUES ($1, 1, 'submitted', 'draft', 'submitted', $2, now() - interval '30 hours')`,
     [createdDtr.rows[0].id, fixtures.ids.studentB],
@@ -143,6 +147,10 @@ test('semester reminders use each assigned requirement, respect term timezone, a
   const approachingDtr = await query(
     `INSERT INTO monthly_dtrs (user_id, office_id, month, status) VALUES ($1, $2, '2000-01', 'submitted') RETURNING id`,
     [fixtures.ids.studentA, fixtures.officeIds.A],
+  );
+  await query(
+    'INSERT INTO dtr_revisions (dtr_id, revision_no, snapshot, generated_by) VALUES ($1, 1, $2::jsonb, $3)',
+    [approachingDtr.rows[0].id, JSON.stringify({ days: [], policy: {} }), fixtures.ids.studentA],
   );
   await query(
     `INSERT INTO dtr_events (dtr_id, revision_no, action, from_status, to_status, actor_id, created_at)

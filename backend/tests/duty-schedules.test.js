@@ -162,7 +162,7 @@ describe('configurable duty requirements and SA schedule preferences', () => {
     assert.equal(revision.status, 200, JSON.stringify(revision.body));
     const feedback = await api.get('/duty-schedules/mine', as('studentA2'));
     assert.deepEqual(feedback.body.data.terms[0].proposal.suggestedDays.map(({ weekday, startsAt, endsAt }) => ({ weekday, startsAt, endsAt })), suggestion);
-    await api.put(`/duty-schedules/${studentTwoProposal.body.data.schedule.id}`, { ...as('studentA2'), body: { ...input, days: days({ startsAt: '12:00', endsAt: '15:00' }) } });
+    await api.put(`/duty-schedules/${studentTwoProposal.body.data.schedule.id}`, { ...as('studentA2'), body: { ...input, days: days({ startsAt: '12:00', endsAt: '16:00' }) } });
     assert.equal((await api.post(`/duty-schedules/${studentTwoProposal.body.data.schedule.id}/submit`, as('studentA2'))).status, 200);
     const backToBack = await api.post(`/duty-schedules/review/${studentTwoProposal.body.data.schedule.id}/decision`, { ...as('supervisorA'), body: { decision: 'approve' } });
     assert.equal(backToBack.status, 200, JSON.stringify(backToBack.body));
@@ -205,9 +205,10 @@ describe('configurable duty requirements and SA schedule preferences', () => {
     const winner = decisions.findIndex((response) => response.status === 200);
     const winningStudent = winner === 0 ? fx.ids.studentA : fx.ids.studentA2;
     const winningCookie = winner === 0 ? 'studentA' : 'studentA2';
-    await query('UPDATE duty_assignments SET ends_on = $2 WHERE user_id = $1 AND ends_on IS NULL', [winningStudent, '2026-10-01']);
-    await query('INSERT INTO duty_assignments (user_id, office_id, starts_on) VALUES ($1, $2, $3)', [winningStudent, fx.officeIds.A, '2026-10-01']);
-    const moved = await api.post('/duty-schedules', { ...as(winningCookie), body: input });
+    const { rows: [transferDates] } = await query("SELECT current_date::text AS ends_on, (current_date + 1)::text AS starts_on");
+    await query('UPDATE duty_assignments SET ends_on = $2 WHERE user_id = $1 AND ends_on IS NULL', [winningStudent, transferDates.ends_on]);
+    await query('INSERT INTO duty_assignments (user_id, office_id, starts_on) VALUES ($1, $2, $3)', [winningStudent, fx.officeIds.B, transferDates.starts_on]);
+    const moved = await api.post('/duty-schedules', { ...as(winningCookie), body: { ...input, effectiveStartsOn: transferDates.starts_on } });
     assert.equal(moved.status, 201, JSON.stringify(moved.body));
     assert.equal((await api.post(`/duty-schedules/${moved.body.data.schedule.id}/submit`, as(winningCookie))).status, 200);
     const overlap = await api.post(`/duty-schedules/review/${moved.body.data.schedule.id}/decision`, {

@@ -20,6 +20,8 @@ const TOKEN_MINUTES = 30;
  * Requests a password reset for the given email.
  * Always returns the same generic response to prevent email enumeration.
  * Returns { sent, devUrl? } so the route can surface the devUrl in dev only.
+ * If SMTP handoff fails, the issued token is invalidated and the generic
+ * response is preserved so mail outages do not expose account existence.
  */
 export async function requestReset({ email, ip, userAgent }) {
   // Without a delivery provider in production, do not create a token that
@@ -66,8 +68,21 @@ export async function requestReset({ email, ip, userAgent }) {
   });
 
   const resetUrl = `${appUrl}/reset-password?token=${rawToken}`;
-  const result = await sendResetEmail({ to: user.email, resetUrl });
-  return result;
+  try {
+    return await sendResetEmail({ to: user.email, resetUrl });
+  } catch (error) {
+    // Do not leave a working token that the user could not receive.
+    await query(
+      'UPDATE password_reset_tokens SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL',
+      [tokenHash],
+    );
+    // Provider errors can contain addresses or server responses; log only a safe code.
+    const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,40}$/.test(error.code)
+      ? error.code
+      : 'SMTP_ERROR';
+    console.error('Password-reset email delivery failed.', { code });
+    return { sent: false };
+  }
 }
 
 /**

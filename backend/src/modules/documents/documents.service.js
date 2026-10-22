@@ -94,8 +94,11 @@ export async function openForDownload({ user, id, ip }) {
   let stream;
   try {
     stream = await openFile(doc.stored_name);
-  } catch {
-    throw new AppError(404, 'FILE_MISSING', 'The stored file could not be found. Contact an administrator.');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      throw new AppError(404, 'FILE_MISSING', 'The stored file could not be found. Contact an administrator.');
+    }
+    throw error;
   }
   await recordAudit({
     actorId: user.id, action: 'document.downloaded', targetType: 'document', targetId: doc.id,

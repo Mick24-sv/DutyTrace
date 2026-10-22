@@ -27,15 +27,15 @@ const monthSchema = z
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const recorders = requireRole('student', 'supervisor'); // roles that have their own attendance
 
-// Clock-in status and QR scans are for Student Assistants. Supervisors review
-// attendance and provide the office code; they do not record duty shifts.
-attendanceRouter.get('/status', requireRole('student'), asyncHandler(async (req, res) => {
+// Students and supervisors can record their own office attendance. Administrators
+// remain read-only and do not have a personal attendance record.
+attendanceRouter.get('/status', recorders, asyncHandler(async (req, res) => {
   const current = await attendance.getState(req.user.id);
   ok(res, { ...current, office: req.user.office, timezone: env.timezone });
 }));
 
 // Record my own time-in / time-out by presenting my office's QR code.
-attendanceRouter.post('/scan', requireRole('student'), asyncHandler(async (req, res) => {
+attendanceRouter.post('/scan', recorders, asyncHandler(async (req, res) => {
   const { action, qrPayload } = parse(scanSchema, req.body ?? {});
   const result = await attendance.scan({
     user: req.user, action, qrPayload, ip: req.ip, userAgent: req.get('user-agent'),

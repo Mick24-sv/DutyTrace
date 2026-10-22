@@ -7,23 +7,14 @@
 //   SMTP_FROM  – "from" address  (defaults to noreply@dutytrace.local)
 //   APP_URL    – public base URL   (defaults to http://localhost:5173)
 //
-// To use Gmail App Password:
-//   SMTP_HOST=smtp.gmail.com  SMTP_PORT=587  SMTP_SECURE=false
-//   SMTP_USER=you@gmail.com   SMTP_PASS=<16-char app password>
+// Brevo SMTP uses smtp-relay.brevo.com:587 with SMTP_SECURE=false,
+// the SMTP login shown in Brevo, and a Brevo SMTP key (not an API key).
 
 import nodemailer from 'nodemailer';
 import { env, isProduction } from '../../config/env.js';
 
-const smtp = {
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT ?? 587),
-  secure: ['1', 'true', 'yes'].includes(String(process.env.SMTP_SECURE ?? '').toLowerCase()),
-  user: process.env.SMTP_USER,
-  pass: process.env.SMTP_PASS,
-  from: process.env.SMTP_FROM ?? 'DutyTrace <noreply@dutytrace.local>',
-};
-
-export const appUrl = process.env.APP_URL ?? env.clientOrigin ?? 'http://localhost:5173';
+const { smtp } = env;
+export const appUrl = env.appUrl;
 
 /** Returns true if SMTP is configured well enough to send email. */
 export const emailConfigured = () => Boolean(smtp.host && smtp.user && smtp.pass);
@@ -44,7 +35,8 @@ function getTransporter() {
  * Sends the password-reset email.
  * Returns { sent: true } on success.
  * Returns { sent: false, devUrl } in development when SMTP is unconfigured.
- * Throws on delivery failure so the caller can surface the error.
+ * Throws on delivery failure so the reset service can invalidate the token
+ * and keep the public response generic.
  */
 export async function sendResetEmail({ to, resetUrl }) {
   if (!emailConfigured()) {

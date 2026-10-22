@@ -102,7 +102,7 @@ export function authRoutes({ loginRateLimitMax = env.loginRateLimitMax } = {}) {
 
     // Generic response — never reveal whether the email exists.
     const response = {
-      message: 'If an account exists for that email address, a reset link has been sent.',
+      message: 'If an active account matches that address and email delivery succeeds, reset instructions will be sent.',
       emailConfigured: emailConfigured(),
     };
 

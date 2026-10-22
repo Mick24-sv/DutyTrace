@@ -2,15 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, ChevronDown, LogOut, Mail, Menu } from 'lucide-react';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
-import { useApiHealth } from '../../hooks/useApiHealth.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
-
-const HEALTH_LABEL = {
-  checking: { text: 'Checking API…', dot: 'bg-muted' },
-  online: { text: 'API online', dot: 'bg-ok-fg' },
-  offline: { text: 'API offline', dot: 'bg-bad-fg' },
-};
 
 const initials = (name) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
@@ -18,7 +11,6 @@ const initials = (name) =>
 export default function Topbar({ role, title, onMenu }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef(null);
-  const health = HEALTH_LABEL[useApiHealth()];
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -53,11 +45,6 @@ export default function Topbar({ role, title, onMenu }) {
       </button>
 
       <p className="flex-1 truncate text-base font-semibold text-navy">{title}</p>
-
-      <span className="hidden items-center gap-2 text-xs text-muted sm:flex" role="status">
-        <span className={`h-2 w-2 rounded-full ${health.dot}`} aria-hidden="true" />
-        {health.text}
-      </span>
 
       <NotificationCenter role={role} />
 

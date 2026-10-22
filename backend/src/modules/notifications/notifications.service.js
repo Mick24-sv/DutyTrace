@@ -2,6 +2,11 @@ import { query } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { emailConfigured } from '../auth/email.service.js';
 
+const policyCategories = new Set([
+  'completion_risk', 'deadline', 'upcoming_shift', 'attendance', 'missed_shift', 'recovery',
+  'transition', 'schedule_conflict', 'dtr', 'absence', 'compliance', 'documents', 'semester_requirement',
+]);
+
 export async function createNotification(db, {
   recipientId, institutionId, type, title, message, relatedType = null, relatedId = null,
   important = false, dedupeKey, severity = important ? 'warning' : 'informational', actionUrl = null,
@@ -15,7 +20,8 @@ export async function createNotification(db, {
     type.startsWith('schedule_conflict')?'schedule_conflict':type.split('_')[0];
   const riskKey=relatedType==='attendance_discrepancy'&&relatedId?`attendance-discrepancy:${relatedId}`:null;
   const policy=await db.query('SELECT enabled_categories FROM institution_alert_policies WHERE institution_id=$1',[institutionId]);
-  if(policy.rows[0]?.enabled_categories&&!policy.rows[0].enabled_categories.includes(category)) return null;
+  if(policyCategories.has(category) && policy.rows[0]?.enabled_categories
+    && !policy.rows[0].enabled_categories.includes(category)) return null;
   const { rows } = await db.query(
     `INSERT INTO notifications
        (recipient_id, institution_id, type, title, message, related_type, related_id, important, dedupe_key, severity, action_url, risk_key)

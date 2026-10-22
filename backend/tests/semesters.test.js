@@ -76,7 +76,21 @@ describe('semester requirements and approved-hour progress', () => {
     assert.equal(secondStudent.verifiedHours, 0);
     assert.equal((await api.get('/semesters/mine', as('studentA'))).body.data.terms.length, 2);
 
-    assert.equal((await api.post(`/semesters/${firstTerm.id}/finalize`, { ...as('admin'), body: {} })).status, 200);
+    const directFinalize = await api.post(`/semesters/${firstTerm.id}/finalize`, { ...as('admin'), body: {} });
+    assert.equal(directFinalize.status, 409);
+    assert.equal(directFinalize.body.error.code, 'TRANSITION_POLICY_REQUIRED');
+
+    assert.equal((await assign(secondTerm.id, fx.ids.studentA2, fx.officeIds.A, 60)).status, 200);
+    assert.equal((await assign(secondTerm.id, fx.ids.studentB, fx.officeIds.B, 70)).status, 200);
+    assert.equal((await api.put('/semester-transitions/policy', { ...as('admin'), body: { policy: 'keep_original' } })).status, 200);
+    const preview = await api.post('/semester-transitions/preview', { ...as('admin'), body: {
+      sourceTermId: firstTerm.id, destinationTermId: secondTerm.id,
+      studentIds: [fx.ids.studentA, fx.ids.studentA2, fx.ids.studentB],
+    } });
+    assert.equal(preview.status, 201, JSON.stringify(preview.body));
+    assert.equal(preview.body.data.preview.canFinalize, true, JSON.stringify(preview.body.data.preview.summary));
+    const finalized = await api.post(`/semester-transitions/${preview.body.data.preview.id}/finalize`, as('admin'));
+    assert.equal(finalized.status, 200, JSON.stringify(finalized.body));
     assert.equal((await assign(firstTerm.id, fx.ids.studentA, fx.officeIds.A, 150)).status, 409);
 
     const unassignedTerm = await api.post('/semesters', {

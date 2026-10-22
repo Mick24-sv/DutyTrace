@@ -108,7 +108,7 @@ Students can only explain or propose changes. Office supervisors can decide reco
 - **Cases are opened only by an administrator** and never from hours or notices. Case types and their requested documents are configuration; each case copies the type's list when opened so later edits do not rewrite a case in progress.
 - **Rules live in two places on purpose.** Pure functions (`absences.rules.js`, `cases.rules.js`) define the allowed status moves and are unit-tested; database triggers enforce the same moves so SQL run outside the API cannot break them.
 - **One access function.** `modules/common/access.js` (`assertCanView`) decides who may see a notice, case or document (owner, supervisor of the record's office, administrator). Unknown and forbidden ids both return `403` so ids cannot be probed.
-- **Documents are private.** Files go to `UPLOAD_DIR` under random names (mode 0600), outside any static route. The type is decided from the file's magic bytes and must agree with the extension (PDF/PNG/JPEG). A failed or refused upload removes the file from disk. The one read path, `GET /api/documents/:id/download`, re-checks access every time, writes an audit entry and forces download with `nosniff`, `no-store` and a sandbox CSP. `storage.js` is the only file that touches the disk, so moving to object storage means replacing that file.
+- **Documents are private.** `storage.js` is the storage adapter: development/tests use `UPLOAD_DIR`; production uses the private `dutytrace-documents` Supabase Storage bucket through a server-side secret key. Objects use random UUID names; no public or signed URL is returned. The type is decided from file magic bytes and must agree with the extension (PDF/PNG/JPEG). A failed or refused upload attempts cleanup. The one read path, `GET /api/documents/:id/download`, re-checks access every time, writes an audit entry and forces download with `nosniff`, `no-store` and a sandbox CSP. Supabase Storage object bytes need a separate backup plan; PostgreSQL dumps only preserve the database metadata.
 - **Uploads are raw bodies** (`express.raw`, file name in `?filename=`), which avoids a multipart parser dependency.
 - **Emails are recorded, not read.** Staff record "received by email / in person" receipts by hand. There is no Gmail integration.
 - **History is append-only** (events and documents), reusing the Phase 4 trigger functions.
@@ -127,13 +127,13 @@ Students can only explain or propose changes. Office supervisors can decide reco
 
 ## Known limitations
 
-- No password change/reset, email verification or MFA yet.
+- Password reset is available through the single-use email flow when SMTP is configured. There is no email verification or MFA yet.
 - No CSRF token; relies on `SameSite=Lax` + `Origin` check (adequate when the client and API share a site).
 - No session cleanup job (expired rows stay in `sessions` until a future maintenance task).
-- Administrators can create users and offices and assign offices in the UI; there is no password reset and no editing of names or emails yet.
+- Administrators can create users and offices and assign offices in the UI; there is no administrator-assisted password reset or email editing flow.
 - Static QR codes do not prove physical presence (see README). No attendance corrections yet, so a returned DTR can only be regenerated from the same attendance or resubmitted.
 - A DTR belongs to the office the student is assigned to at generation time; a month split between two offices is not modelled.
 - The PDF uses the built-in Helvetica font (Latin-1). Accented Latin names print correctly; characters outside Latin-1 (e.g. CJK) print as `?` rather than as garbage. The on-screen DTR is exact.
 - The scanner depends on a camera and a secure context (HTTPS or localhost); a paste-the-code fallback exists.
 - Unit/integration tests cover auth and permissions; there are no frontend tests yet (the UI was checked with a scripted browser session, which is not part of the repo).
-- Phase 5: uploads have no virus scanning, are stored on local disk and cannot be deleted; no Gmail/email integration or notifications; supervisors cannot decide cases; administrators read absence notices (privacy decision pending); the browser checks of Phase 5 were a scripted session that is not part of the repo.
+- Phase 5: uploads have no virus scanning. Production Supabase Storage still needs its private bucket, credentials and object backup plan; development/tests use local disk. Supervisors cannot decide cases; administrators read absence notices (privacy decision pending); the browser checks of Phase 5 were a scripted session that is not part of the repo.

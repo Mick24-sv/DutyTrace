@@ -8,7 +8,7 @@
     "backend"
   ],
   "engines": {
-    "node": ">=20.12"
+    "node": ">=20.12 <25"
   },
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,cyan \"npm run dev -w backend\" \"npm run dev -w frontend\"",

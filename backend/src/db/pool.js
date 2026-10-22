@@ -29,7 +29,9 @@ export const getPool = () => {
     pool = new pg.Pool({
       connectionString: env.databaseUrl,
       ssl: buildSsl(),
-      max: 10,
+      max: env.databasePoolMax,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 30_000,
     });
   }
   return pool;
