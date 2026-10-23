@@ -27,6 +27,12 @@ function getTransporter() {
     port: smtp.port,
     secure: smtp.secure,
     auth: { user: smtp.user, pass: smtp.pass },
+    // Bound SMTP waits so password recovery requests cannot stay open for
+    // Nodemailer's multi-minute defaults when the provider/network is stuck.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+    dnsTimeout: 10_000,
   });
   return _transporter;
 }
@@ -92,10 +98,6 @@ export async function sendResetEmail({ to, resetUrl }) {
                style="display:inline-block;padding:12px 28px;background:#007F86;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px">
               Reset Password
             </a>
-            <p style="margin:24px 0 0;font-size:13px;color:#888">
-              If the button does not work, copy this URL into your browser:<br/>
-              <a href="${resetUrl}" style="color:#007F86;word-break:break-all">${resetUrl}</a>
-            </p>
             <hr style="margin:24px 0;border:none;border-top:1px solid #eee"/>
             <p style="margin:0;font-size:12px;color:#aaa">
               If you did not request this, you can safely ignore this email — your password has not changed.
