@@ -94,6 +94,7 @@ export async function list({ user, status, type, date, search, limit=100 }) {
   if(user.role==='student'){params.push(user.id);where.push(`d.student_id=$${params.length}`);}
   if(user.role==='supervisor'){ if(!user.office?.id) return {items:[],total:0}; params.push(user.office.id);where.push(`d.office_id=$${params.length}`); }
   if(status){params.push(status);where.push(`d.status=$${params.length}`);}
+  else where.push("d.status NOT IN('superseded','cancelled')");
   if(type){params.push(type);where.push(`d.discrepancy_type=$${params.length}`);}
   if(date){params.push(date);where.push(`d.shift_date=$${params.length}::date`);}
   if(search){params.push(`%${search}%`);where.push(`(u.full_name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);}
@@ -102,6 +103,39 @@ export async function list({ user, status, type, date, search, limit=100 }) {
       count(*) OVER()::int AS total FROM attendance_discrepancies d JOIN users u ON u.id=d.student_id
       LEFT JOIN offices o ON o.id=d.office_id WHERE ${where.join(' AND ')} ORDER BY d.detected_at DESC LIMIT $${params.length}`,params);
   return {items:rows.map(mapRow),total:rows[0]?.total??0};
+}
+
+export async function clearPreQrDiscrepancies({user,ip}) {
+  if(!['supervisor','admin'].includes(user.role)) throw fail(403,'FORBIDDEN','Only supervisors and administrators can clear pre-QR discrepancies.');
+  return withTransaction(async db=>{
+    const scope=user.role==='supervisor'?'AND d.office_id=$2':'AND d.institution_id=$2';
+    const scopeId=user.role==='supervisor'?user.office?.id:user.institutionId;
+    if(!scopeId) return {cleared:0};
+    const {rows}=await db.query(`WITH tracking_start AS (
+        SELECT o.id AS office_id,o.institution_id,
+          COALESCE(min((e.recorded_at AT TIME ZONE i.timezone)::date),(now() AT TIME ZONE i.timezone)::date+1) AS first_tracking_date
+        FROM offices o JOIN institutions i ON i.id=o.institution_id
+        LEFT JOIN attendance_events e ON e.office_id=o.id
+        WHERE o.institution_id=$1 GROUP BY o.id,o.institution_id,i.timezone
+      ), candidates AS (
+        SELECT d.id,d.status AS old_status FROM attendance_discrepancies d
+        JOIN tracking_start q ON q.office_id=d.office_id AND q.institution_id=d.institution_id
+        WHERE d.discrepancy_type='scheduled_no_attendance' AND d.shift_date<q.first_tracking_date
+          AND d.status IN('open','explanation_submitted','under_review') ${scope}
+        FOR UPDATE OF d
+      ) UPDATE attendance_discrepancies d SET status='superseded',supervisor_decision='attendance_tracking_not_active',
+        supervisor_remarks='This scheduled shift predates QR attendance availability for the office and is not a QR attendance discrepancy.',
+        reviewer_id=$3,reviewed_at=now(),resolved_at=now(),updated_at=now()
+        FROM candidates c WHERE d.id=c.id RETURNING d.id,c.old_status`,[user.institutionId,scopeId,user.id]);
+    const note='This scheduled shift predates QR attendance availability for the office and is not a QR attendance discrepancy.';
+    for(const row of rows){
+      await addHistory(db,row.id,user.id,'attendance_tracking_not_active',row.old_status,'superseded',note);
+      await db.query("DELETE FROM notifications WHERE related_type='attendance_discrepancy' AND related_id=$1",[row.id]);
+    }
+    await recordAudit({actorId:user.id,institutionId:user.institutionId,action:'attendance_discrepancy.pre_qr_cleared',
+      targetType:'attendance_discrepancy',after:{cleared:rows.length},ip},db);
+    return {cleared:rows.length};
+  });
 }
 
 export async function summary(user) {
@@ -290,10 +324,10 @@ async function upsertDetection(db, data) {
     data.type,data.key,JSON.stringify(data.details),data.reason]);
   if(rows[0].created){
     await addHistory(db,rows[0].id,null,'detected',null,'open',data.reason,data.details);
-    await notifyOfficeSupervisors(db,{officeId:data.officeId,institutionId:data.institutionId,type:'attendance_discrepancy_detected',
+    if(data.type!=='scheduled_no_attendance') await notifyOfficeSupervisors(db,{officeId:data.officeId,institutionId:data.institutionId,type:'attendance_discrepancy_detected',
       title:'Attendance discrepancy detected',message:'A scheduled attendance record needs review.',relatedType:'attendance_discrepancy',
       relatedId:rows[0].id,important:true,dedupeKey:`attendance-discrepancy:${rows[0].id}:detected`});
-    await createNotification(db,{recipientId:data.studentId,institutionId:data.institutionId,type:'attendance_discrepancy_detected',
+    if(data.type!=='scheduled_no_attendance') await createNotification(db,{recipientId:data.studentId,institutionId:data.institutionId,type:'attendance_discrepancy_detected',
       title:'Attendance record needs review',message:'A discrepancy was found in your duty attendance. You can review and explain it in Attendance Discrepancies.',
       relatedType:'attendance_discrepancy',relatedId:rows[0].id,important:true,dedupeKey:`attendance-discrepancy:${rows[0].id}:detected`});
     await recordAudit({actorId:null,institutionId:data.institutionId,action:'attendance_discrepancy.detected',targetType:'attendance_discrepancy',
@@ -333,8 +367,9 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
   for(const d of preQr.rows){
     await addHistory(db,d.id,null,'attendance_tracking_not_active',d.old_status,'superseded',
       'This scheduled shift predates QR attendance availability for the office and is not a QR attendance discrepancy.');
-    await db.query(`UPDATE notifications SET read_at=COALESCE(read_at,now()),resolved_at=COALESCE(resolved_at,now()),updated_at=now()
-      WHERE related_type='attendance_discrepancy' AND related_id=$1 AND resolved_at IS NULL`,[d.id]);
+    // These are rollout-period false positives. Remove their inbox alerts while
+    // retaining the discrepancy and immutable history for audit purposes.
+    await db.query(`DELETE FROM notifications WHERE related_type='attendance_discrepancy' AND related_id=$1`,[d.id]);
   }
   const staleRecoveries=await db.query(`WITH candidates AS (
       SELECT d.id,d.status AS old_status,d.student_id,d.institution_id FROM attendance_discrepancies d
@@ -420,6 +455,7 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
   };
   const now=(await db.query('SELECT now() AS now')).rows[0].now;
   let found=0;
+  const newNoShowsByOffice=new Map();
   for(const shift of shifts){
     const cacheKey=`${shift.student_id}:${shift.shift_date}:${shift.timezone}`;
     if(!eventCache.has(cacheKey)) eventCache.set(cacheKey,effectiveEvents([shift.student_id],{startDate:shift.shift_date,nextDate:shift.shift_date,timezone:shift.timezone,db}));
@@ -439,9 +475,13 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
       const coveredByAbsence=await hasReviewedAbsence(shift.student_id,shift.office_id,shift.shift_date);
       const key=`${shift.schedule_id}:${shift.shift_date}:${period}`;
       if(!relevant.length&&!coveredByAbsence){
-        await upsertDetection(db,{institutionId:shift.institution_id,studentId:shift.student_id,officeId:shift.office_id,
+        const detection=await upsertDetection(db,{institutionId:shift.institution_id,studentId:shift.student_id,officeId:shift.office_id,
           scheduleId:shift.schedule_id,date:shift.shift_date,type:'scheduled_no_attendance',key:`no-show:${key}`,
           details:{scheduledStart:starts,scheduledEnd:ends,timezone:shift.timezone},reason:'Approved duty shift ended after the institution grace period without a matching attendance event.'});found++;
+        if(detection.created){
+          const batch=newNoShowsByOffice.get(shift.office_id)??{institutionId:shift.institution_id,students:new Set(),timezone:shift.timezone};
+          batch.students.add(shift.student_id);newNoShowsByOffice.set(shift.office_id,batch);
+        }
       }
       if(relevant.length||coveredByAbsence){
         const note=coveredByAbsence?'A reviewed or acknowledged absence notice covers this shift. No missed-shift action is required.':'Attendance was recorded for this approved shift.';
@@ -524,10 +564,16 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
     const events=(effective.get(shift.student_id)??[]).filter(e=>e.officeId===shift.office_id&&e.recordedAt>=shift.starts_at&&e.recordedAt<=shift.ends_at);
     const coveredByAbsence=await hasReviewedAbsence(shift.student_id,shift.office_id,shift.shift_date);
     const dedupe=`recovery-no-show:${shift.id}`;
-    if(!events.length&&!coveredByAbsence) await upsertDetection(db,{institutionId:shift.institution_id,studentId:shift.student_id,officeId:shift.office_id,
+    if(!events.length&&!coveredByAbsence) {
+      const detection=await upsertDetection(db,{institutionId:shift.institution_id,studentId:shift.student_id,officeId:shift.office_id,
       scheduleId:null,date:shift.shift_date,type:'scheduled_no_attendance',key:dedupe,
       details:{recoveryShiftId:shift.id,scheduledStart:shift.starts_at,scheduledEnd:shift.ends_at,timezone:shift.timezone},
       reason:'Approved recovery shift ended after the institution grace period without matching attendance.'});
+      if(detection.created){
+        const batch=newNoShowsByOffice.get(shift.office_id)??{institutionId:shift.institution_id,students:new Set(),timezone:shift.timezone};
+        batch.students.add(shift.student_id);newNoShowsByOffice.set(shift.office_id,batch);
+      }
+    }
     else if(events.length||coveredByAbsence) {
       const note=coveredByAbsence?'A reviewed or acknowledged absence notice covers this recovery shift. No missed-shift action is required.':'Attendance was recorded for the approved recovery shift.';
       const {rows:stale}=await db.query(`WITH candidates AS (SELECT id,status AS old_status FROM attendance_discrepancies
@@ -551,6 +597,16 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
           scheduledStart:shift.starts_at,scheduledEnd:shift.ends_at,timezone:shift.timezone},
         reason:'An approved recovery shift has a clock-in without a corresponding clock-out.'});found++;
     }
+  }
+  for(const [officeId,batch] of newNoShowsByOffice){
+    const batchDate=localDateKey(new Date(),batch.timezone);
+    await notifyOfficeSupervisors(db,{officeId,institutionId:batch.institutionId,type:'attendance_discrepancy_detected',
+      title:'Scheduled attendance needs review',message:'New scheduled shifts need review. Open Attendance Discrepancies to see the individual records.',
+      important:true,dedupeKey:`scheduled-no-attendance:${officeId}:${batchDate}`});
+    for(const studentId of batch.students) await createNotification(db,{recipientId:studentId,institutionId:batch.institutionId,
+      type:'attendance_discrepancy_detected',title:'Scheduled attendance needs review',
+      message:'New scheduled shifts need review. Open Attendance Discrepancies to see the individual records.',
+      important:true,dedupeKey:`scheduled-no-attendance:${officeId}:${studentId}:${batchDate}`});
   }
   return {checked:shifts.length,createdOrMatched:found};
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Check, Clock3, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
+import { AlertTriangle, Check, Clock3, RefreshCw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
@@ -20,7 +20,7 @@ export default function AttendanceDiscrepanciesPage(){
   const staff=user?.role==='supervisor'||user?.role==='admin';
   const reviewer=user?.role==='supervisor';
   const [data,setData]=useState({items:[],total:0});const [summary,setSummary]=useState(null);
-  const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [busy,setBusy]=useState('');
+  const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState('');const [clearing,setClearing]=useState(false);
   const [filters,setFilters]=useState(()=>({status:'',type:'',search:'',date:searchParams.get('date')??''}));const [selected,setSelected]=useState(null);
   const [explanation,setExplanation]=useState('');const [start,setStart]=useState('');const [end,setEnd]=useState('');const [remarks,setRemarks]=useState('');
   const load=useCallback(async()=>{setLoading(true);setError('');try{
@@ -30,6 +30,7 @@ export default function AttendanceDiscrepanciesPage(){
   }catch(e){setError(e.message);}finally{setLoading(false);}},[filters]);
   useEffect(()=>{load();},[load]);
   const counts=useMemo(()=>summary??{open:0,pendingReview:0,resolved:0,rejected:0},[summary]);
+  const clearPreQr=async()=>{if(!window.confirm('Clear open scheduled no-attendance records dated before the first QR attendance scan in your authorized scope? Their audit history will be retained, and their inbox alerts will be removed.'))return;setClearing(true);setError('');setNotice('');try{const result=await apiPost('/attendance-discrepancies/clear-pre-qr',{});setNotice(`${result.cleared} pre-QR false positive${result.cleared===1?'':'s'} cleared.`);await load();}catch(e){setError(e.message);}finally{setClearing(false);}};
   const action=async(id,path,body)=>{setBusy(id);setError('');try{await apiPost(`/attendance-discrepancies/${id}/${path}`,body);setSelected(null);setExplanation('');setStart('');setEnd('');setRemarks('');setSearchParams({}, {replace:true});await load();}catch(e){setError(e.message);}finally{setBusy('');}};
   const openDetail=useCallback(async(item)=>{setSelected({...item,loadingDetail:true});setExplanation('');setRemarks('');try{setSelected(await apiGet(`/attendance-discrepancies/${item.id}`));}catch(e){setError(e.message);setSelected(item);}},[]);
   useEffect(()=>{
@@ -57,8 +58,9 @@ export default function AttendanceDiscrepanciesPage(){
         <label className="text-xs text-muted">Date<input type="date" value={filters.date} onChange={e=>setFilters(f=>({...f,date:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-40"/></label>
         <label className="text-xs text-muted">Status<select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-48"><option value="">All statuses</option>{Object.entries(STATUS).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
         <button onClick={load} className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><RefreshCw className="h-4 w-4"/>Refresh</button>
+        {staff&&<button disabled={clearing} onClick={clearPreQr} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>{clearing?'Clearing…':'Clear pre-QR false positives'}</button>}
       </div>
-      {error&&<div role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      {error&&<div role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}{notice&&<div role="status" className="m-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
       {loading?<div className="p-8 text-center text-sm text-muted">Loading attendance discrepancies…</div>:data.items.length===0?<div className="p-10 text-center text-sm text-muted">No attendance discrepancies found.</div>:
         <div className="divide-y divide-line">{data.items.map(item=><article key={item.id} className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-ink">{staff?item.student.fullName:TYPES[item.type]}</span><Badge tone={item.status==='rejected'?'rejected':item.status==='approved_correction'||item.status==='resolved'?'approved':'pending'}>{STATUS[item.status]}</Badge></div>

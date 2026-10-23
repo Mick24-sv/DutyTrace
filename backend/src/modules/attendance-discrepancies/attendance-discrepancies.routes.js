@@ -30,6 +30,8 @@ attendanceDiscrepanciesRouter.get('/',requireRole('student','supervisor','admin'
   const f=parse(querySchema,req.query);ok(res,await discrepancies.list({user:req.user,...f}));
 }));
 attendanceDiscrepanciesRouter.get('/:id',requireRole('student','supervisor','admin'),asyncHandler(async(req,res)=>ok(res,await discrepancies.detail({user:req.user,id:id(req)}))));
+attendanceDiscrepanciesRouter.post('/clear-pre-qr',requireRole('supervisor','admin'),asyncHandler(async(req,res)=>
+  ok(res,await discrepancies.clearPreQrDiscrepancies({user:req.user,ip:req.ip}))));
 attendanceDiscrepanciesRouter.post('/:id/explanation',requireRole('student'),correctionLimiter,asyncHandler(async(req,res)=>{
   const b=parse(z.object({explanation:text(3000)}),req.body??{});
   ok(res,await discrepancies.explain({user:req.user,id:id(req),explanation:b.explanation,ip:req.ip}));
