@@ -37,6 +37,7 @@ const smtp = {
   pass: process.env.SMTP_PASS ?? '',
   from: process.env.SMTP_FROM ?? '',
 };
+const brevoApiKey = process.env.BREVO_API_KEY ?? '';
 
 // Secret used to sign office QR payloads. There is no built-in default: you must set QR_SIGNING_SECRET
 // (32+ characters). Only the automated tests, which run under `node --test`, use a throwaway value.
@@ -79,8 +80,8 @@ if (!underTest && nodeEnv === 'production') {
   if (resetOrigin.protocol !== 'https:' || resetOrigin.origin !== appUrl || appUrl !== clientOrigin) {
     throw new Error('APP_URL must exactly match CLIENT_ORIGIN so password reset links return to the approved frontend.');
   }
-  if (!smtp.host || !smtp.user || !smtp.pass || !smtp.from || /\.local(?:>|\s|$)/i.test(smtp.from)) {
-    throw new Error('SMTP_HOST, SMTP_USER, SMTP_PASS, and a verified non-local SMTP_FROM are required in production for account recovery.');
+  if ((!brevoApiKey && (!smtp.host || !smtp.user || !smtp.pass)) || !smtp.from || /\.local(?:>|\s|$)/i.test(smtp.from)) {
+    throw new Error('Configure BREVO_API_KEY or SMTP credentials, plus a verified non-local SMTP_FROM, for production account recovery.');
   }
 }
 
@@ -115,6 +116,7 @@ export const env = {
   supabaseStorageBucket,
   appUrl,
   smtp,
+  brevoApiKey,
 
   // Private document storage (Phase 5). Never served statically; files are only reachable through
   // authenticated, access-checked API routes. Keep this directory OUT of git and any web root.

@@ -4,6 +4,7 @@
 //
 // Supported env vars:
 //   SMTP_HOST, SMTP_PORT, SMTP_SECURE (true/false), SMTP_USER, SMTP_PASS
+//   BREVO_API_KEY (preferred on hosts that restrict SMTP egress)
 //   SMTP_FROM  – "from" address  (defaults to noreply@dutytrace.local)
 //   APP_URL    – public base URL   (defaults to http://localhost:5173)
 //
@@ -13,11 +14,11 @@
 import nodemailer from 'nodemailer';
 import { env, isProduction } from '../../config/env.js';
 
-const { smtp } = env;
+const { smtp, brevoApiKey } = env;
 export const appUrl = env.appUrl;
 
 /** Returns true if SMTP is configured well enough to send email. */
-export const emailConfigured = () => Boolean(smtp.host && smtp.user && smtp.pass);
+export const emailConfigured = () => Boolean(brevoApiKey || (smtp.host && smtp.user && smtp.pass));
 
 let _transporter = null;
 function getTransporter() {
@@ -37,6 +38,44 @@ function getTransporter() {
   return _transporter;
 }
 
+function parseSender(value) {
+  const match = String(value || '').match(/^\s*(.*?)\s*<([^<>]+)>\s*$/);
+  return match
+    ? { name: match[1].replace(/^"|"$/g, ''), email: match[2].trim() }
+    : { email: String(value || '').trim() };
+}
+
+async function sendEmail({ to, subject, text, html, messageId }) {
+  if (brevoApiKey) {
+    let response;
+    try {
+      response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': brevoApiKey, 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({
+          sender: parseSender(smtp.from),
+          to: [{ email: to }],
+          subject,
+          textContent: text,
+          ...(html ? { htmlContent: html } : {}),
+          ...(messageId ? { headers: { 'Message-ID': messageId } } : {}),
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (error) {
+      const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,40}$/.test(error.code)
+        ? error.code
+        : error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'BREVO_API_TIMEOUT' : 'BREVO_API_NETWORK_ERROR';
+      throw Object.assign(new Error('Brevo API request failed.'), { code });
+    }
+    if (!response.ok) {
+      throw Object.assign(new Error('Brevo API rejected the email.'), { code: `BREVO_API_HTTP_${response.status}` });
+    }
+    return;
+  }
+  await getTransporter().sendMail({ from: smtp.from, to, subject, text, ...(html ? { html } : {}), ...(messageId ? { messageId } : {}) });
+}
+
 /**
  * Sends the password-reset email.
  * Returns { sent: true } on success.
@@ -54,11 +93,10 @@ export async function sendResetEmail({ to, resetUrl }) {
       console.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return { sent: false, devUrl: resetUrl };
     }
-    throw new Error('Email delivery is not configured. Set SMTP_HOST, SMTP_USER and SMTP_PASS.');
+    throw new Error('Email delivery is not configured. Set BREVO_API_KEY or SMTP credentials.');
   }
 
-  await getTransporter().sendMail({
-    from: smtp.from,
+  await sendEmail({
     to,
     subject: 'Reset your DutyTrace password',
     text: [
@@ -115,14 +153,13 @@ export async function sendResetEmail({ to, resetUrl }) {
 
 /** Sends a concise risk alert after SMTP confirms handoff. */
 export async function sendRiskAlertEmail({ to, title, message, actionUrl, notificationId }) {
-  if (!emailConfigured()) throw new Error('SMTP email is not configured.');
+  if (!emailConfigured() || !smtp.from) throw new Error('Email delivery is not configured.');
   const link = actionUrl ? new URL(actionUrl, appUrl).toString() : null;
-  await getTransporter().sendMail({
-    from: smtp.from,
+  await sendEmail({
     to,
     subject: `DutyTrace alert: ${title}`,
-    ...(notificationId ? { messageId: `<dutytrace-${notificationId}@notifications.dutytrace>` } : {}),
     text: [`DutyTrace alert`, '', title, '', message, ...(link ? ['', `Open DutyTrace: ${link}`] : []), '', 'DutyTrace'].join('\n'),
+    messageId: notificationId ? `<dutytrace-${notificationId}@notifications.dutytrace>` : undefined,
   });
   return { handedOff: true };
 }
