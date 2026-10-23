@@ -309,6 +309,33 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
   if(institutionId){scopeParams.push(institutionId);scope.push(`d.institution_id=$${scopeParams.length}`);}
   if(officeId){scopeParams.push(officeId);scope.push(`d.office_id=$${scopeParams.length}`);}
   if(studentId){scopeParams.push(studentId);scope.push(`d.student_id=$${scopeParams.length}`);}
+  // QR attendance cannot be expected before an office had its first QR code.
+  // Close previously generated no-show flags before that rollout date instead of
+  // repeatedly treating pre-DutyTrace scheduled hours as missing QR attendance.
+  const preQr=await db.query(`WITH qr_start AS (
+      SELECT o.id AS office_id, o.institution_id,
+        COALESCE(min((q.created_at AT TIME ZONE i.timezone)::date),
+          (now() AT TIME ZONE i.timezone)::date + 1) AS first_qr_date
+      FROM offices o JOIN institutions i ON i.id=o.institution_id
+      LEFT JOIN office_qr_codes q ON q.office_id=o.id
+      GROUP BY o.id,o.institution_id,i.timezone
+    ), candidates AS (
+      SELECT d.id,d.status AS old_status FROM attendance_discrepancies d
+      JOIN qr_start q ON q.office_id=d.office_id AND q.institution_id=d.institution_id
+      WHERE d.discrepancy_type='scheduled_no_attendance' AND d.shift_date<q.first_qr_date
+        AND d.status IN('open','explanation_submitted','under_review')
+        ${scope.length?`AND ${scope.join(' AND ')}`:''}
+      FOR UPDATE OF d
+    ) UPDATE attendance_discrepancies d SET status='superseded',supervisor_decision='attendance_tracking_not_active',
+      supervisor_remarks='This scheduled shift predates QR attendance availability for the office and is not a QR attendance discrepancy.',
+      reviewed_at=now(),resolved_at=now(),updated_at=now()
+      FROM candidates c WHERE d.id=c.id RETURNING d.id,c.old_status`,scopeParams);
+  for(const d of preQr.rows){
+    await addHistory(db,d.id,null,'attendance_tracking_not_active',d.old_status,'superseded',
+      'This scheduled shift predates QR attendance availability for the office and is not a QR attendance discrepancy.');
+    await db.query(`UPDATE notifications SET read_at=COALESCE(read_at,now()),resolved_at=COALESCE(resolved_at,now()),updated_at=now()
+      WHERE related_type='attendance_discrepancy' AND related_id=$1 AND resolved_at IS NULL`,[d.id]);
+  }
   const staleRecoveries=await db.query(`WITH candidates AS (
       SELECT d.id,d.status AS old_status,d.student_id,d.institution_id FROM attendance_discrepancies d
       JOIN duty_recovery_shifts r ON d.original_details->>'recoveryShiftId'=r.id::text
@@ -363,7 +390,9 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
     COALESCE(NULLIF(s.policy_snapshot->'configuration'->'attendance'->>'lateClockOutToleranceMinutes','')::integer,i.attendance_late_tolerance_minutes) AS attendance_late_tolerance_minutes
     FROM student_duty_schedules s JOIN academic_terms t ON t.id=s.term_id JOIN institutions i ON i.id=s.institution_id
     JOIN student_duty_schedule_days d ON d.schedule_id=s.id
-    CROSS JOIN LATERAL generate_series(GREATEST(s.effective_starts_on,(now() AT TIME ZONE t.timezone)::date - 90),
+    CROSS JOIN LATERAL generate_series(GREATEST(s.effective_starts_on,(now() AT TIME ZONE t.timezone)::date - 90,
+      COALESCE((SELECT min((q.created_at AT TIME ZONE t.timezone)::date) FROM office_qr_codes q WHERE q.office_id=s.office_id),
+        (now() AT TIME ZONE t.timezone)::date + 1)),
       LEAST(COALESCE(s.effective_ends_on,(now() AT TIME ZONE t.timezone)::date), (now() AT TIME ZONE t.timezone)::date), interval '1 day') day
     WHERE ${where.join(' AND ')} AND extract(isodow FROM day)=d.weekday`,params);
   const recoveryParams=[];const recoveryWhere=[];
