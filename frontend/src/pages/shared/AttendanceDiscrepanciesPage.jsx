@@ -20,7 +20,7 @@ export default function AttendanceDiscrepanciesPage(){
   const staff=user?.role==='supervisor'||user?.role==='admin';
   const reviewer=user?.role==='supervisor';
   const [data,setData]=useState({items:[],total:0});const [summary,setSummary]=useState(null);
-  const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState('');const [clearing,setClearing]=useState(false);
+  const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState('');const [clearing,setClearing]=useState(false);const [confirmClear,setConfirmClear]=useState(false);
   const [filters,setFilters]=useState(()=>({status:'',type:'',search:'',date:searchParams.get('date')??''}));const [selected,setSelected]=useState(null);
   const [explanation,setExplanation]=useState('');const [start,setStart]=useState('');const [end,setEnd]=useState('');const [remarks,setRemarks]=useState('');
   const load=useCallback(async()=>{setLoading(true);setError('');try{
@@ -30,7 +30,7 @@ export default function AttendanceDiscrepanciesPage(){
   }catch(e){setError(e.message);}finally{setLoading(false);}},[filters]);
   useEffect(()=>{load();},[load]);
   const counts=useMemo(()=>summary??{open:0,pendingReview:0,resolved:0,rejected:0},[summary]);
-  const clearPreQr=async()=>{if(!window.confirm('Clear open scheduled no-attendance records dated before the first QR attendance scan in your authorized scope? Their audit history will be retained, and their inbox alerts will be removed.'))return;setClearing(true);setError('');setNotice('');try{const result=await apiPost('/attendance-discrepancies/clear-pre-qr',{});setNotice(`${result.cleared} pre-QR false positive${result.cleared===1?'':'s'} cleared.`);await load();}catch(e){setError(e.message);}finally{setClearing(false);}};
+  const clearPreQr=async()=>{setClearing(true);setError('');setNotice('');try{const result=await apiPost('/attendance-discrepancies/clear-pre-qr',{});setNotice(`${result.cleared} pre-QR false positive${result.cleared===1?'':'s'} cleared.`);setConfirmClear(false);await load();}catch(e){setError(e.message);}finally{setClearing(false);}};
   const action=async(id,path,body)=>{setBusy(id);setError('');try{await apiPost(`/attendance-discrepancies/${id}/${path}`,body);setSelected(null);setExplanation('');setStart('');setEnd('');setRemarks('');setSearchParams({}, {replace:true});await load();}catch(e){setError(e.message);}finally{setBusy('');}};
   const openDetail=useCallback(async(item)=>{setSelected({...item,loadingDetail:true});setExplanation('');setRemarks('');try{setSelected(await apiGet(`/attendance-discrepancies/${item.id}`));}catch(e){setError(e.message);setSelected(item);}},[]);
   useEffect(()=>{
@@ -58,7 +58,7 @@ export default function AttendanceDiscrepanciesPage(){
         <label className="text-xs text-muted">Date<input type="date" value={filters.date} onChange={e=>setFilters(f=>({...f,date:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-40"/></label>
         <label className="text-xs text-muted">Status<select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-48"><option value="">All statuses</option>{Object.entries(STATUS).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
         <button onClick={load} className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><RefreshCw className="h-4 w-4"/>Refresh</button>
-        {staff&&<button disabled={clearing} onClick={clearPreQr} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>{clearing?'Clearing…':'Clear pre-QR false positives'}</button>}
+        {staff&&<button disabled={clearing} onClick={()=>setConfirmClear(true)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>{clearing?'Clearing…':'Clear pre-QR false positives'}</button>}
       </div>
       {error&&<div role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}{notice&&<div role="status" className="m-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</div>}
       {loading?<div className="p-8 text-center text-sm text-muted">Loading attendance discrepancies…</div>:data.items.length===0?<div className="p-10 text-center text-sm text-muted">No attendance discrepancies found.</div>:
@@ -68,6 +68,13 @@ export default function AttendanceDiscrepanciesPage(){
           </div><button onClick={()=>openDetail(item)} className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-canvas">View details</button>
         </article>)}</div>}
     </Card>
+
+    {confirmClear&&<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={e=>e.target===e.currentTarget&&!clearing&&setConfirmClear(false)}>
+      <section role="alertdialog" aria-modal="true" aria-labelledby="clear-pre-qr-title" aria-describedby="clear-pre-qr-description" className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 shadow-xl">
+        <div className="flex items-start gap-3"><div className="rounded-full bg-red-50 p-2 text-red-700"><Trash2 className="h-5 w-5"/></div><div><h2 id="clear-pre-qr-title" className="text-lg font-semibold text-ink">Clear pre-QR false positives?</h2><p id="clear-pre-qr-description" className="mt-2 text-sm leading-6 text-muted">This clears open scheduled no-attendance records dated before your office’s first QR scan. Their inbox alerts will be removed. Audit history is retained, and other discrepancy types are not affected.</p></div></div>
+        <div className="mt-5 flex justify-end gap-2"><button disabled={clearing} onClick={()=>setConfirmClear(false)} className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-canvas disabled:opacity-50">Cancel</button><button disabled={clearing} onClick={clearPreQr} className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50">{clearing?'Clearing…':'Clear eligible records'}</button></div>
+      </section>
+    </div>}
 
     {selected&&<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" role="presentation" onMouseDown={e=>e.target===e.currentTarget&&setSelected(null)}>
       <section role="dialog" aria-modal="true" aria-labelledby="discrepancy-title" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-surface p-5 shadow-xl sm:rounded-2xl">
