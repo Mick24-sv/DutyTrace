@@ -309,20 +309,20 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
   if(institutionId){scopeParams.push(institutionId);scope.push(`d.institution_id=$${scopeParams.length}`);}
   if(officeId){scopeParams.push(officeId);scope.push(`d.office_id=$${scopeParams.length}`);}
   if(studentId){scopeParams.push(studentId);scope.push(`d.student_id=$${scopeParams.length}`);}
-  // QR attendance cannot be expected before an office had its first QR code.
-  // Close previously generated no-show flags before that rollout date instead of
-  // repeatedly treating pre-DutyTrace scheduled hours as missing QR attendance.
-  const preQr=await db.query(`WITH qr_start AS (
+  // Do not treat scheduled shifts before the office's first recorded QR scan as
+  // missed QR attendance. A QR may have been generated before staff began using it.
+  // Close old rollout-period flags with history and clear their linked alerts.
+  const preQr=await db.query(`WITH tracking_start AS (
       SELECT o.id AS office_id, o.institution_id,
-        COALESCE(min((q.created_at AT TIME ZONE i.timezone)::date),
-          (now() AT TIME ZONE i.timezone)::date + 1) AS first_qr_date
+        COALESCE(min((e.recorded_at AT TIME ZONE i.timezone)::date),
+          (now() AT TIME ZONE i.timezone)::date + 1) AS first_tracking_date
       FROM offices o JOIN institutions i ON i.id=o.institution_id
-      LEFT JOIN office_qr_codes q ON q.office_id=o.id
+      LEFT JOIN attendance_events e ON e.office_id=o.id
       GROUP BY o.id,o.institution_id,i.timezone
     ), candidates AS (
       SELECT d.id,d.status AS old_status FROM attendance_discrepancies d
-      JOIN qr_start q ON q.office_id=d.office_id AND q.institution_id=d.institution_id
-      WHERE d.discrepancy_type='scheduled_no_attendance' AND d.shift_date<q.first_qr_date
+      JOIN tracking_start q ON q.office_id=d.office_id AND q.institution_id=d.institution_id
+      WHERE d.discrepancy_type='scheduled_no_attendance' AND d.shift_date<q.first_tracking_date
         AND d.status IN('open','explanation_submitted','under_review')
         ${scope.length?`AND ${scope.join(' AND ')}`:''}
       FOR UPDATE OF d
@@ -391,7 +391,7 @@ export async function reconcile({institutionId=null,officeId=null,studentId=null
     FROM student_duty_schedules s JOIN academic_terms t ON t.id=s.term_id JOIN institutions i ON i.id=s.institution_id
     JOIN student_duty_schedule_days d ON d.schedule_id=s.id
     CROSS JOIN LATERAL generate_series(GREATEST(s.effective_starts_on,(now() AT TIME ZONE t.timezone)::date - 90,
-      COALESCE((SELECT min((q.created_at AT TIME ZONE t.timezone)::date) FROM office_qr_codes q WHERE q.office_id=s.office_id),
+      COALESCE((SELECT min((e.recorded_at AT TIME ZONE t.timezone)::date) FROM attendance_events e WHERE e.office_id=s.office_id),
         (now() AT TIME ZONE t.timezone)::date + 1)),
       LEAST(COALESCE(s.effective_ends_on,(now() AT TIME ZONE t.timezone)::date), (now() AT TIME ZONE t.timezone)::date), interval '1 day') day
     WHERE ${where.join(' AND ')} AND extract(isodow FROM day)=d.weekday`,params);
