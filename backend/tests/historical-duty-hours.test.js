@@ -70,7 +70,7 @@ describe('historical duty-hour credits', () => {
     assert.equal(termProgress.remainingHours, 59.5);
     const forecast = await api.get(`/forecast/mine?termId=${termId}`, as('studentA'));
     assert.equal(forecast.status, 200, JSON.stringify(forecast.body));
-    assert.equal(forecast.body.data.validatedCompletedHours, 40.5);
+    assert.equal(forecast.body.data.completedHours, 40.5);
 
     const amendment = await api.post('/historical-duty-hours', { ...as('supervisorA'), body: {
       ...creditBody, hours: 39.25, verificationReference: 'Paper DTR archive 2026-AUG-17 amended',
@@ -147,7 +147,7 @@ describe('historical duty-hour credits', () => {
     const supervisorCookie = await api.login('hist-supervisor@isolated.dutytrace.test');
     const foreignCredit = await api.post('/historical-duty-hours', { cookie: supervisorCookie, body: {
       studentId,termId:term.id,month,granularity:'monthly_total',hours:12,verificationSource:'Signed paper DTR',
-      verificationReference:'Isolated archive record 14',reason:'Verified from the isolated office ledger.',
+      verificationReference:'Isolated archive record 14',reason:'Verified from the isolated office ledger.',exceptional:true,
     } });
     assert.equal(foreignCredit.status,201,JSON.stringify(foreignCredit.body));
     const mainOversight = await api.get('/historical-duty-hours/oversight',as('admin'));

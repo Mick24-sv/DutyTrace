@@ -10,6 +10,7 @@ import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-d
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const roundHours = (seconds) => Math.round((seconds / 3600) * 100) / 100;
+const roundHourValue = (hours) => Math.round(Number(hours || 0) * 100) / 100;
 
 const mapTerm = (row) => ({
   id: row.id,
@@ -288,7 +289,7 @@ async function progressForStudents(term, students, now) {
       officeId: requirement?.office_id ?? student.office_id,
       officeName: student.office_name,
       recordedHours: roundHours(recordedSeconds),
-      historicalHours: roundHours((historicalVerified.get(student.id) ?? 0) / 3600),
+      historicalHours: roundHours(historicalVerified.get(student.id) ?? 0),
       ...calculateSemesterProgress({
         requiredHours: requirement?.required_hours != null ? Number(requirement.required_hours) : null,
         verifiedHours,
@@ -415,7 +416,7 @@ export async function myMonthlySummary(user, termId) {
     months.push({
       month,
       recordedHours,
-      historicalHours: roundHours(historicalByMonth.get(month) ?? 0),
+      historicalHours: roundHourValue(historicalByMonth.get(month) ?? 0),
       verifiedHours,
       pendingHours: roundHours(Math.max(0, recordedSeconds - (verifiedSeconds ?? 0))),
       adjustedHours: roundHours(adjustedSeconds),

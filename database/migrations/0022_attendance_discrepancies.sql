@@ -63,7 +63,7 @@ CREATE TABLE attendance_adjustments (
   verified_delta_seconds integer NOT NULL DEFAULT 0,
   approved_by uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   approved_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT attendance_adjustment_month CHECK (dtr_month IS NULL OR dtr_month ~ '^\\d{4}-(0[1-9]|1[0-2])$')
+  CONSTRAINT attendance_adjustment_month CHECK (dtr_month IS NULL OR dtr_month ~ '^[0-9]{4}-(0[1-9]|1[0-2])$')
 );
 CREATE INDEX attendance_adjustments_student_idx ON attendance_adjustments(institution_id, student_id, approved_at);
 CREATE TABLE attendance_adjustment_sources (
