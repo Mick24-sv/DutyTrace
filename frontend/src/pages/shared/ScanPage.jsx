@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CircleCheck, CircleX, QrCode, TriangleAlert } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
@@ -27,6 +27,7 @@ export default function ScanPage() {
   const [cameraMessage, setCameraMessage] = useState('');
   const [result, setResult] = useState(null);
   const [failure, setFailure] = useState(null);
+  const submittingRef = useRef(false);
 
   const tz = status.data?.timezone;
   const timedIn = status.data?.state === 'timed_in';
@@ -35,6 +36,8 @@ export default function ScanPage() {
   const attendancePath = `${ROLE_CONFIG[user.role].base}/attendance`;
 
   const submit = async (qrPayload) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setMode('submitting');
     setFailure(null);
     try {
@@ -45,6 +48,8 @@ export default function ScanPage() {
     } catch (err) {
       setFailure({ message: err.message, code: err.code });
       setMode('idle');
+    } finally {
+      submittingRef.current = false;
     }
   };
 

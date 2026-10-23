@@ -5,7 +5,6 @@ import { recordAudit } from '../audit/audit.service.js';
 import { readPayload } from '../qr/qr.service.js';
 import { buildSessions, summarizeMonth } from './calc.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
-import { reconcile as reconcileDiscrepancies } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 import { effectivePolicyForCurrentDate } from '../policy-templates/policy-templates.service.js';
 
 const maxSessionSeconds = () => env.maxSessionHours * 3600;
@@ -116,9 +115,9 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
         session,
       };
     });
-    // Scan processing also reconciles this student's ended approved shifts. A separate
-    // deployment cron endpoint handles missed shifts when nobody scans later that day.
-    await reconcileDiscrepancies({institutionId:user.institutionId,studentId:user.id}).catch(()=>{});
+    // Schedule reconciliation can inspect up to 90 days of shifts and may create a
+    // review notification for each missed shift. Keep it off this interactive path;
+    // the dedicated reconciliation endpoint processes those records separately.
     return result;
   } catch (err) {
     // Log refused scans (outside the rolled-back transaction) so odd patterns are visible.
