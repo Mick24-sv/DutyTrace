@@ -20,6 +20,7 @@ import { recoveryRouter } from '../modules/recovery/recovery.routes.js';
 import { transitionsRouter } from '../modules/transitions/transitions.routes.js';
 import { attendanceDiscrepanciesRouter } from '../modules/attendance-discrepancies/attendance-discrepancies.routes.js';
 import { policyTemplatesRouter } from '../modules/policy-templates/policy-templates.routes.js';
+import { historicalDutyHoursRouter } from '../modules/historical-duty-hours/historical-duty-hours.routes.js';
 
 // Feature routers (absences, compliance, ...) get mounted here in later phases.
 export function buildRoutes(options = {}) {
@@ -32,6 +33,7 @@ export function buildRoutes(options = {}) {
   router.use('/offices', officesRouter);
   router.use('/attendance', attendanceRouter);
   router.use('/attendance-discrepancies', attendanceDiscrepanciesRouter);
+  router.use('/historical-duty-hours', historicalDutyHoursRouter);
   router.use('/policy-templates', policyTemplatesRouter);
   router.use('/dtrs', dtrRouter);
   router.use('/absences', absencesRouter);

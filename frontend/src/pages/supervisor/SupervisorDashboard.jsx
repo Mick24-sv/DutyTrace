@@ -21,6 +21,7 @@ import ProgressBar from '../../components/ui/ProgressBar.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { formatDutyTime, formatHours, formatMonth, formatTime } from '../../utils/format.js';
+import HistoricalDutyHoursPanel from '../../components/attendance/HistoricalDutyHoursPanel.jsx';
 
 export default function SupervisorDashboard() {
   const { user } = useAuth();
@@ -159,44 +160,7 @@ export default function SupervisorDashboard() {
         </div>
       )}
 
-      <Card title="Student Assistants’ preferred duty times" className="mb-6" action={
-        <Link to="/supervisor/duty-schedules" className="text-sm font-medium text-teal hover:underline">Review preferences</Link>
-      }>
-        {scheduleOverview.loading && <p role="status" className="text-sm text-muted">Loading submitted preferences…</p>}
-        {scheduleOverview.error && <p role="alert" className="text-sm text-bad-fg">Unable to load schedule preferences: {scheduleOverview.error}</p>}
-        {!scheduleOverview.loading && !scheduleOverview.error && scheduleOverview.data?.schedules?.length > 0 && <>
-          <p className="mb-3 text-sm text-muted">{scheduleOverview.data.term ? `${scheduleOverview.data.term.academicYear} · ${scheduleOverview.data.term.semester} — submitted and approved weekly schedules` : 'Current term'}</p>
-          <div className="hidden overflow-x-auto sm:block"><table className="min-w-max border-collapse text-left text-sm"><thead><tr>
-            <th className="border border-line bg-canvas p-2">Student Assistant</th>
-            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => <th key={day} className="border border-line bg-canvas p-2">{day.slice(0, 3)}</th>)}
-          </tr></thead><tbody>{scheduleOverview.data.schedules.map((schedule) => <tr key={schedule.id}>
-            <th className="border border-line p-2 font-medium">{schedule.studentName}<span className="block text-xs font-normal capitalize text-muted">{schedule.status.replaceAll('_', ' ')}</span></th>
-            {Array.from({ length: 6 }, (_, index) => {
-              const day = schedule.days.find((item) => item.weekday === index + 1);
-              return <td key={index} className="min-w-28 border border-line p-2 align-top">{day ? <>
-                <span>{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</span>
-                {day.afternoonStartsAt && <span className="block">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</span>}
-              </> : <span className="text-muted">Not available</span>}</td>;
-            })}
-          </tr>)}</tbody></table></div>
-          <div className="space-y-3 sm:hidden">{scheduleOverview.data.schedules.map((schedule) => <article key={schedule.id} className="rounded-lg border border-line p-3">
-            <div className="flex items-start justify-between gap-2"><h3 className="min-w-0 break-words text-sm font-semibold">{schedule.studentName}</h3><Badge tone={schedule.status === 'approved' ? 'approved' : 'pending'}>{schedule.status.replaceAll('_', ' ')}</Badge></div>
-            <div className="mt-3 grid grid-cols-2 gap-2">{schedule.days.map((day) => <div key={day.weekday} className="min-w-0 rounded-md bg-canvas p-2">
-              <p className="text-xs font-semibold">{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day.weekday - 1]}</p>
-              <p className="mt-1 break-words text-xs text-muted">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</p>
-              {day.afternoonStartsAt && <p className="break-words text-xs text-muted">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</p>}
-            </div>)}</div>
-          </article>)}</div>
-          <p className="mt-2 text-xs text-muted">Times are student preferences unless status is approved. Approval checks schedule overlaps and office capacity.</p>
-        </>}
-        {!scheduleOverview.loading && !scheduleOverview.error && !scheduleOverview.data?.schedules?.length && <p className="text-sm text-muted">No submitted or approved preferences for the current term.</p>}
-      </Card>
 
-      <Card title="Attendance discrepancy review" className="mb-6" action={<Link to="/supervisor/discrepancies" className="text-sm font-medium text-teal hover:underline">Open review queue</Link>}>
-        <p className="text-sm text-muted">Review student explanations and correction requests for your office. Original QR records stay unchanged.</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-sm"><Badge tone="pending">{discrepancySummary.data?.pendingReview??0} pending review</Badge><Badge tone="neutral">{discrepancySummary.data?.open??0} unresolved</Badge></div>
-        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Could not load discrepancy counts: {discrepancySummary.error}</p>}
-      </Card>
 
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -328,7 +292,7 @@ export default function SupervisorDashboard() {
       </Card>
 
       {/* Two-column layout for Today's Attendance and Students Below Requirement */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card
           title="Today's Attendance Overview"
           action={
@@ -337,7 +301,7 @@ export default function SupervisorDashboard() {
             </Link>
           }
         >
-          <div className="hidden sm:block">
+          <div className="hidden 2xl:block">
           <DataTable
             columns={todayColumns}
             rows={todayAttendance}
@@ -345,7 +309,7 @@ export default function SupervisorDashboard() {
             empty={loading ? 'Loading attendance…' : 'No student assistants assigned to your office.'}
           />
           </div>
-          <div className="divide-y divide-line sm:hidden">
+          <div className="divide-y divide-line 2xl:hidden">
             {todayAttendance.length === 0 ? <p className="py-4 text-center text-sm text-muted">{loading ? 'Loading attendance...' : 'No student assistants assigned to your office.'}</p> : todayAttendance.map((assistant) => (
               <div key={assistant.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
@@ -367,7 +331,7 @@ export default function SupervisorDashboard() {
             </Link>
           }
         >
-          <div className="hidden sm:block">
+          <div className="hidden 2xl:block">
           <DataTable
             columns={belowColumns}
             rows={studentsBelow}
@@ -379,7 +343,7 @@ export default function SupervisorDashboard() {
             }
           />
           </div>
-          <div className="divide-y divide-line sm:hidden">
+          <div className="divide-y divide-line 2xl:hidden">
             {studentsBelow.length === 0 ? <p className="py-4 text-center text-sm text-muted">{loading ? 'Checking hours...' : 'No assigned semester requirements are currently below target.'}</p> : studentsBelow.map((student) => (
               <article key={student.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
                 <p className="break-words text-sm font-medium text-ink">{student.studentName}</p>
@@ -401,13 +365,54 @@ export default function SupervisorDashboard() {
         </Card>
       </div>
 
+      <Card title="Attendance discrepancy review" className="mt-4 [&>div:last-child]:!p-3" action={<Link to="/supervisor/discrepancies" className="text-sm font-medium text-teal hover:underline">Open review queue</Link>}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm leading-snug text-muted">Review student explanations and correction requests for your office.</p>
+          <div className="flex flex-wrap gap-2 text-sm"><Badge tone="pending">{discrepancySummary.data?.pendingReview??0} pending review</Badge><Badge tone="neutral">{discrepancySummary.data?.open??0} unresolved</Badge></div>
+        </div>
+        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Could not load discrepancy counts: {discrepancySummary.error}</p>}
+      </Card>
+
+      <Card title="Student Assistants’ preferred duty times" className="mt-4 mb-6" action={
+        <Link to="/supervisor/duty-schedules" className="text-sm font-medium text-teal hover:underline">Review preferences</Link>
+      }>
+        {scheduleOverview.loading && <p role="status" className="text-sm text-muted">Loading submitted preferences…</p>}
+        {scheduleOverview.error && <p role="alert" className="text-sm text-bad-fg">Unable to load schedule preferences: {scheduleOverview.error}</p>}
+        {!scheduleOverview.loading && !scheduleOverview.error && scheduleOverview.data?.schedules?.length > 0 && <>
+          <p className="mb-3 text-sm text-muted">{scheduleOverview.data.term ? `${scheduleOverview.data.term.academicYear} · ${scheduleOverview.data.term.semester} — submitted and approved weekly schedules` : 'Current term'}</p>
+          <div className="hidden overflow-x-auto sm:block"><table className="min-w-max border-collapse text-left text-sm"><thead><tr>
+            <th className="border border-line bg-canvas p-2">Student Assistant</th>
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => <th key={day} className="border border-line bg-canvas p-2">{day.slice(0, 3)}</th>)}
+          </tr></thead><tbody>{scheduleOverview.data.schedules.map((schedule) => <tr key={schedule.id}>
+            <th className="border border-line p-2 font-medium">{schedule.studentName}<span className="block text-xs font-normal capitalize text-muted">{schedule.status.replaceAll('_', ' ')}</span></th>
+            {Array.from({ length: 6 }, (_, index) => {
+              const day = schedule.days.find((item) => item.weekday === index + 1);
+              return <td key={index} className="min-w-28 border border-line p-2 align-top">{day ? <>
+                <span>{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</span>
+                {day.afternoonStartsAt && <span className="block">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</span>}
+              </> : <span className="text-muted">Not available</span>}</td>;
+            })}
+          </tr>)}</tbody></table></div>
+          <div className="space-y-3 sm:hidden">{scheduleOverview.data.schedules.map((schedule) => <article key={schedule.id} className="rounded-lg border border-line p-3">
+            <div className="flex items-start justify-between gap-2"><h3 className="min-w-0 break-words text-sm font-semibold">{schedule.studentName}</h3><Badge tone={schedule.status === 'approved' ? 'approved' : 'pending'}>{schedule.status.replaceAll('_', ' ')}</Badge></div>
+            <div className="mt-3 grid grid-cols-2 gap-2">{schedule.days.map((day) => <div key={day.weekday} className="min-w-0 rounded-md bg-canvas p-2">
+              <p className="text-xs font-semibold">{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day.weekday - 1]}</p>
+              <p className="mt-1 break-words text-xs text-muted">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</p>
+              {day.afternoonStartsAt && <p className="break-words text-xs text-muted">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</p>}
+            </div>)}</div>
+          </article>)}</div>
+          <p className="mt-2 text-xs text-muted">Times are student preferences unless status is approved. Approval checks schedule overlaps and office capacity.</p>
+        </>}
+        {!scheduleOverview.loading && !scheduleOverview.error && !scheduleOverview.data?.schedules?.length && <p className="text-sm text-muted">No submitted or approved preferences for the current term.</p>}
+      </Card>
+
       {/* Full Table: All Assigned Student Assistants */}
       <Card
         title="Monthly Duty Hours Summary"
-        className="mt-6"
+        className="mt-4"
         action={<span className="whitespace-nowrap text-right text-xs text-muted">{data?.semesterSummary?.term ? `${data.semesterSummary.term.academicYear} · ${data.semesterSummary.term.semester}` : 'No active academic term'}</span>}
       >
-        <p className="mb-3 text-xs text-muted">Monthly completed hours are calculated from attendance records. Hours left use the assigned semester requirement and these recorded hours.</p>
+        <p className="mb-3 text-xs text-muted">QR-recorded and historical paper-DTR credits are shown separately. Remaining hours use approved DTRs and verified historical credits.</p>
         <div className="hidden overflow-x-auto sm:block"><table className="min-w-max border-collapse text-left text-sm"><thead><tr>
           <th className="border border-line bg-canvas p-2">Student Assistant</th>
           <th className="border border-line bg-canvas p-2">Duty Hours Requirement</th>
@@ -417,7 +422,7 @@ export default function SupervisorDashboard() {
         </tr></thead><tbody>{assistants.map((assistant) => <tr key={assistant.id}>
           <th className="whitespace-nowrap border border-line p-2 font-medium">{assistant.studentName}</th>
           <td className="whitespace-nowrap border border-line p-2">{assistant.semesterRequirementAssigned ? formatHours(assistant.semesterRequiredHours) : 'No requirement'}</td>
-          {monthColumns.map((month) => <td key={month} className="whitespace-nowrap border border-line p-2">{formatHours(assistant.monthlyHours?.[month] ?? 0)}</td>)}
+          {monthColumns.map((month) => <td key={month} className="whitespace-nowrap border border-line p-2"><span className="block text-[10px] text-muted">QR recorded</span>{formatHours(assistant.monthlyHours?.[month] ?? 0)}<span className="mt-1 block text-[10px] text-muted">Historical verified</span>{formatHours(assistant.historicalMonthlyHours?.[month] ?? 0)}</td>)}
           <td className="whitespace-nowrap border border-line p-2">{assistant.recordedHoursLeft == null ? '—' : formatHours(assistant.recordedHoursLeft)}</td>
           <td className="whitespace-nowrap border border-line p-2 font-semibold">{formatHours(assistant.totalRecordedTermHours ?? 0)}</td>
         </tr>)}</tbody></table></div>
@@ -428,10 +433,12 @@ export default function SupervisorDashboard() {
             <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Hours left</dt><dd className="mt-1 font-semibold text-ink">{assistant.recordedHoursLeft == null ? '—' : formatHours(assistant.recordedHoursLeft)}</dd></div>
             <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Total hours</dt><dd className="mt-1 font-semibold text-ink">{formatHours(assistant.totalRecordedTermHours ?? 0)}</dd></div>
           </dl>
-          {monthColumns.length > 0 && <div className="mt-3"><p className="mb-2 text-xs font-semibold text-muted">Completed by month</p><dl className="grid grid-cols-2 gap-2">{monthColumns.map((month) => <div key={month} className="flex min-w-0 items-center justify-between gap-2 rounded-md border border-line px-2 py-1.5 text-xs"><dt className="truncate text-muted">{formatMonth(month)}</dt><dd className="whitespace-nowrap font-medium">{formatHours(assistant.monthlyHours?.[month] ?? 0)}</dd></div>)}</dl></div>}
+          {monthColumns.length > 0 && <div className="mt-3"><p className="mb-2 text-xs font-semibold text-muted">Hours by month</p><dl className="grid grid-cols-2 gap-2">{monthColumns.map((month) => <div key={month} className="flex min-w-0 items-start justify-between gap-2 rounded-md border border-line px-2 py-1.5 text-xs"><dt className="truncate text-muted">{formatMonth(month)}</dt><dd className="whitespace-nowrap text-right font-medium"><span className="block">QR {formatHours(assistant.monthlyHours?.[month] ?? 0)}</span><span className="block text-teal">Historical {formatHours(assistant.historicalMonthlyHours?.[month] ?? 0)}</span></dd></div>)}</dl></div>}
         </article>)}</div>
         {assistants.length === 0 && <p className="py-4 text-center text-sm text-muted">{loading ? 'Loading hour summaries…' : 'No assistants assigned to your office.'}</p>}
       </Card>
+
+      <HistoricalDutyHoursPanel />
 
     </>
   );

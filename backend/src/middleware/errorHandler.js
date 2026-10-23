@@ -40,9 +40,14 @@ export const errorHandler = (err, _req, res, _next) => {
     });
   }
 
-  // Log only safe metadata. Error objects can contain request bodies, which
-  // may include passwords, reset tokens, or other sensitive values.
-  if (!known) console.error('Unhandled API error', { name: err?.name, code: err?.code });
+  // Keep production logs free of database details. In local development the
+  // database message identifies SQL issues (for example, ambiguous columns)
+  // without logging request bodies, which may contain credentials.
+  if (!known) {
+    const metadata = { name: err?.name, code: err?.code };
+    if (process.env.NODE_ENV !== 'production') metadata.message = err?.message;
+    console.error('Unhandled API error', metadata);
+  }
 
   return res.status(status).json({
     success: false,

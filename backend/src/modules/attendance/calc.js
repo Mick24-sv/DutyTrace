@@ -59,6 +59,7 @@ export function buildSessions(events, { now, timeZone, maxSessionSeconds }) {
     counted: false,
     date: localDateKey(timeIn.recordedAt, timeZone),
     flags: [],
+    adjusted: Boolean(timeIn.adjusted),
   });
 
   for (const e of events) {
@@ -79,6 +80,7 @@ export function buildSessions(events, { now, timeZone, maxSessionSeconds }) {
         counted: !tooLong,
         date,
         flags: localDateKey(e.recordedAt, timeZone) !== date ? ['crosses_midnight'] : [],
+        adjusted: Boolean(open.adjusted || e.adjusted),
       });
       open = null;
     } else {
@@ -91,6 +93,7 @@ export function buildSessions(events, { now, timeZone, maxSessionSeconds }) {
         counted: false,
         date: localDateKey(e.recordedAt, timeZone),
         flags: [],
+        adjusted: Boolean(e.adjusted),
       });
     }
   }

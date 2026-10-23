@@ -151,6 +151,10 @@ export async function myOverview(user) {
   const { rows } = await query(`${DTR_SELECT} WHERE d.user_id = $1`, [user.id]);
   const byMonth = new Map(rows.map((r) => [r.month, mapDtr(r)]));
   const verified = rows.filter((r) => r.status === 'approved').reduce((sum, r) => sum + Number(r.effective_verified_seconds ?? r.verified_seconds), 0);
+  const { rows: historicalRows } = await query(`SELECT credit_month,sum(hours)::numeric AS hours
+    FROM historical_duty_credits WHERE student_id=$1 AND institution_id=$2 AND status='approved' GROUP BY credit_month`,
+  [user.id, user.institutionId]);
+  const historicalByMonth = new Map(historicalRows.map((row) => [row.credit_month, Number(row.hours)]));
   const policy = await getPolicy(user.institutionId);
   const effectivePolicy = {
     ...policy,
@@ -159,8 +163,9 @@ export async function myOverview(user) {
   return {
     timezone: env.timezone,
     policy: effectivePolicy,
-    months: endedMonths(now, env.timezone).map((month) => ({ month, dtr: byMonth.get(month) ?? null })),
+    months: endedMonths(now, env.timezone).map((month) => ({ month, dtr: byMonth.get(month) ?? null, historicalHours: historicalByMonth.get(month) ?? 0 })),
     verifiedHoursTotal: secondsToHours(verified),
+    historicalHoursTotal: Math.round(historicalRows.reduce((sum, row) => sum + Number(row.hours), 0) * 100) / 100,
     approvedCount: rows.filter((r) => r.status === 'approved').length,
   };
 }

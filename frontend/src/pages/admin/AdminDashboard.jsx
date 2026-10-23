@@ -20,6 +20,7 @@ import Badge from '../../components/ui/Badge.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { formatHours, formatMonth } from '../../utils/format.js';
+import HistoricalDutyCreditsReview from '../../components/attendance/HistoricalDutyCreditsReview.jsx';
 
 export default function AdminDashboard() {
   const { data, loading, error } = useApiData('/reports/dashboard-stats');
@@ -108,12 +109,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <Card title="Attendance discrepancy monitoring" className="mb-6" action={<Link to="/admin/discrepancies" className="text-sm font-medium text-teal hover:underline">Open institution review</Link>}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[['Open',discrepancySummary.data?.open],['Pending supervisor review',discrepancySummary.data?.pendingReview],['Resolved',discrepancySummary.data?.resolved],['Rejected',discrepancySummary.data?.rejected]].map(([label,value])=><div key={label} className="rounded-lg bg-canvas p-3"><div className="text-xs text-muted">{label}</div><div className="mt-1 text-xl font-semibold text-ink">{discrepancySummary.loading?'…':value??0}</div></div>)}
-        </div>
-        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Unable to load discrepancy monitoring: {discrepancySummary.error}</p>}
-      </Card>
 
       {/* Row 1: High Level System KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -178,6 +173,15 @@ export default function AdminDashboard() {
           icon={BarChart3}
         />
       </div>
+
+      <Card title="Attendance discrepancy monitoring" className="mt-6" action={<Link to="/admin/discrepancies" className="text-sm font-medium text-teal hover:underline">Open institution review</Link>}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[['Open',discrepancySummary.data?.open],['Pending supervisor review',discrepancySummary.data?.pendingReview],['Resolved',discrepancySummary.data?.resolved],['Rejected',discrepancySummary.data?.rejected]].map(([label,value])=><div key={label} className="rounded-lg bg-canvas p-3"><div className="text-xs text-muted">{label}</div><div className="mt-1 text-xl font-semibold text-ink">{discrepancySummary.loading?'…':value??0}</div></div>)}
+        </div>
+        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Unable to load discrepancy monitoring: {discrepancySummary.error}</p>}
+      </Card>
+
+      <HistoricalDutyCreditsReview />
 
       {/* Middle Section: DTR Breakdown and Hours Summary */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
@@ -298,6 +302,7 @@ export default function AdminDashboard() {
           </div>
         </Card>
       </div>
+
 
       {/* Bottom Section: Absences and Document Review Summaries */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">

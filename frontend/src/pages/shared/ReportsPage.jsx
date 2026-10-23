@@ -252,19 +252,19 @@ export default function ReportsPage() {
               const status = typeof r.status === 'string' ? r.status : 'unknown';
               const tone = status === 'unknown'
                 ? 'neutral'
-                : status === 'approved'
+                : status === 'approved' || status === 'historical_credit'
                   ? 'approved'
                   : status === 'needs_correction'
                     ? 'rejected'
                     : 'pending';
               return (
                 <Badge tone={tone}>
-                  {status.replace(/_/g, ' ')}
+                  {status === 'historical_credit' ? 'Historical verified' : status.replace(/_/g, ' ')}
                 </Badge>
               );
             },
           },
-          { key: 'currentRevision', header: 'Rev', render: (r) => `v${r.currentRevision}` },
+          { key: 'currentRevision', header: 'Rev', render: (r) => r.currentRevision ? `v${r.currentRevision}` : '—' },
           {
             key: 'recordedHours',
             header: 'Recorded',
@@ -274,6 +274,11 @@ export default function ReportsPage() {
             key: 'verifiedHours',
             header: 'Verified',
             render: (r) => <span className="font-mono font-semibold text-ok-fg">{formatHours(r.verifiedHours)}</span>,
+          },
+          {
+            key: 'historicalHours',
+            header: 'Historical',
+            render: (r) => <span className="font-mono text-teal">{formatHours(r.historicalHours)}</span>,
           },
           { key: 'decidedBy', header: 'Reviewer' },
         ];
@@ -453,7 +458,7 @@ export default function ReportsPage() {
 
       case 'dtr':
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
             <div className="rounded-lg border border-line bg-surface p-3">
               <div className="text-xs text-muted">Total DTRs</div>
               <div className="text-lg font-bold text-navy mt-1">{s.total}</div>
@@ -465,6 +470,10 @@ export default function ReportsPage() {
             <div className="rounded-lg border border-line bg-surface p-3">
               <div className="text-xs text-muted">Approved & Verified</div>
               <div className="text-lg font-bold text-ok-fg mt-1">{s.approved}</div>
+            </div>
+            <div className="rounded-lg border border-line bg-surface p-3">
+              <div className="text-xs text-muted">Months with Historical Credits</div>
+              <div className="text-lg font-bold text-teal mt-1">{s.historicalCreditMonths ?? 0}</div>
             </div>
             <div className="rounded-lg border border-line bg-surface p-3">
               <div className="text-xs text-muted">Returned for Correction</div>

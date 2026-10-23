@@ -445,9 +445,21 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
     params,
   );
 
+  const { rows: historicalRows } = await query(`SELECT c.student_id,c.office_id,c.credit_month AS month,
+      u.full_name AS student_name,u.email AS student_email,o.name AS office_name,o.code AS office_code,
+      sum(c.hours)::numeric AS historical_hours
+    FROM historical_duty_credits c JOIN users u ON u.id=c.student_id JOIN offices o ON o.id=c.office_id
+    WHERE c.institution_id=$1 AND c.status='approved'
+      AND ($2::uuid IS NULL OR c.office_id=$2) AND ($3::text IS NULL OR c.credit_month=$3)
+    GROUP BY c.student_id,c.office_id,c.credit_month,u.full_name,u.email,o.name,o.code`,
+  [user.institutionId, effectiveOfficeId, month ?? null]);
+  const historicalByStudentMonth = new Map(historicalRows.map((r) => [`${r.student_id}:${r.month}`, r]));
+  const seen = new Set();
   const statusCounts = { draft: 0, submitted: 0, under_review: 0, approved: 0, needs_correction: 0 };
   const items = rows.map((r) => {
     if (statusCounts[r.status] !== undefined) statusCounts[r.status]++;
+    const historical = historicalByStudentMonth.get(`${r.user_id}:${r.month}`);
+    if (historical) seen.add(`${r.user_id}:${r.month}`);
     const recHours = Number(r.recorded_hours || 0);
     const verHours = r.effective_verified_seconds != null ? Math.round((Number(r.effective_verified_seconds) / 3600) * 100) / 100 : 0;
 
@@ -460,6 +472,7 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
       verifiedHours: verHours,
       adjusted: r.effective_verified_seconds != null && Number(r.effective_verified_seconds)!==Number(r.verified_seconds),
       adjustmentHours: r.effective_verified_seconds != null ? Math.round(((Number(r.effective_verified_seconds)-Number(r.verified_seconds))/3600)*100)/100 : 0,
+      historicalHours: historical ? Number(historical.historical_hours) : 0,
       studentName: r.student_name,
       studentEmail: r.student_email,
       officeName: r.office_name,
@@ -469,10 +482,20 @@ export async function dtrReport({ user, officeId, month, status, page, limit }) 
       submittedAt: r.submitted_at,
     };
   });
+  if (!status || status === 'approved') for (const r of historicalRows) {
+    const key = `${r.student_id}:${r.month}`;
+    if (seen.has(key)) continue;
+    items.push({ id: `historical-${key}`, month: r.month, status: 'historical_credit', currentRevision: null,
+      recordedHours: 0, verifiedHours: 0, adjusted: false, adjustmentHours: 0, historicalHours: Number(r.historical_hours),
+      studentName: r.student_name, studentEmail: r.student_email, officeName: r.office_name, officeCode: r.office_code,
+      decidedBy: 'â€”', decidedAt: null, submittedAt: null });
+  }
+  items.sort((a, b) => b.month.localeCompare(a.month) || a.studentName.localeCompare(b.studentName));
 
   return {
     summary: {
-      total: items.length,
+      total: rows.length,
+      historicalCreditMonths: historicalRows.length,
       ...statusCounts,
       pendingReview: statusCounts.submitted + statusCounts.under_review,
     },
@@ -490,6 +513,7 @@ export const dtrCsvColumns = [
   { header: 'Revision', key: 'currentRevision' },
   { header: 'Recorded Hours', key: 'recordedHours' },
   { header: 'Verified Hours', key: 'verifiedHours' },
+  { header: 'Historical Verified Hours', key: 'historicalHours' },
   { header: 'Decided By', key: 'decidedBy' },
   { header: 'Decided At', key: 'decidedAt' },
   { header: 'Submitted At', key: 'submittedAt' },
@@ -925,9 +949,17 @@ export async function getDashboardStats(user) {
       }
     }
     const monthlyHoursByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
+    const historicalMonthlyHoursByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
     for (const month of monthColumns) {
       const monthData = month === monthRange.month ? hoursData : await hoursReport({ user, officeId, month, page: 1, limit: 1000 });
       for (const student of monthData.items) monthlyHoursByStudent.get(student.id)?.set(month, student.recordedHours);
+    }
+    if (semesterProgress.term) {
+      const { rows: historicalRows } = await query(`SELECT student_id,credit_month,sum(hours)::numeric AS hours
+        FROM historical_duty_credits WHERE institution_id=$1 AND office_id=$2 AND term_id=$3 AND status='approved'
+          AND credit_month=ANY($4::char(7)[]) GROUP BY student_id,credit_month`,
+      [user.institutionId, officeId, semesterProgress.term.id, monthColumns]);
+      for (const row of historicalRows) historicalMonthlyHoursByStudent.get(row.student_id)?.set(row.credit_month, Number(row.hours));
     }
     const studentsBelow = semesterProgress.students
       .filter((student) => student.requirementAssigned && student.remainingHours > 0)
@@ -952,10 +984,9 @@ export async function getDashboardStats(user) {
         semesterRequirementAssigned: semester?.requirementAssigned ?? false,
         meetsRequirement: semester?.requirementAssigned ? semester.remainingHours === 0 : null,
         monthlyHours: Object.fromEntries(monthColumns.map((month) => [month, monthlyHoursByStudent.get(student.id)?.get(month) ?? 0])),
+        historicalMonthlyHours: Object.fromEntries(monthColumns.map((month) => [month, historicalMonthlyHoursByStudent.get(student.id)?.get(month) ?? 0])),
         totalRecordedTermHours: monthColumns.reduce((total, month) => total + (monthlyHoursByStudent.get(student.id)?.get(month) ?? 0), 0),
-        recordedHoursLeft: semester?.requirementAssigned
-          ? Math.max(0, Math.round((semester.requiredHours - monthColumns.reduce((total, month) => total + (monthlyHoursByStudent.get(student.id)?.get(month) ?? 0), 0)) * 100) / 100)
-          : null,
+        recordedHoursLeft: semester?.remainingHours ?? null,
       };
     });
 

@@ -6,6 +6,7 @@ import { createNotification } from '../notifications/notifications.service.js';
 import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { calculateSemesterProgress, verifiedSecondsForTerm } from './semester.rules.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-duty-hours.service.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const roundHours = (seconds) => Math.round((seconds / 3600) * 100) / 100;
@@ -265,6 +266,7 @@ async function progressForStudents(term, students, now) {
   }
   const adjustedVerified=await verifiedAdjustmentSeconds(ids,String(term.starts_on).slice(0,7),String(term.ends_on).slice(0,7),{query},
     {fromDate:term.starts_on,toDate:term.ends_on,timezone:term.timezone});
+  const historicalVerified = await verifiedHistoricalSeconds(ids, term.id, { query });
 
   const requirements = await currentRequirements(term.id);
   return students.map((student) => {
@@ -276,7 +278,7 @@ async function progressForStudents(term, students, now) {
     const recordedSeconds = sessionSeconds(sessions, term.starts_on, term.ends_on);
     const verifiedSeconds = verifiedSecondsForTerm(
       dtrsByStudent.get(student.id), term.starts_on, term.ends_on, term.timezone,
-    ) + (adjustedVerified.get(student.id) ?? 0);
+    ) + (adjustedVerified.get(student.id) ?? 0) + (historicalVerified.get(student.id) ?? 0);
     const verifiedHours = roundHours(verifiedSeconds);
     const requirement = requirements.get(student.id);
     return {
@@ -286,6 +288,7 @@ async function progressForStudents(term, students, now) {
       officeId: requirement?.office_id ?? student.office_id,
       officeName: student.office_name,
       recordedHours: roundHours(recordedSeconds),
+      historicalHours: roundHours((historicalVerified.get(student.id) ?? 0) / 3600),
       ...calculateSemesterProgress({
         requiredHours: requirement?.required_hours != null ? Number(requirement.required_hours) : null,
         verifiedHours,
@@ -332,6 +335,99 @@ export async function myTerms(user) {
     });
   }
   return terms;
+}
+
+// Calendar-month view bounded to this student's academic term. It uses the same
+// effective event stream and DTR snapshot rules as semester progress, so approved
+// correction overlays are counted without rewriting finalized DTRs or raw scans.
+export async function myMonthlySummary(user, termId) {
+  const term = await requireTerm(termId, user.institutionId);
+  const { rows: [clock] } = await query('SELECT now() AS now');
+  const today = localDateKey(clock.now, term.timezone);
+  const endDate = today < term.ends_on ? today : term.ends_on;
+  if (endDate < term.starts_on) {
+    return { term: mapTerm(term), months: [] };
+  }
+
+  const startMonth = String(term.starts_on).slice(0, 7);
+  const endMonth = endDate.slice(0, 7);
+  const { rows: dtrRows } = await query(
+    `SELECT d.month,d.status,rv.snapshot FROM monthly_dtrs d
+     LEFT JOIN dtr_revisions rv ON rv.dtr_id=d.id AND rv.revision_no=d.verified_revision
+     WHERE d.user_id=$1 AND d.month BETWEEN $2 AND $3`,
+    [user.id, startMonth, endMonth],
+  );
+  const dtrsByMonth = new Map(dtrRows.map((row) => [row.month, row]));
+  const { rows: historicalRows } = await query(`SELECT credit_month AS month,sum(hours)::numeric AS hours
+    FROM historical_duty_credits WHERE institution_id=$1 AND student_id=$2 AND term_id=$3 AND status='approved'
+      AND credit_month BETWEEN $4 AND $5 GROUP BY credit_month`,
+  [user.institutionId, user.id, termId, startMonth, endMonth]);
+  const historicalByMonth = new Map(historicalRows.map((row) => [row.month, Number(row.hours)]));
+
+  const eventsByStudent = await effectiveEvents([user.id], {
+    startDate: term.starts_on, nextDate: endDate, timezone: term.timezone,
+  });
+  const sessions = buildSessions(eventsByStudent.get(user.id) ?? [], {
+    now: clock.now, timeZone: term.timezone, maxSessionSeconds: env.maxSessionHours * 3600,
+  }).filter((session) => session.date >= term.starts_on && session.date <= endDate);
+
+  const { rows: discrepancies } = await query(
+    `SELECT id,to_char(shift_date,'YYYY-MM') AS month,to_char(shift_date,'YYYY-MM-DD') AS date,
+       discrepancy_type AS type,status,detection_reason AS reason
+     FROM attendance_discrepancies
+     WHERE institution_id=$1 AND student_id=$2 AND shift_date BETWEEN $3::date AND $4::date
+       AND status NOT IN ('cancelled','superseded')
+     ORDER BY shift_date DESC,detected_at DESC`,
+    [user.institutionId, user.id, term.starts_on, endDate],
+  );
+  const discrepanciesByMonth = new Map();
+  for (const discrepancy of discrepancies) {
+    const list = discrepanciesByMonth.get(discrepancy.month) ?? [];
+    list.push({ id: discrepancy.id, date: discrepancy.date, type: discrepancy.type, status: discrepancy.status, reason: discrepancy.reason });
+    discrepanciesByMonth.set(discrepancy.month, list);
+  }
+
+  const months = [];
+  let cursor = new Date(`${startMonth}-01T12:00:00.000Z`);
+  const last = new Date(`${endMonth}-01T12:00:00.000Z`);
+  while (cursor <= last) {
+    const month = cursor.toISOString().slice(0, 7);
+    const monthStart = month === startMonth ? term.starts_on : `${month}-01`;
+    const monthLastDay = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+    const monthEnd = month === endMonth ? endDate : monthLastDay;
+    const monthSessions = sessions.filter((session) => session.date >= monthStart && session.date <= monthEnd);
+    const recordedSeconds = monthSessions.reduce((sum, session) => sum + (session.counted ? session.seconds : 0), 0);
+    const adjustedSeconds = monthSessions.reduce((sum, session) => sum + (session.counted && session.adjusted ? session.seconds : 0), 0);
+
+    const dtr = dtrsByMonth.get(month);
+    let verifiedHours = null;
+    let verifiedSeconds = null;
+    if (dtr?.status === 'approved') {
+      verifiedSeconds = verifiedSecondsForTerm([dtr], monthStart, monthEnd, term.timezone);
+      const adjustment = await verifiedAdjustmentSeconds([user.id], month, month, { query }, {
+        fromDate: monthStart, toDate: monthEnd, timezone: term.timezone,
+      });
+      verifiedSeconds += adjustment.get(user.id) ?? 0;
+      verifiedHours = roundHours(verifiedSeconds);
+    }
+
+    const recordedHours = roundHours(recordedSeconds);
+    months.push({
+      month,
+      recordedHours,
+      historicalHours: roundHours(historicalByMonth.get(month) ?? 0),
+      verifiedHours,
+      pendingHours: roundHours(Math.max(0, recordedSeconds - (verifiedSeconds ?? 0))),
+      adjustedHours: roundHours(adjustedSeconds),
+      dtrStatus: dtr?.status ?? 'not_submitted',
+      discrepancies: discrepanciesByMonth.get(month) ?? [],
+      pendingCorrectionCount: (discrepanciesByMonth.get(month) ?? []).filter((item) => ['explanation_submitted','under_review'].includes(item.status)).length,
+      isOngoing: month === today.slice(0, 7) && today >= term.starts_on && today <= term.ends_on,
+    });
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1, 12));
+  }
+
+  return { term: mapTerm(term), months };
 }
 
 export async function officeProgress({ actor, termId, officeId }) {

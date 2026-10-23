@@ -4,6 +4,7 @@ import { AppError } from '../../utils/response.js';
 import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { verifiedSecondsForTerm } from '../semesters/semester.rules.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-duty-hours.service.js';
 import {
   calculateHistoricalAttendancePace,
   calculateConfirmedScheduleHours,
@@ -167,6 +168,7 @@ async function computeForecastsForStudents({
   const startMonth=String(term.starts_on).slice(0,7), endMonth=String(term.ends_on).slice(0,7);
   const adjustedVerified=await verifiedAdjustmentSeconds(studentIds,startMonth,endMonth,db,
     {fromDate:term.starts_on,toDate:term.ends_on,timezone:term.timezone});
+  const historicalVerified=await verifiedHistoricalSeconds(studentIds,term.id,db);
 
   // 3. Raw attendance events in term for total recorded hours and in historical window for pace
   const eventsByStudent = await effectiveEvents(studentIds, {startDate:term.starts_on,nextDate:term.ends_on,timezone:term.timezone,db});
@@ -192,7 +194,7 @@ async function computeForecastsForStudents({
 
     // Total validated hours from approved DTRs
     const verifiedSecs = verifiedSecondsForTerm(studentDtrs, term.starts_on, term.ends_on, term.timezone)
-      + (adjustedVerified.get(student.id) ?? 0);
+      + (adjustedVerified.get(student.id) ?? 0) + (historicalVerified.get(student.id) ?? 0);
     const validatedCompletedHours = Math.round((verifiedSecs / 3600) * 100) / 100;
 
     // Total valid recorded hours in the term

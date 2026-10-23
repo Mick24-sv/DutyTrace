@@ -30,6 +30,10 @@ semestersRouter.get('/mine', requireRole('student'), asyncHandler(async (req, re
   ok(res, { terms: await semesters.myTerms(req.user) });
 }));
 
+semestersRouter.get('/mine/:termId/monthly-summary', requireRole('student'), asyncHandler(async (req, res) => {
+  ok(res, await semesters.myMonthlySummary(req.user, parseId(req.params.termId)));
+}));
+
 semestersRouter.get('/current', requireRole('admin', 'supervisor'), asyncHandler(async (req, res) => {
   ok(res, { term: await semesters.currentTerm(req.user.institutionId) });
 }));

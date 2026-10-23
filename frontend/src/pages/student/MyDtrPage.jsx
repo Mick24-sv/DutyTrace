@@ -36,6 +36,7 @@ export default function MyDtrPage() {
     { key: 'status', header: 'Status', render: (r) => (r.dtr ? <DtrStatusBadge status={r.dtr.status} /> : <span className="text-muted">Not generated</span>) },
     { key: 'recorded', header: 'Recorded', render: (r) => (r.dtr ? formatHours(r.dtr.recordedHours) : '—') },
     { key: 'verified', header: 'Verified', render: (r) => (r.dtr?.verifiedHours != null ? formatHours(r.dtr.verifiedHours) : <span className="text-muted">Not verified</span>) },
+    { key: 'historical', header: 'Historical verified', render: (r) => formatHours(r.historicalHours) },
     {
       key: 'action', header: '',
       render: (r) => (r.dtr ? (
@@ -56,8 +57,9 @@ export default function MyDtrPage() {
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
       {data && (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Supervisor-verified hours" value={formatHours(data.verifiedHoursTotal)} hint={`From ${data.approvedCount} approved DTR(s) only`} icon={ShieldCheck} />
+            <StatCard label="Historical verified hours" value={formatHours(data.historicalHoursTotal)} hint="From approved paper DTR credits" icon={ShieldCheck} />
             <StatCard label="Monthly DTR target" value={formatHours(data.policy.requiredMonthlyHours)} hint="Separate from semester duty-hour completion" icon={Target} />
             <StatCard label="DTRs created" value={data.months.filter((m) => m.dtr).length} hint="Last 12 ended months" icon={FileText} />
           </div>
@@ -91,6 +93,10 @@ export default function MyDtrPage() {
                     <div>
                       <p className="text-xs text-muted">Verified</p>
                       <p className="mt-1">{row.dtr?.verifiedHours != null ? formatHours(row.dtr.verifiedHours) : <span className="text-muted">Not verified</span>}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted">Historical verified</p>
+                      <p className="mt-1">{formatHours(row.historicalHours)}</p>
                     </div>
                   </div>
                 </article>

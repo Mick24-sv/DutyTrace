@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Check, Clock3, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -14,11 +15,13 @@ const localTimeToIso=(value,timezone='UTC')=>{const [d,t]=value.split('T');const
 
 export default function AttendanceDiscrepanciesPage(){
   const {user}=useAuth();
+  const [searchParams,setSearchParams]=useSearchParams();
+  const requestedId=searchParams.get('discrepancyId');
   const staff=user?.role==='supervisor'||user?.role==='admin';
   const reviewer=user?.role==='supervisor';
   const [data,setData]=useState({items:[],total:0});const [summary,setSummary]=useState(null);
   const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [busy,setBusy]=useState('');
-  const [filters,setFilters]=useState({status:'',type:'',search:'',date:''});const [selected,setSelected]=useState(null);
+  const [filters,setFilters]=useState(()=>({status:'',type:'',search:'',date:searchParams.get('date')??''}));const [selected,setSelected]=useState(null);
   const [explanation,setExplanation]=useState('');const [start,setStart]=useState('');const [end,setEnd]=useState('');const [remarks,setRemarks]=useState('');
   const load=useCallback(async()=>{setLoading(true);setError('');try{
     const qs=new URLSearchParams();Object.entries(filters).forEach(([k,v])=>v&&qs.set(k,v));
@@ -27,8 +30,13 @@ export default function AttendanceDiscrepanciesPage(){
   }catch(e){setError(e.message);}finally{setLoading(false);}},[filters]);
   useEffect(()=>{load();},[load]);
   const counts=useMemo(()=>summary??{open:0,pendingReview:0,resolved:0,rejected:0},[summary]);
-  const action=async(id,path,body)=>{setBusy(id);setError('');try{await apiPost(`/attendance-discrepancies/${id}/${path}`,body);setSelected(null);setExplanation('');setStart('');setEnd('');setRemarks('');await load();}catch(e){setError(e.message);}finally{setBusy('');}};
-  const openDetail=async(item)=>{setSelected({...item,loadingDetail:true});setExplanation('');setRemarks('');try{setSelected(await apiGet(`/attendance-discrepancies/${item.id}`));}catch(e){setError(e.message);setSelected(item);}};
+  const action=async(id,path,body)=>{setBusy(id);setError('');try{await apiPost(`/attendance-discrepancies/${id}/${path}`,body);setSelected(null);setExplanation('');setStart('');setEnd('');setRemarks('');setSearchParams({}, {replace:true});await load();}catch(e){setError(e.message);}finally{setBusy('');}};
+  const openDetail=useCallback(async(item)=>{setSelected({...item,loadingDetail:true});setExplanation('');setRemarks('');try{setSelected(await apiGet(`/attendance-discrepancies/${item.id}`));}catch(e){setError(e.message);setSelected(item);}},[]);
+  useEffect(()=>{
+    if(!requestedId||selected||loading)return;
+    const item=data.items.find((row)=>row.id===requestedId);
+    if(item)openDetail(item);
+  },[data.items,loading,openDetail,requestedId,selected]);
   const submitCorrection=()=>{
     if(!selected||!start||!end||!explanation.trim())return;
     const source=selected.originalDetails??{};
