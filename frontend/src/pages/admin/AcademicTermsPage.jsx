@@ -4,6 +4,7 @@ import { CalendarRange, LockKeyhole } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
+import TimezoneSelect from '../../components/ui/TimezoneSelect.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPost, apiPut } from '../../services/api.js';
@@ -214,8 +215,8 @@ export default function AcademicTermsPage() {
             <input id="institution-name" className={field} value={institutionForm.name} onChange={(event) => setInstitutionForm((f) => ({ ...f, name: event.target.value }))} required />
           </div>
           <div>
-            <label htmlFor="institution-timezone" className="mb-1 block text-xs font-medium text-muted">Default timezone (IANA)</label>
-            <input id="institution-timezone" className={field} value={institutionForm.timezone} onChange={(event) => setInstitutionForm((f) => ({ ...f, timezone: event.target.value }))} required />
+            <label htmlFor="institution-timezone" className="mb-1 block text-xs font-medium text-muted">Default timezone</label>
+            <TimezoneSelect id="institution-timezone" className={field} value={institutionForm.timezone} onChange={(event) => setInstitutionForm((f) => ({ ...f, timezone: event.target.value }))} required />
           </div>
           {institutionMessage && <p role={institutionMessage.ok ? 'status' : 'alert'} className={`sm:col-span-2 text-sm ${institutionMessage.ok ? 'text-ok-fg' : 'text-bad-fg'}`}>{institutionMessage.text}</p>}
           <div><Button type="submit" disabled={institutionBusy}>{institutionBusy ? 'Saving…' : 'Save institution settings'}</Button></div>
@@ -269,7 +270,7 @@ export default function AcademicTermsPage() {
           </div>
           <div>
             <label htmlFor="term-timezone" className="mb-1 block text-xs font-medium text-muted">Institution timezone</label>
-            <input id="term-timezone" className={field} value={form.timezone} onChange={set('timezone')} required disabled={Boolean(selected?.finalizedAt)} />
+            <TimezoneSelect id="term-timezone" className={field} value={form.timezone} onChange={set('timezone')} required disabled={Boolean(selected?.finalizedAt)} />
           </div>
           {error && <p role="alert" className="sm:col-span-2 text-sm text-bad-fg">{error}</p>}
           <div className="sm:col-span-2 flex flex-wrap gap-2">
