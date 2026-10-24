@@ -2,15 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import Card from '../ui/Card.jsx';
 import Badge from '../ui/Badge.jsx';
 import Button from '../ui/Button.jsx';
+import Pagination from '../ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPost } from '../../services/api.js';
 import { formatHours, formatMonth } from '../../utils/format.js';
 
 const field = 'mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
+const PAGE_SIZE = 7;
 const monthDates = (month) => ({ start: `${month}-01`, end: new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10) });
 
 export default function HistoricalDutyHoursPanel() {
   const [refresh, setRefresh] = useState(0);
+  const [page, setPage] = useState(1);
   const optionsQuery = useApiData('/historical-duty-hours/options');
   const listQuery = useApiData(`/historical-duty-hours/mine?refresh=${refresh}`);
   const terms = optionsQuery.data?.terms ?? [];
@@ -33,6 +36,9 @@ export default function HistoricalDutyHoursPanel() {
   const students = term?.students ?? [];
   const selectedMonth = term?.months.find((item) => item.month === month);
   const dateBounds = month ? monthDates(month) : null;
+  const entries = listQuery.data?.items ?? [];
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(entries.length / PAGE_SIZE)));
+  const visibleEntries = entries.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   useEffect(() => {
     if (!terms.length) return;
@@ -72,6 +78,7 @@ export default function HistoricalDutyHoursPanel() {
       setMessage(item.status === 'approved' ? 'Historical credit verified and added to the student’s semester hours.' : 'Submitted for administrator review before it affects verified totals.');
       setHours(''); setVerificationSource(''); setVerificationReference(''); setReason(''); setExceptional(false); setAmendsId('');
       setRefresh((value) => value + 1);
+      setPage(1);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
   }
@@ -117,10 +124,11 @@ export default function HistoricalDutyHoursPanel() {
         {listQuery.loading && <p className="text-sm text-muted">Loading entries…</p>}
         {listQuery.error && <p role="alert" className="text-sm text-bad-fg">Unable to load entries: {listQuery.error}</p>}
         {!listQuery.loading && !listQuery.error && !(listQuery.data?.items?.length) && <p className="text-sm text-muted">No historical duty credits have been entered for this office.</p>}
-        <ul className="space-y-2">{(listQuery.data?.items ?? []).slice(0, 10).map((item) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+        <ul className="space-y-2">{visibleEntries.map((item) => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
           <div className="min-w-0"><p className="font-medium text-ink">{item.studentName} · {formatMonth(item.month)} · {formatHours(item.hours)}</p><p className="break-words text-xs text-muted">{item.granularity === 'daily' ? `${item.workDate} · ` : ''}{item.verificationSource} · Ref: {item.verificationReference}</p>{item.reviewNote && <p className="text-xs text-muted">Review: {item.reviewNote}</p>}</div>
           <div className="flex items-center gap-2"><Badge tone={item.status === 'approved' ? 'approved' : item.status === 'pending_admin' ? 'pending' : item.status === 'rejected' ? 'rejected' : 'neutral'}>{item.status.replaceAll('_', ' ')}</Badge>{item.status === 'approved' && <button type="button" onClick={() => startAmendment(item)} className="text-xs font-medium text-teal underline">Amend</button>}</div>
         </li>)}</ul>
+        {listQuery.data && <Pagination page={currentPage} total={entries.length} pageSize={PAGE_SIZE} onPageChange={setPage} disabled={listQuery.loading || busy} label="Historical duty entries pagination" recordLabel="Entries" />}
       </div>
     </Card>
   );

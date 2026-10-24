@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, CheckCheck, Settings2 } from 'lucide-react';
+import { BellRing, CheckCheck, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
 import Card from '../ui/Card.jsx';
 import { apiGet, apiPatch, apiPut } from '../../services/api.js';
 
+const PAGE_SIZE=7;
 const studentFilters=[['all','All'],['unread','Unread'],['informational','Info'],['warning','Warning'],['critical','Critical']];
 const oversightFilters=[['all','All severity'],['informational','Info'],['warning','Warning'],['critical','Critical']];
 const categories=['completion_risk','deadline','upcoming_shift','attendance','missed_shift','recovery','transition','schedule_conflict','dtr','absence','compliance','documents','semester_requirement'];
@@ -12,18 +13,22 @@ const tone={informational:'bg-info-bg text-info-fg',warning:'bg-warn-bg text-war
 export default function DutyAlertsPanel({role='student'}){
   const [filter,setFilter]=useState('all');const [items,setItems]=useState([]);const [unread,setUnread]=useState(0);const [summary,setSummary]=useState(null);
   const [officeOptions,setOfficeOptions]=useState([]);const [queryFilters,setQueryFilters]=useState({officeId:'',category:'',status:'active'});
+  const [page,setPage]=useState(0);const [pageCursors,setPageCursors]=useState([null]);const requestId=useRef(0);
+  const cursor=pageCursors[page]??null;
+  const resetPages=()=>{setPage(0);setPageCursors([null]);};
   const [nextCursor,setNextCursor]=useState(null);const [totalAlerts,setTotalAlerts]=useState(0);
   const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [prefs,setPrefs]=useState(null);
   const [saving,setSaving]=useState(false);const [showPrefs,setShowPrefs]=useState(false);const [showPolicy,setShowPolicy]=useState(false);const [policy,setPolicy]=useState(null);const navigate=useNavigate();
-  const load=useCallback(async()=>{setLoading(true);setError('');try{
+  const load=useCallback(async()=>{const request=++requestId.current;setLoading(true);setError('');try{
     const [alerts,preferences,totals]=await Promise.all([role==='student'
       ?apiGet(`/notifications?filter=${filter}`)
-      :apiGet(`/notifications/oversight?${new URLSearchParams({status:queryFilters.status,category:queryFilters.category,limit:'25',...(filter==='all'?{}:{severity:filter}),...(queryFilters.officeId?{officeId:queryFilters.officeId}:{})})}`),
+      :apiGet(`/notifications/oversight?${new URLSearchParams({status:queryFilters.status,category:queryFilters.category,limit:String(PAGE_SIZE),...(cursor?{cursor}:{}),...(filter==='all'?{}:{severity:filter}),...(queryFilters.officeId?{officeId:queryFilters.officeId}:{})})}`),
       role==='student'?apiGet('/notifications/preferences'):Promise.resolve(null),apiGet('/notifications/summary')]);
+    if(request!==requestId.current)return;
     setItems(role==='student'?alerts.notifications:alerts.alerts);setUnread(role==='student'?alerts.unreadCount:totals.unread);if(preferences)setPrefs(preferences);
-    setNextCursor(role==='student'?alerts.nextCursor:alerts.nextCursor);setTotalAlerts(role==='student'?alerts.notifications.length:alerts.total);
+    setNextCursor(role==='student'?alerts.nextCursor:alerts.nextCursor);if(page===0)setTotalAlerts(role==='student'?alerts.notifications.length:alerts.total);
     setSummary(totals);
-  }catch(e){setError(e.message);}finally{setLoading(false);}},[filter,queryFilters,role]);
+  }catch(e){if(request===requestId.current)setError(e.message);}finally{if(request===requestId.current)setLoading(false);}},[filter,queryFilters,role,cursor,page]);
   useEffect(()=>{load();},[load]);
   useEffect(()=>{if(role==='admin')apiGet('/offices').then(data=>setOfficeOptions(data.offices??[])).catch(()=>{});},[role]);
   useEffect(()=>{if(role==='admin')apiGet('/notifications/policy').then(({policy:value})=>setPolicy(value)).catch(e=>setError(e.message));},[role]);
@@ -34,10 +39,6 @@ export default function DutyAlertsPanel({role='student'}){
       item.relatedType==='academic_term'?role==='admin'?'/admin/semesters':`/${role}`:`/${role}`;
     navigate(path);
   }catch(e){setError(e.message);}};
-  const loadMore=async()=>{if(!nextCursor)return;setSaving(true);try{
-    const params=new URLSearchParams({status:queryFilters.status,category:queryFilters.category,limit:'25',cursor:nextCursor,...(filter==='all'?{}:{severity:filter}),...(queryFilters.officeId?{officeId:queryFilters.officeId}:{})});
-    const data=await apiGet(`/notifications/oversight?${params}`);setItems(rows=>[...rows,...data.alerts]);setNextCursor(data.nextCursor);
-  }catch(e){setError(e.message);}finally{setSaving(false);}};
   const savePrefs=async(key,value)=>{const next={...prefs,[key]:value};setPrefs(next);setSaving(true);try{const saved=await apiPut('/notifications/preferences',next);setPrefs(saved);}catch(e){setError(e.message);}finally{setSaving(false);}};
   const savePolicy=async(event)=>{event.preventDefault();setSaving(true);setError('');try{const saved=await apiPut('/notifications/policy',{...policy,
     deadlineReminderDays:String(policy.deadlineReminderDays).split(',').map(n=>Number(n.trim())).filter(Number.isFinite)});setPolicy(saved.policy);}catch(e){setError(e.message);}finally{setSaving(false);}};
@@ -52,15 +53,15 @@ export default function DutyAlertsPanel({role='student'}){
       </li>)}</ul>
     </div>}
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter duty alerts">{(role==='student'?studentFilters:oversightFilters).map(([id,label])=><button key={id} role="tab" aria-selected={filter===id} onClick={()=>setFilter(id)} className={`rounded-full px-3 py-1 text-xs font-medium ${filter===id?'bg-teal text-white':'text-muted hover:bg-canvas'}`}>{label}</button>)}</div>
+      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Filter duty alerts">{(role==='student'?studentFilters:oversightFilters).map(([id,label])=><button key={id} role="tab" aria-selected={filter===id} onClick={()=>{resetPages();setFilter(id);}} className={`rounded-full px-3 py-1 text-xs font-medium ${filter===id?'bg-teal text-white':'text-muted hover:bg-canvas'}`}>{label}</button>)}</div>
       <div className="flex gap-3">{role==='student'&&!!unread&&<button type="button" onClick={async()=>{try{await apiPatch('/notifications/read-all',{});setUnread(0);await load();}catch(e){setError(e.message);}}} className="inline-flex items-center gap-1 text-xs font-medium text-teal"><CheckCheck className="h-3.5 w-3.5"/>Mark all read</button>}
         {role==='student'&&<button type="button" onClick={()=>setShowPrefs(v=>!v)} className="inline-flex items-center gap-1 text-xs font-medium text-teal"><Settings2 className="h-3.5 w-3.5"/>Reminder settings</button>}
         {role==='admin'&&<button type="button" onClick={()=>setShowPolicy(v=>!v)} className="inline-flex items-center gap-1 text-xs font-medium text-teal"><Settings2 className="h-3.5 w-3.5"/>Institution alert rules</button>}</div>
     </div>
     {role!=='student'&&<div className="mt-3 grid gap-2 sm:grid-cols-3">
-      {role==='admin'&&<label className="text-xs text-muted">Office<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.officeId} onChange={e=>setQueryFilters({...queryFilters,officeId:e.target.value})}><option value="">All offices</option>{officeOptions.map(office=><option key={office.id} value={office.id}>{office.code} · {office.name}</option>)}</select></label>}
-      <label className="text-xs text-muted">Category<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.category} onChange={e=>setQueryFilters({...queryFilters,category:e.target.value})}><option value="">All categories</option>{categories.map(category=><option key={category} value={category}>{category.replaceAll('_',' ')}</option>)}</select></label>
-      <label className="text-xs text-muted">Status<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.status} onChange={e=>setQueryFilters({...queryFilters,status:e.target.value})}>{['active','resolved','dismissed','all'].map(status=><option key={status} value={status}>{status}</option>)}</select></label>
+      {role==='admin'&&<label className="text-xs text-muted">Office<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.officeId} onChange={e=>{resetPages();setQueryFilters({...queryFilters,officeId:e.target.value});}}><option value="">All offices</option>{officeOptions.map(office=><option key={office.id} value={office.id}>{office.code} · {office.name}</option>)}</select></label>}
+      <label className="text-xs text-muted">Category<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.category} onChange={e=>{resetPages();setQueryFilters({...queryFilters,category:e.target.value});}}><option value="">All categories</option>{categories.map(category=><option key={category} value={category}>{category.replaceAll('_',' ')}</option>)}</select></label>
+      <label className="text-xs text-muted">Status<select className="mt-1 block w-full rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink" value={queryFilters.status} onChange={e=>{resetPages();setQueryFilters({...queryFilters,status:e.target.value});}}>{['active','resolved','dismissed','all'].map(status=><option key={status} value={status}>{status}</option>)}</select></label>
     </div>}
     {showPrefs&&prefs&&<div className="mt-3 grid gap-2 rounded-lg bg-canvas p-3 text-xs sm:grid-cols-2">
       <label className="flex items-start gap-2"><input type="checkbox" disabled={saving||!prefs.emailAvailable} checked={prefs.emailReminders} onChange={e=>savePrefs('emailReminders',e.target.checked)}/><span>Email alerts for institution-enabled high-priority notices{!prefs.emailAvailable&&<span className="block text-muted">Email is unavailable until SMTP is configured.</span>}</span></label>
@@ -90,8 +91,13 @@ export default function DutyAlertsPanel({role='student'}){
         <span className="shrink-0 self-center text-xs font-medium text-teal">Open</span>
       </button>
     </li>)}</ul>}
-    {role!=='student'&&items.length>0&&<p className="mt-2 text-xs text-muted">Showing {items.length} of {totalAlerts} matching authorized alerts.</p>}
-    {role!=='student'&&nextCursor&&<button type="button" disabled={saving} onClick={loadMore} className="mt-2 rounded-md border border-line px-3 py-2 text-xs font-medium text-teal disabled:opacity-50">{saving?'Loading…':'Load more alerts'}</button>}
+    {role!=='student'&&totalAlerts>0&&<nav aria-label="Duty alerts pagination" className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+      <p role="status" className="w-full text-center text-xs text-muted sm:w-auto sm:text-left">Alerts {page*PAGE_SIZE+1} to {page*PAGE_SIZE+items.length} of {totalAlerts}<span className="ml-2">Page {page+1} of {Math.max(1,Math.ceil(totalAlerts/PAGE_SIZE))}</span></p>
+      <div className="flex w-full justify-between gap-2 sm:w-auto">
+        <button type="button" disabled={page===0||loading} onClick={()=>setPage(page-1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft aria-hidden="true" className="h-4 w-4"/>Previous</button>
+        <button type="button" disabled={!nextCursor||loading} onClick={()=>{setPageCursors(current=>[...current.slice(0,page+1),nextCursor]);setPage(page+1);}} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">Next<ChevronRight aria-hidden="true" className="h-4 w-4"/></button>
+      </div>
+    </nav>}
     {role==='student'&&items.length>5&&<p className="mt-2 text-xs text-muted">Showing the latest 5 here. Use the notification bell in the header to browse all alerts.</p>}
   </Card>;
 }

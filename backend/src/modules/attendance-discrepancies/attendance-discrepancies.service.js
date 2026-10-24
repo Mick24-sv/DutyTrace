@@ -89,7 +89,7 @@ const mapRow = (r) => ({
   reviewedAt:r.reviewed_at, resolvedAt:r.resolved_at,
 });
 
-export async function list({ user, status, type, date, search, limit=100 }) {
+export async function list({ user, status, type, date, search, limit=100, page=1 }) {
   const params=[user.institutionId]; const where=['d.institution_id=$1'];
   if(user.role==='student'){params.push(user.id);where.push(`d.student_id=$${params.length}`);}
   if(user.role==='supervisor'){ if(!user.office?.id) return {items:[],total:0}; params.push(user.office.id);where.push(`d.office_id=$${params.length}`); }
@@ -98,11 +98,17 @@ export async function list({ user, status, type, date, search, limit=100 }) {
   if(type){params.push(type);where.push(`d.discrepancy_type=$${params.length}`);}
   if(date){params.push(date);where.push(`d.shift_date=$${params.length}::date`);}
   if(search){params.push(`%${search}%`);where.push(`(u.full_name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);}
-  params.push(Math.min(Math.max(Number(limit)||100,1),200));
-  const {rows}=await query(`SELECT d.*,u.full_name AS student_name,u.email AS student_email,o.name AS office_name,o.code AS office_code,
-      count(*) OVER()::int AS total FROM attendance_discrepancies d JOIN users u ON u.id=d.student_id
-      LEFT JOIN offices o ON o.id=d.office_id WHERE ${where.join(' AND ')} ORDER BY d.detected_at DESC LIMIT $${params.length}`,params);
-  return {items:rows.map(mapRow),total:rows[0]?.total??0};
+  const pageSize=Math.min(Math.max(Number(limit)||100,1),200);
+  const currentPage=Math.max(1,Math.floor(Number(page)||1));
+  const from=`FROM attendance_discrepancies d JOIN users u ON u.id=d.student_id
+      LEFT JOIN offices o ON o.id=d.office_id WHERE ${where.join(' AND ')}`;
+  const [records,count]=await Promise.all([
+    query(`SELECT d.*,u.full_name AS student_name,u.email AS student_email,o.name AS office_name,o.code AS office_code
+      ${from} ORDER BY d.detected_at DESC,d.id DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
+      [...params,pageSize,(currentPage-1)*pageSize]),
+    query(`SELECT count(*)::int AS total ${from}`,params),
+  ]);
+  return {items:records.rows.map(mapRow),total:count.rows[0].total,page:currentPage,limit:pageSize};
 }
 
 export async function clearPreQrDiscrepancies({user,ip}) {

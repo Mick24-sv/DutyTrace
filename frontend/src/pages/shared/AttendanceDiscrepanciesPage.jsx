@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Check, Clock3, RefreshCw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Clock3, RefreshCw, Send, ShieldCheck, Trash2, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
@@ -9,6 +9,7 @@ import { apiGet, apiPost } from '../../services/api.js';
 import { clockOutBounds, discrepancyTimezone, formatDiscrepancyTime } from '../../utils/discrepancyTime.js';
 import { formatTime } from '../../utils/format.js';
 
+const PAGE_SIZE=7;
 const TYPES={scheduled_no_attendance:'Scheduled shift with no attendance',missing_clock_out:'Missing clock-out',outside_assigned_shift:'Outside assigned shift',duplicate_or_overlap:'Duplicate or overlapping attendance'};
 const STATUS={open:'Open',explanation_submitted:'Explanation submitted',under_review:'Under review',approved_correction:'Approved correction',rejected:'Rejected',resolved:'Resolved',cancelled:'Cancelled',superseded:'Superseded'};
 const localInput=(value,timezone='UTC')=>{if(!value)return '';const parts=new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(value));const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;};
@@ -20,15 +21,22 @@ export default function AttendanceDiscrepanciesPage(){
   const requestedId=searchParams.get('discrepancyId');
   const staff=user?.role==='supervisor'||user?.role==='admin';
   const reviewer=user?.role==='supervisor';
+  const [page,setPage]=useState(1);
+  const loadId=useRef(0);
   const [data,setData]=useState({items:[],total:0});const [summary,setSummary]=useState(null);
   const [loading,setLoading]=useState(true);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [busy,setBusy]=useState('');const [clearing,setClearing]=useState(false);const [confirmClear,setConfirmClear]=useState(false);
   const [filters,setFilters]=useState(()=>({status:'',type:'',search:'',date:searchParams.get('date')??''}));const [selected,setSelected]=useState(null);
   const [explanation,setExplanation]=useState('');const [start,setStart]=useState('');const [end,setEnd]=useState('');const [remarks,setRemarks]=useState('');
-  const load=useCallback(async()=>{setLoading(true);setError('');try{
+  const updateFilters=(change)=>{setPage(1);setFilters(change);};
+  const load=useCallback(async()=>{const request=++loadId.current;setLoading(true);setError('');try{
     const qs=new URLSearchParams();Object.entries(filters).forEach(([k,v])=>v&&qs.set(k,v));
+    qs.set('page',page);qs.set('limit',PAGE_SIZE);
     const [list,s]=await Promise.all([apiGet(`/attendance-discrepancies?${qs}`),apiGet('/attendance-discrepancies/summary')]);
+    if(request!==loadId.current)return;
+    const lastPage=Math.max(1,Math.ceil(list.total/PAGE_SIZE));
+    if(page>lastPage){setPage(lastPage);return;}
     setData(list);setSummary(s);
-  }catch(e){setError(e.message);}finally{setLoading(false);}},[filters]);
+  }catch(e){if(request===loadId.current)setError(e.message);}finally{if(request===loadId.current)setLoading(false);}},[filters,page]);
   useEffect(()=>{load();},[load]);
   const counts=useMemo(()=>summary??{open:0,pendingReview:0,resolved:0,rejected:0},[summary]);
   const clearPreQr=async()=>{setClearing(true);setError('');setNotice('');try{const result=await apiPost('/attendance-discrepancies/clear-pre-qr',{});setNotice(`${result.cleared} pre-QR false positive${result.cleared===1?'':'s'} cleared.`);setConfirmClear(false);await load();}catch(e){setError(e.message);}finally{setClearing(false);}};
@@ -57,11 +65,11 @@ export default function AttendanceDiscrepanciesPage(){
     </div>
     {user?.role==='admin'&&summary?.byOffice?.length>0&&<Card className="mb-5 p-4"><h2 className="mb-3 font-semibold text-ink">Discrepancies by office</h2><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{summary.byOffice.map(o=><div key={o.id} className="rounded-lg border border-line p-3 text-sm"><b>{o.code} · {o.name}</b><div className="mt-1 text-muted">{o.open} open · {o.total} total</div></div>)}</div>{summary.repeatedStudents?.length>0&&<div className="mt-5"><h3 className="font-medium text-ink">Students with repeated discrepancy records</h3><p className="mb-2 text-xs text-muted">For administrative follow-up only. Repeated records do not imply misconduct.</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{summary.repeatedStudents.map(s=><div key={s.studentId} className="rounded-lg border border-line p-3 text-sm"><b>{s.fullName}</b><div className="mt-1 text-muted">{s.total} records · {s.open} unresolved</div></div>)}</div></div>}</Card>}
     <Card className="overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs text-muted">Search student<input value={filters.search} onChange={e=>setFilters(f=>({...f,search:e.target.value}))} placeholder="Name or email" className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"/></label>
-        <label className="text-xs text-muted">Type<select value={filters.type} onChange={e=>setFilters(f=>({...f,type:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-52"><option value="">All types</option>{Object.entries(TYPES).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
-        <label className="text-xs text-muted">Date<input type="date" value={filters.date} onChange={e=>setFilters(f=>({...f,date:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-40"/></label>
-        <label className="text-xs text-muted">Status<select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-48"><option value="">All statuses</option>{Object.entries(STATUS).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+      <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:flex-wrap lg:items-end">
+        <label className="flex-1 text-xs text-muted">Search student<input value={filters.search} onChange={e=>updateFilters(f=>({...f,search:e.target.value}))} placeholder="Name or email" className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink"/></label>
+        <label className="text-xs text-muted">Type<select value={filters.type} onChange={e=>updateFilters(f=>({...f,type:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-52"><option value="">All types</option>{Object.entries(TYPES).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
+        <label className="text-xs text-muted">Date<input type="date" value={filters.date} onChange={e=>updateFilters(f=>({...f,date:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-40"/></label>
+        <label className="text-xs text-muted">Status<select value={filters.status} onChange={e=>updateFilters(f=>({...f,status:e.target.value}))} className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm sm:w-48"><option value="">All statuses</option>{Object.entries(STATUS).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
         <button onClick={load} className="inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm hover:bg-canvas"><RefreshCw className="h-4 w-4"/>Refresh</button>
         {staff&&<button disabled={clearing} onClick={()=>setConfirmClear(true)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-4 w-4"/>{clearing?'Clearing…':'Clear pre-QR false positives'}</button>}
       </div>
@@ -72,6 +80,13 @@ export default function AttendanceDiscrepanciesPage(){
             <div className="mt-1 text-sm text-muted">{staff?TYPES[item.type]:item.office?.name} · {item.date??'Date unavailable'} · {formatTime(item.detectedAt)}</div><p className="mt-1 text-sm text-muted">{item.detectionReason}</p>
           </div><button onClick={()=>openDetail(item)} className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink hover:bg-canvas">View details</button>
         </article>)}</div>}
+      {!loading&&data.total>0&&<nav aria-label="Discrepancy pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
+        <p role="status" className="w-full text-center text-xs text-muted sm:w-auto sm:text-left">Records {(page-1)*PAGE_SIZE+1} to {Math.min(page*PAGE_SIZE,data.total)} of {data.total}<span className="ml-2">Page {page} of {Math.max(1,Math.ceil(data.total/PAGE_SIZE))}</span></p>
+        <div className="flex w-full justify-between gap-2 sm:w-auto">
+          <button type="button" disabled={page===1||loading} onClick={()=>setPage(page-1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft aria-hidden="true" className="h-4 w-4"/>Previous</button>
+          <button type="button" disabled={page>=Math.ceil(data.total/PAGE_SIZE)||loading} onClick={()=>setPage(page+1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">Next<ChevronRight aria-hidden="true" className="h-4 w-4"/></button>
+        </div>
+      </nav>}
     </Card>
 
     {confirmClear&&<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onMouseDown={e=>e.target===e.currentTarget&&!clearing&&setConfirmClear(false)}>

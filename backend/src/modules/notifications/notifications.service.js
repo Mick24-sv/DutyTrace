@@ -162,7 +162,7 @@ export async function listAuthorizedAlerts(actor,{officeId=null,category=null,se
   if(status==='resolved')where.push('n.resolved_at IS NOT NULL');
   if(status==='dismissed')where.push('n.dismissed_at IS NOT NULL');
   if(cursor){params.push(cursor);where.push(`(n.created_at,n.id)<(SELECT created_at,id FROM notifications WHERE id=$${params.length} AND institution_id=$1)`);}
-  params.push(size);
+  params.push(size+1);
   const {rows}=await query(`SELECT n.id,n.recipient_id,n.type,n.title,n.message,n.related_type,n.related_id,n.important,n.created_at,n.read_at,n.severity,n.action_url,
       n.resolved_at,n.dismissed_at,u.full_name AS recipient_name,o.name AS office_name,count(*) OVER()::int AS total
     FROM notifications n JOIN users u ON u.id=n.recipient_id
@@ -171,6 +171,7 @@ export async function listAuthorizedAlerts(actor,{officeId=null,category=null,se
     LEFT JOIN offices o ON o.id=COALESCE(recipient_assignment.office_id,related_assignment.office_id)
     WHERE ${where.join(' AND ')} ORDER BY n.created_at DESC,n.id DESC LIMIT $${params.length}`,params);
   const total=rows[0]?.total??0;
-  return {alerts:rows.map(r=>({...mapNotification(r),recipientName:r.recipient_name,officeName:r.office_name})),total,
-    nextCursor:rows.length===size?rows.at(-1).id:null,limit:size};
+  const pageRows=rows.slice(0,size);
+  return {alerts:pageRows.map(r=>({...mapNotification(r),recipientName:r.recipient_name,officeName:r.office_name})),total,
+    nextCursor:rows.length>size?pageRows.at(-1).id:null,limit:size};
 }

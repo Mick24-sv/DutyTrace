@@ -6,11 +6,13 @@ import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
 import { ChevronDown, Eye, EyeOff, Search } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPatch, apiPost, apiPut } from '../../services/api.js';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
+const PAGE_SIZE = 7;
 
 function StudentHoursInput({ user, onUpdate }) {
   const [editing, setEditing] = useState(false);
@@ -88,6 +90,7 @@ export default function UsersPage() {
   const [formError, setFormError] = useState('');
   const [rowError, setRowError] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [expandedUserId, setExpandedUserId] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const reload = () => setTick((t) => t + 1);
@@ -98,6 +101,9 @@ export default function UsersPage() {
     return [user.fullName, user.email, ROLE_CONFIG[user.role]?.label, user.office?.name, user.status]
       .some((value) => String(value ?? '').toLocaleLowerCase().includes(query));
   });
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE)));
+  const visibleUsers = filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const changePage = (nextPage) => { setPage(nextPage); setExpandedUserId(null); };
 
   async function create(e) {
     e.preventDefault();
@@ -253,18 +259,18 @@ export default function UsersPage() {
                 id="user-search"
                 type="search"
                 value={userSearch}
-                onChange={(event) => setUserSearch(event.target.value)}
+                onChange={(event) => { setUserSearch(event.target.value); setPage(1); setExpandedUserId(null); }}
                 placeholder="Search users by name or email"
                 className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted"
               />
             </div>
             <div className="hidden sm:block">
-              <DataTable columns={columns} rows={filteredUsers} caption="Users" empty={userSearch ? 'No matching users.' : 'No users yet.'} />
+              <DataTable columns={columns} rows={visibleUsers} caption="Users" empty={userSearch ? 'No matching users.' : 'No users yet.'} />
             </div>
             <div className="divide-y divide-line sm:hidden">
               {filteredUsers.length === 0 ? (
                 <p className="py-5 text-center text-sm text-muted">{userSearch ? 'No matching users.' : 'No users yet.'}</p>
-              ) : filteredUsers.map((user) => (
+              ) : visibleUsers.map((user) => (
                 <article key={user.id} className="py-2 first:pt-0 last:pb-0">
                   <button
                     type="button"
@@ -313,6 +319,7 @@ export default function UsersPage() {
                 </article>
               ))}
             </div>
+            <Pagination page={currentPage} total={filteredUsers.length} pageSize={PAGE_SIZE} onPageChange={changePage} disabled={loading} label="Users pagination" recordLabel="Users" />
           </>
         )}
       </Card>

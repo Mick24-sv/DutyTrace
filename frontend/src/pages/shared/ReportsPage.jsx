@@ -15,12 +15,13 @@ import {
   RefreshCw,
   CalendarRange,
   Search,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
-import Button from '../../components/ui/Button.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiGet, apiUrl } from '../../services/api.js';
@@ -57,7 +58,7 @@ export default function ReportsPage() {
   const [termId, setTermId] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const limit = 20;
+  const limit = 7;
 
   // Offce list for admin filter dropdown
   const officesQuery = useApiData(user?.role === 'admin' ? '/offices' : null);
@@ -103,6 +104,10 @@ export default function ReportsPage() {
 
       const data = await apiGet(`${endpoint}?${params.toString()}`);
       if (requestId === reportRequestId.current) {
+        if (page > Math.max(1, data.pagination?.totalPages ?? 1)) {
+          setPage(Math.max(1, data.pagination?.totalPages ?? 1));
+          return;
+        }
         setReportData({ tab: activeTab, data });
       }
     } catch (err) {
@@ -141,6 +146,7 @@ export default function ReportsPage() {
 
   const clearFilters = () => {
     if (!isSupervisor) setOfficeId('');
+    setSearch('');
     setMonth('');
     setFrom('');
     setTo('');
@@ -552,7 +558,7 @@ export default function ReportsPage() {
   const items = currentReportData?.items ?? [];
   const reportColumns = renderColumns();
   const filteredItems = items.filter((item) => JSON.stringify(item).toLowerCase().includes(search.trim().toLowerCase()));
-  const pagination = currentReportData?.pagination ?? { page: 1, limit: 20, total: items.length, totalPages: 1 };
+  const pagination = currentReportData?.pagination ?? { page: 1, limit, total: items.length, totalPages: 1 };
 
   return (
     <>
@@ -776,7 +782,7 @@ export default function ReportsPage() {
 
       {/* Report Table Card */}
       <Card>
-        <div className="flex items-center justify-between pb-3 mb-2 border-b border-line">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-2 border-b border-line">
           <h2 className="text-base font-semibold text-navy">
             {REPORT_TABS.find((t) => t.id === activeTab)?.label}
           </h2>
@@ -784,10 +790,10 @@ export default function ReportsPage() {
             {pagination.total} total record{pagination.total === 1 ? '' : 's'} found
           </span>
         </div>
-        <label htmlFor="report-search" className="sr-only">Search report records</label>
+        <label htmlFor="report-search" className="sr-only">Search records on this page</label>
         <div className="relative mb-3 w-full sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-          <input id="report-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search records" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+          <input id="report-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this page" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
         </div>
         <div className="hidden sm:block">
           <DataTable
@@ -804,7 +810,7 @@ export default function ReportsPage() {
             const second = visibleColumns[1];
             const renderValue = (column) => column.render ? column.render(item) : item[column.key];
             return (
-              <article key={item.id ?? item.reference ?? item.date ?? index} className="space-y-2 py-3 first:pt-0 last:pb-0">
+              <article key={`${page}-${index}`} className="space-y-2 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   {first && <p className="break-words text-sm font-medium text-ink">{renderValue(first)}</p>}
                   {second && <p className="break-words text-xs text-muted">{renderValue(second)}</p>}
@@ -822,29 +828,25 @@ export default function ReportsPage() {
           })}
         </div>
 
-        {/* Pagination Navigation */}
-        {pagination.totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-sm">
-            <span className="text-xs text-muted">
-              Page {pagination.page} of {pagination.totalPages} ({pagination.total} records)
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={pagination.page <= 1 || loading}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={pagination.page >= pagination.totalPages || loading}
-                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-              >
-                Next
-              </Button>
+        {!error && currentReportData && (
+          <nav aria-label="Report pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            <p role="status" className="w-full text-center text-xs text-muted sm:w-auto sm:text-left">
+              Records {pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}
+              <span className="ml-2">Page {pagination.page} of {pagination.totalPages}</span>
+            </p>
+            <div className="flex w-full justify-between gap-2 sm:w-auto">
+              <button type="button" disabled={pagination.page <= 1 || loading}
+                onClick={() => setPage(Math.max(1, pagination.page - 1))}
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
+              </button>
+              <button type="button" disabled={pagination.page >= pagination.totalPages || loading}
+                onClick={() => setPage(Math.min(pagination.totalPages, pagination.page + 1))}
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
-          </div>
+          </nav>
         )}
       </Card>
     </>

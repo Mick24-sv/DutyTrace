@@ -74,6 +74,30 @@ test('mark all read is scoped to the signed-in recipient', async () => {
   assert.equal(other.body.data.unreadCount, before.body.data.unreadCount + 1);
 });
 
+test('authorized alerts return seven per page and stop at an exactly full final page', async () => {
+  const { rows: [student] } = await query('SELECT institution_id FROM users WHERE id=$1', [fixtures.ids.studentA]);
+  const ids = [];
+  for (let index = 0; index < 14; index++) {
+    const notice = await createFor(fixtures.ids.studentA, student.institution_id, `alert-page-${index}`, {
+      type: 'document_pagination', severity: 'critical',
+    });
+    ids.push(notice.id);
+  }
+  const path = '/notifications/oversight?category=documents&severity=critical&status=all&limit=7';
+  const first = await api.get(path, { cookie: fixtures.cookies.admin });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.data.total, 14);
+  assert.equal(first.body.data.alerts.length, 7);
+  assert.ok(first.body.data.nextCursor);
+  const second = await api.get(`${path}&cursor=${first.body.data.nextCursor}`, { cookie: fixtures.cookies.admin });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.data.alerts.length, 7);
+  assert.equal(second.body.data.nextCursor, null, 'no empty extra page for exactly 14 alerts');
+  assert.deepEqual(new Set([...first.body.data.alerts,...second.body.data.alerts].map((item) => item.id)), new Set(ids));
+  const back = await api.get(path, { cookie: fixtures.cookies.admin });
+  assert.deepEqual(back.body.data.alerts.map((item) => item.id), first.body.data.alerts.map((item) => item.id));
+});
+
 test('semester reminders use each assigned requirement, respect term timezone, and deduplicate repeated sweeps', async () => {
   const { rows: instRows } = await query('SELECT institution_id FROM users WHERE id = $1', [fixtures.ids.studentA]);
   const institutionId = instRows[0].institution_id;

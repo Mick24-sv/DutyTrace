@@ -5,9 +5,12 @@ import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { formatHours } from '../../utils/format.js';
+
+const PAGE_SIZE = 7;
 
 // Supervisor view: every Student Assistant assigned to MY office, with this
 // month's recorded hours. The API refuses any other office.
@@ -15,6 +18,7 @@ export default function AssistantsPage() {
   const { user } = useAuth();
   const [month, setMonth] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const officeId = user.office?.id;
   const monthData = useApiData(
     officeId ? `/attendance/office/${officeId}/summary${month ? `?month=${month}` : ''}` : null,
@@ -31,6 +35,9 @@ export default function AssistantsPage() {
     return [assistant.fullName, assistant.email, assistant.state, semester?.requirementAssigned ? 'requirement assigned' : 'no requirement', assistant.totals.recordedHours]
       .some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase()));
   });
+
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredAssistants.length / PAGE_SIZE)));
+  const visibleAssistants = filteredAssistants.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const columns = [
     {
@@ -90,7 +97,7 @@ export default function AssistantsPage() {
           <label htmlFor="month" className="mb-1 block text-xs font-medium text-muted">Month</label>
           <input
             id="month" type="month" value={month || data?.month || ''}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            onChange={(e) => { if(e.target.value) { setMonth(e.target.value); setPage(1); } }}
             className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
           />
         </div>
@@ -129,13 +136,13 @@ export default function AssistantsPage() {
             <label htmlFor="assistant-search" className="sr-only">Search Student Assistants</label>
             <div className="relative mb-3 w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input id="assistant-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assistants" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+              <input id="assistant-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search assistants" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
             </div>
             <div className="hidden sm:block">
-              <DataTable columns={columns} rows={filteredAssistants} caption="Student assistants in your office" empty={search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'} />
+              <DataTable columns={columns} rows={visibleAssistants} caption="Student assistants in your office" empty={search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'} />
             </div>
             <div className="divide-y divide-line sm:hidden">
-              {filteredAssistants.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'}</p> : filteredAssistants.map((assistant) => {
+              {filteredAssistants.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'}</p> : visibleAssistants.map((assistant) => {
                 const semester = semesterStudents.get(assistant.id);
                 return (
                   <article key={assistant.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
@@ -171,6 +178,7 @@ export default function AssistantsPage() {
                 );
               })}
             </div>
+            <Pagination page={currentPage} total={filteredAssistants.length} pageSize={PAGE_SIZE} onPageChange={setPage} disabled={loading} label="Student Assistants pagination" recordLabel="Assistants" />
           </>
         )}
       </Card>

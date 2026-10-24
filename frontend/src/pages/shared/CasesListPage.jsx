@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -18,6 +18,7 @@ const DESCRIPTION = {
   supervisor: 'Cases for Student Assistants in your office. You can read them, add notes and record documents you received.',
   admin: 'Open, review and resolve compliance cases. A case is only opened by an administrator; nothing is opened automatically.',
 };
+const PAGE_SIZE = 7;
 
 // Compliance cases list for all three roles. Administrators also open cases and manage case types here.
 export default function CasesListPage() {
@@ -31,6 +32,7 @@ export default function CasesListPage() {
   const users = useApiData(isAdmin ? '/users' : null);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const columns = [
     { key: 'ref', header: 'Reference', render: (r) => <span className="font-medium">{r.reference}</span> },
@@ -47,6 +49,10 @@ export default function CasesListPage() {
   const activeTypes = (types.data?.types ?? []).filter((t) => t.isActive);
   const filteredCases = (data?.cases ?? []).filter((caseItem) => [caseItem.reference, caseItem.student?.fullName, caseItem.type?.name, caseItem.status, caseItem.periodStart, caseItem.periodEnd]
     .some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase())));
+  const totalPages = Math.max(1, Math.ceil(filteredCases.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const visibleCases = filteredCases.slice(pageStart, pageStart + PAGE_SIZE);
 
   return (
     <>
@@ -54,7 +60,7 @@ export default function CasesListPage() {
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="case-filter" className="mb-1 block text-xs font-medium text-muted">Status</label>
-            <select id="case-filter" value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
+            <select id="case-filter" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
               <option value="">All</option>
               {Object.entries(CASE_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
             </select>
@@ -79,13 +85,13 @@ export default function CasesListPage() {
           <label htmlFor="case-search" className="sr-only">Search compliance cases</label>
           <div className="relative mb-3 w-full sm:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-            <input id="case-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search cases" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+            <input id="case-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search cases" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
           </div>
           <div className="hidden sm:block">
-            <DataTable columns={columns} rows={filteredCases} caption="Compliance cases" empty={search ? 'No matching cases.' : 'No compliance cases.'} />
+            <DataTable columns={columns} rows={visibleCases} caption="Compliance cases" empty={search ? 'No matching cases.' : 'No compliance cases.'} />
           </div>
           <div className="divide-y divide-line sm:hidden">
-            {filteredCases.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching cases.' : 'No compliance cases.'}</p> : filteredCases.map((caseItem) => (
+            {visibleCases.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching cases.' : 'No compliance cases.'}</p> : visibleCases.map((caseItem) => (
               <article key={caseItem.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -104,6 +110,20 @@ export default function CasesListPage() {
               </article>
             ))}
           </div>
+          <nav aria-label="Compliance cases pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+            <p role="status" className="w-full text-center text-xs text-muted sm:w-auto sm:text-left">
+              Cases {filteredCases.length ? pageStart + 1 : 0} to {pageStart + visibleCases.length} of {filteredCases.length}
+              <span className="ml-2">Page {currentPage} of {totalPages}</span>
+            </p>
+            <div className="flex w-full justify-between gap-2 sm:w-auto">
+              <button type="button" disabled={currentPage === 1 || loading} onClick={() => setPage(currentPage - 1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                <ChevronLeft aria-hidden="true" className="h-4 w-4" /> Previous
+              </button>
+              <button type="button" disabled={currentPage === totalPages || loading} onClick={() => setPage(currentPage + 1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                Next <ChevronRight aria-hidden="true" className="h-4 w-4" />
+              </button>
+            </div>
+          </nav>
         </Card>
       )}
 

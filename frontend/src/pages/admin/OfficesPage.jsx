@@ -5,6 +5,7 @@ import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
+import Pagination from '../../components/ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { apiPost, apiPut } from '../../services/api.js';
 
@@ -19,6 +20,7 @@ const columns = [
 ];
 
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
+const PAGE_SIZE = 7;
 
 export default function OfficesPage() {
   const [tick, setTick] = useState(0);
@@ -28,10 +30,13 @@ export default function OfficesPage() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [capacityValues, setCapacityValues] = useState({});
   const [capacityBusy, setCapacityBusy] = useState('');
   const filteredOffices = (data?.offices ?? []).filter((office) => [office.code, office.name, office.isActive ? 'active' : 'inactive']
     .some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase())));
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredOffices.length / PAGE_SIZE)));
+  const visibleOffices = filteredOffices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   async function create(e) {
     e.preventDefault();
@@ -75,15 +80,15 @@ export default function OfficesPage() {
             <label htmlFor="office-search" className="sr-only">Search offices</label>
             <div className="relative mb-3 w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input id="office-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search offices" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
+              <input id="office-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search offices" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
             </div>
             <div className="hidden sm:block">
-              <DataTable columns={columns} rows={filteredOffices} caption="Offices" empty={search ? 'No matching offices.' : 'No offices yet. Add the first one above.'} />
+              <DataTable columns={columns} rows={visibleOffices} caption="Offices" empty={search ? 'No matching offices.' : 'No offices yet. Add the first one above.'} />
             </div>
             <div className="mt-4 space-y-2">
               <h2 className="text-sm font-semibold">Schedule staffing capacity</h2>
               <p className="text-xs text-muted">Maximum Student Assistants assigned to overlapping shifts in each office. Back-to-back shifts do not overlap.</p>
-              {filteredOffices.map((office) => <div key={office.id} className="rounded-lg border border-line p-3">
+              {visibleOffices.map((office) => <div key={office.id} className="rounded-lg border border-line p-3">
                 <div className="mb-3 flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0"><p className="break-words text-sm font-medium text-ink">{office.code} · {office.name}</p></div>
                   <Badge tone={office.isActive ? 'approved' : 'rejected'}>{office.isActive ? 'active' : 'inactive'}</Badge>
@@ -97,6 +102,7 @@ export default function OfficesPage() {
               </div>)}
             </div>
             {filteredOffices.length === 0 && <p className="py-5 text-center text-sm text-muted">{search ? 'No matching offices.' : 'No offices yet. Add the first one above.'}</p>}
+            <Pagination page={currentPage} total={filteredOffices.length} pageSize={PAGE_SIZE} onPageChange={setPage} disabled={loading || !!capacityBusy} label="Offices pagination" recordLabel="Offices" />
           </>
         )}
       </Card>

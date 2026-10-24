@@ -134,7 +134,7 @@ const outstandingQuerySchema = paginationSchema.extend({
   month: monthSchema,
 });
 
-const semesterHoursQuerySchema = z.object({
+const semesterHoursQuerySchema = paginationSchema.extend({
   termId: z.string().uuid().optional(),
   officeId: z.string().uuid().optional(),
   format: z.enum(['json', 'csv']).default('json'),
@@ -161,7 +161,7 @@ reportsRouter.get('/semester-hours', asyncHandler(async (req, res) => {
     const termSuffix = data.term ? `${data.term.academicYear}-${data.term.semester}` : 'no-active-term';
     return sendCsv(res, `semester-hours-${termSuffix}.csv`, semesterHoursCsvColumns, data.items);
   }
-  ok(res, data);
+  ok(res, { ...data, ...reports.paginateArray(data.items, q.page, q.limit) });
 }));
 
 reportsRouter.get('/outstanding-requirements', asyncHandler(async (req, res) => {

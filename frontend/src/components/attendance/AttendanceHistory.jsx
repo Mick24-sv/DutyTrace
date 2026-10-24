@@ -1,8 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarCheck, CircleAlert, Clock, ShieldQuestion } from 'lucide-react';
-import Card from '../ui/Card.jsx';
-import StatCard from '../ui/StatCard.jsx';
+import { ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import EmptyState from '../ui/EmptyState.jsx';
 import SessionBadge from './SessionBadge.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
@@ -12,6 +10,7 @@ import { useAuth } from '../../hooks/useAuth.jsx';
 import { findEligibleDiscrepancy } from '../../utils/discrepancyNavigation.js';
 
 const FLAG_TEXT = { crosses_midnight: 'crosses midnight' };
+const DAYS_PER_PAGE = 7;
 
 const EXPLAIN = {
   missing_time_out: 'No time-out was recorded, so these hours are not counted.',
@@ -22,12 +21,14 @@ const EXPLAIN = {
 // Daily and monthly attendance for one person. `endpoint` is e.g. '/attendance/me'
 // or `/attendance/users/<id>`; the API decides whether the viewer may see it.
 export default function AttendanceHistory({ endpoint }) {
+  const [page, setPage] = useState(1);
   const [month, setMonth] = useState(''); // '' = let the server pick the current month
   const [correctionState, setCorrectionState] = useState({ busyDate: '', message: '' });
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, loading, error } = useApiData(`${endpoint}${month ? `?month=${month}` : ''}`);
   const tz = data?.timezone;
+  useEffect(() => { setPage(1); }, [endpoint]);
 
   const checkCorrection = async (date, sessionId = null) => {
     setCorrectionState({ busyDate: date, message: '' });
@@ -48,125 +49,113 @@ export default function AttendanceHistory({ endpoint }) {
     }
   };
 
+  const days = [...(data?.days ?? [])].reverse();
+  const pageCount = Math.max(1, Math.ceil(days.length / DAYS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * DAYS_PER_PAGE;
+  const visibleDays = days.slice(pageStart, pageStart + DAYS_PER_PAGE);
+  const sessionDuration = (session) => session.seconds == null ? '—'
+    : session.seconds < 60 && session.counted ? '< 1 m' : formatDuration(session.seconds);
+  const correctionButton = (day, session) => user?.role === 'student' && (
+    <button type="button" disabled={correctionState.busyDate === day.date}
+      onClick={() => checkCorrection(day.date, session.id)}
+      aria-label={`Request correction for ${formatDateKey(day.date)}, clock-in ${formatTime(session.timeIn, tz)}`}
+      className="inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:opacity-50">
+      {correctionState.busyDate === day.date ? 'Checking…' : 'Request correction'}
+    </button>
+  );
+  const sessionNote = (session) => [
+    ...(session.flags ?? []).map((flag) => FLAG_TEXT[flag] ?? flag),
+    session.status === 'needs_review' ? `Longer than ${data.maxSessionHours} h; not counted until reviewed.` : EXPLAIN[session.status],
+  ].filter(Boolean).join(' · ');
+
   return (
-    <>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="w-full sm:w-auto">
-          {data?.user && (
-            <p className="text-sm text-muted">
-              <span className="font-medium text-ink">{data.user.fullName}</span>
-              {data.user.office ? ` · ${data.user.office.name}` : ''}
-            </p>
-          )}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-navy">Attendance log</h2>
+          {data?.user && <p className="mt-1 text-xs text-muted">{data.user.fullName}{data.user.office ? ` · ${data.user.office.name}` : ''}</p>}
+          <p className="mt-1 text-xs text-muted">{tz ? `Times in ${tz}. ` : ''}Expand a day to see scans and corrections.</p>
         </div>
-        <div className="w-full sm:w-auto">
-          <label htmlFor="month" className="mb-1 block text-xs font-medium text-muted">Month</label>
-          <input
-            id="month" type="month" value={month || data?.month || ''}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
-            className="h-10 w-full rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:w-auto"
-          />
-        </div>
+        <label className="text-xs text-muted" htmlFor="attendance-month">Month
+          <input id="attendance-month" type="month" value={month || data?.month || ''}
+            onChange={(event) => { if(event.target.value) { setMonth(event.target.value); setPage(1); } }}
+            className="mt-1 block h-10 max-w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal" />
+        </label>
       </div>
-
       {loading && <p role="status" className="text-sm text-muted">Loading attendance…</p>}
-      {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
-      {correctionState.message && <p role="status" className="mb-4 rounded-lg bg-info-bg px-3 py-2 text-sm text-info-fg">{correctionState.message}</p>}
-
-      {data && (
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-            <StatCard compact label="Recorded hours" value={formatHours(data.totals.recordedHours)} hint="From completed sessions" icon={Clock} />
-            <StatCard compact label="Completed sessions" value={data.totals.countedSessions} icon={CalendarCheck} />
-            <StatCard
-              compact
-              label="Need attention" value={data.totals.incompleteCount}
-              hint={data.totals.inProgress ? 'Plus one in progress' : 'Incomplete or flagged'}
-              icon={CircleAlert}
-            />
-            <StatCard
-              compact
-              label="Verified hours" value={formatHours(data.totals.verifiedHours)}
-              hint={data.totals.verificationAvailable ? 'From the approved DTR for this month' : 'No approved DTR for this month yet'}
-              icon={ShieldQuestion}
-            />
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Recorded hours come from time-in/time-out scans and are <strong>not verified</strong> until a supervisor approves the month's DTR.
-            Incomplete sessions are shown below but never counted. Times are shown in {tz}.
-          </p>
-
-          {data.days.length === 0 ? (
-            <div className="mt-6">
-              <EmptyState icon={Clock} title="No attendance this month">
-                Nothing has been recorded for {data.month}.
-              </EmptyState>
-            </div>
-          ) : (
-            <div className="mt-6 space-y-4">
-              {[...data.days].reverse().map((day) => (
-                <Card
-                  key={day.date}
-                  title={formatDateKey(day.date)}
-                  action={<span className="text-sm font-medium text-navy">{formatHours(day.recordedHours)} recorded</span>}
-                >
-                  <div className="space-y-2 sm:hidden">
-                    {day.sessions.map((s) => (
-                      <article key={s.id} className="rounded-lg border border-line bg-surface p-3">
-                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-                          <div className="min-w-0"><dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Time in</dt><dd className="mt-0.5 break-words text-sm text-ink">{formatTime(s.timeIn, tz)}</dd></div>
-                          <div className="min-w-0"><dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Time out</dt><dd className="mt-0.5 break-words text-sm text-ink">{formatTime(s.timeOut, tz)}</dd></div>
-                          <div className="min-w-0"><dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Duration</dt><dd className="mt-0.5 break-words text-sm text-ink">{s.counted ? formatDuration(s.seconds) : s.seconds != null ? `${formatDuration(s.seconds)} (not counted)` : '—'}</dd></div>
-                          <div className="min-w-0"><dt className="text-[11px] font-medium uppercase tracking-wide text-muted">Status</dt><dd className="mt-1"><SessionBadge status={s.status} /></dd></div>
-                        </dl>
-                        {(s.flags.length > 0 || EXPLAIN[s.status]) && <p className="mt-2 text-xs leading-5 text-muted">{s.flags.map((flag) => FLAG_TEXT[flag] ?? flag).join(' · ')}{s.flags.length > 0 && EXPLAIN[s.status] ? ' · ' : ''}{s.status === 'needs_review' ? `Longer than ${data.maxSessionHours} h, so it is not counted until reviewed.` : EXPLAIN[s.status]}</p>}
-                        {user?.role === 'student' && <button type="button" disabled={correctionState.busyDate === day.date} onClick={() => checkCorrection(day.date, s.id)} className="mt-3 min-h-10 w-full rounded-lg border border-line px-3 py-2 text-sm font-medium text-teal hover:bg-canvas disabled:opacity-50">{correctionState.busyDate === day.date ? 'Checking…' : 'Request correction'}</button>}
-                      </article>
-                    ))}
+      {error && <p role="alert" className="rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}
+      {correctionState.message && <p role="status" className="rounded-lg bg-info-bg p-3 text-sm text-info-fg">{correctionState.message}</p>}
+      {data && <>
+        <dl className="grid grid-cols-2 overflow-hidden rounded-card border border-line bg-surface sm:grid-cols-4">
+          {[
+            ['Recorded', formatHours(data.totals.recordedHours)],
+            ['Verified', data.totals.verificationAvailable ? formatHours(data.totals.verifiedHours) : 'Pending DTR'],
+            ['Completed', data.totals.countedSessions],
+            ['Need attention', data.totals.incompleteCount],
+          ].map(([label, value]) => <div key={label} className="min-w-0 px-4 py-3"><dt className="text-xs text-muted">{label}</dt><dd className="mt-1 text-base font-semibold text-navy">{value}</dd></div>)}
+        </dl>
+        <p className="text-xs text-muted">Recorded hours become verified after DTR approval. Incomplete or flagged sessions are not counted.</p>
+        {days.length === 0 ? <EmptyState icon={Clock} title="No attendance this month">Nothing has been recorded for {data.month}.</EmptyState> :
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
+            {visibleDays.map((day) => {
+              const attention = day.sessions.filter((session) => !['complete', 'in_progress'].includes(session.status)).length;
+              const inProgress = day.sessions.some((session) => session.status === 'in_progress');
+              return <details key={`${data.month}-${currentPage}-${day.date}`} className="group border-b border-line last:border-0">
+                <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3 hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal sm:px-4 [&::-webkit-details-marker]:hidden">
+                  <div className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-ink">{formatDateKey(day.date)}</span>
+                    <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted">
+                      <span>{day.sessions.length} {day.sessions.length === 1 ? 'session' : 'sessions'}</span>
+                      {inProgress && <span className="font-medium text-teal">Timed in</span>}
+                      {attention > 0 && <span className="font-medium text-bad-fg">{attention} need attention</span>}
+                    </span>
                   </div>
-                  <div className="hidden overflow-x-auto sm:block">
-                    <table className="w-full min-w-[620px] text-left text-sm">
-                      <caption className="sr-only">Attendance sessions on {day.date}</caption>
-                      <thead>
-                        <tr className="text-xs uppercase tracking-wide text-muted">
-                          <th scope="col" className="px-2 py-2 font-medium">Time in</th>
-                          <th scope="col" className="px-2 py-2 font-medium">Time out</th>
-                          <th scope="col" className="px-2 py-2 font-medium">Duration</th>
-                          <th scope="col" className="px-2 py-2 font-medium">Status</th>
-                          {user?.role === 'student' && <th scope="col" className="px-2 py-2 font-medium">Correction</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {day.sessions.map((s) => (
-                          <tr key={s.id} className="border-t border-line align-top">
-                            <td className="px-2 py-2.5">{formatTime(s.timeIn, tz)}</td>
-                            <td className="px-2 py-2.5">{formatTime(s.timeOut, tz)}</td>
-                            <td className="px-2 py-2.5">
-                              {s.counted ? formatDuration(s.seconds) : s.seconds != null ? `${formatDuration(s.seconds)} (not counted)` : '—'}
-                            </td>
-                            <td className="px-2 py-2.5">
-                              <SessionBadge status={s.status} />
-                              {s.flags.map((f) => (
-                                <span key={f} className="ml-2 text-xs text-muted">{FLAG_TEXT[f] ?? f}</span>
-                              ))}
-                              {EXPLAIN[s.status] && (
-                                <p className="mt-1 max-w-xs text-xs text-muted">
-                                  {s.status === 'needs_review' ? `Longer than ${data.maxSessionHours} h, so it is not counted until reviewed.` : EXPLAIN[s.status]}
-                                </p>
-                              )}
-                            </td>
-                            {user?.role === 'student' && <td className="px-2 py-2.5"><button type="button" disabled={correctionState.busyDate === day.date} onClick={() => checkCorrection(day.date, s.id)} className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-teal hover:bg-canvas disabled:opacity-50">{correctionState.busyDate === day.date ? 'Checking…' : 'Request correction'}</button></td>}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-navy">{formatHours(day.recordedHours)}</span>
+                  <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-line bg-canvas/40 px-3 sm:px-4">
+                  <div className="divide-y divide-line md:hidden">
+                    {day.sessions.map((session) => <article key={session.id} className="py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2"><SessionBadge status={session.status} /><span className="text-xs font-medium tabular-nums text-ink">{sessionDuration(session)}{!session.counted && session.seconds != null ? ' · not counted' : ''}</span></div>
+                      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                        <div><dt className="text-[11px] text-muted">Time in</dt><dd className="mt-0.5 tabular-nums text-ink">{formatTime(session.timeIn, tz)}</dd></div>
+                        <div><dt className="text-[11px] text-muted">Time out</dt><dd className="mt-0.5 tabular-nums text-ink">{formatTime(session.timeOut, tz)}</dd></div>
+                      </dl>
+                      {sessionNote(session) && <p className="mt-2 text-xs text-muted">{sessionNote(session)}</p>}
+                      {correctionButton(day, session)}
+                    </article>)}
                   </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </>
+                  <table className="hidden w-full text-left text-sm md:table">
+                    <caption className="sr-only">Attendance sessions on {day.date}, times in {tz}</caption>
+                    <thead><tr className="text-[11px] text-muted">{['Time in', 'Time out', 'Duration', 'Status', ...(user?.role === 'student' ? [''] : [])].map((label, i) => <th scope="col" key={i} className="py-2 pr-3 font-medium">{label || <span className="sr-only">Actions</span>}</th>)}</tr></thead>
+                    <tbody>{day.sessions.map((session) => <tr key={session.id} className="border-t border-line align-top">
+                      <td className="py-3 pr-3 tabular-nums">{formatTime(session.timeIn, tz)}</td>
+                      <td className="py-3 pr-3 tabular-nums">{formatTime(session.timeOut, tz)}</td>
+                      <td className="py-3 pr-3">{sessionDuration(session)}{!session.counted && session.seconds != null && <span className="block text-xs text-muted">Not counted</span>}</td>
+                      <td className="py-3 pr-3"><SessionBadge status={session.status} />{sessionNote(session) && <p className="mt-1 max-w-48 text-xs text-muted">{sessionNote(session)}</p>}</td>
+                      {user?.role === 'student' && <td className="py-1.5 text-right">{correctionButton(day, session)}</td>}
+                    </tr>)}</tbody>
+                  </table>
+                </div>
+              </details>;
+            })}
+            <nav aria-label="Attendance days pagination" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-3 py-3 sm:px-4">
+              <p role="status" className="w-full text-center text-xs text-muted sm:w-auto sm:text-left">
+                Days {pageStart + 1}–{pageStart + visibleDays.length} of {days.length}
+                <span className="ml-2">Page {currentPage} of {pageCount}</span>
+              </p>
+              <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
+                <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Previous
+                </button>
+                <button type="button" disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-3 text-sm font-medium text-teal hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal disabled:cursor-not-allowed disabled:opacity-40">
+                  Next <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+            </nav>
+          </div>}
+      </>}
+    </div>
   );
 }

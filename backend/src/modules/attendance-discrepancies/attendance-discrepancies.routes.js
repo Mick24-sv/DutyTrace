@@ -19,7 +19,7 @@ attendanceDiscrepanciesRouter.use(requireAuth);
 const text=(max)=>z.string().trim().min(1).max(max);
 const status=z.enum(['open','explanation_submitted','under_review','approved_correction','rejected','resolved','cancelled','superseded']).optional();
 const type=z.enum(['scheduled_no_attendance','missing_clock_out','outside_assigned_shift','duplicate_or_overlap']).optional();
-const querySchema=z.object({status,type,date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),search:z.string().trim().max(120).optional(),limit:z.coerce.number().int().min(1).max(200).optional()});
+const querySchema=z.object({status,type,date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),search:z.string().trim().max(120).optional(),limit:z.coerce.number().int().min(1).max(200).optional(),page:z.coerce.number().int().min(1).max(100000).optional()});
 const event=z.object({eventType:z.enum(['time_in','time_out']),recordedAt:z.string().datetime({offset:true}),officeId:z.string().uuid().optional()});
 const id=req=>parseId(req.params.id);
 const correctionLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:true,legacyHeaders:false,
