@@ -19,6 +19,22 @@ const scan = (who, action, qrPayload, extra = {}) =>
 const eventCount = async (userId) =>
   (await query('SELECT count(*)::int AS n FROM attendance_events WHERE user_id = $1', [userId])).rows[0].n;
 
+test('attendance status and history use the institution timezone', async () => {
+  const { rows: [institution] } = await query(
+    'SELECT i.id,i.timezone FROM institutions i JOIN users u ON u.institution_id=i.id WHERE u.id=$1', [fx.ids.studentA],
+  );
+  try {
+    await query("UPDATE institutions SET timezone='Asia/Manila' WHERE id=$1", [institution.id]);
+    for (const path of ['/attendance/status', '/attendance/me?month=2026-10', `/attendance/office/${fx.officeIds.A}/summary?month=2026-10`]) {
+      const res = await api.get(path, { cookie: path.includes('/office/') ? fx.cookies.supervisorA : fx.cookies.studentA });
+      assert.equal(res.status, 200);
+      assert.equal(res.body.data.timezone, 'Asia/Manila');
+    }
+  } finally {
+    await query('UPDATE institutions SET timezone=$2 WHERE id=$1', [institution.id, institution.timezone]);
+  }
+});
+
 describe('who may scan', () => {
   test('anonymous users are rejected (401)', async () => {
     assert.equal((await api.post('/attendance/scan', { body: { action: 'time_in', qrPayload: payloadA } })).status, 401);

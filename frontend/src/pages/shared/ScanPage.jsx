@@ -29,7 +29,7 @@ export default function ScanPage() {
   const [failure, setFailure] = useState(null);
   const submittingRef = useRef(false);
 
-  const tz = status.data?.timezone;
+  const tz = user.institution?.timezone ?? status.data?.timezone;
   const timedIn = status.data?.state === 'timed_in';
   const action = timedIn ? 'time_out' : 'time_in';
   const actionLabel = timedIn ? 'Time out' : 'Time in';
@@ -122,7 +122,7 @@ export default function ScanPage() {
             <CircleCheck className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
             <div>
               <p className="font-semibold">
-                {result.event.type === 'time_in' ? 'Timed in' : 'Timed out'} at {formatTime(result.event.recordedAt, result.timezone)}
+                {result.event.type === 'time_in' ? 'Timed in' : 'Timed out'} at {formatTime(result.event.recordedAt, user.institution?.timezone ?? result.timezone)}
               </p>
               <p className="mt-0.5">{result.office.name}</p>
               {result.session && (
@@ -134,6 +134,8 @@ export default function ScanPage() {
             </div>
           </div>
         )}
+
+        <p className="text-xs text-muted">Attendance times are shown in {tz ?? 'your institution timezone'}.</p>
 
         <Card title={mode === 'scanning' ? `Scan to ${actionLabel.toLowerCase()}` : 'Record attendance'}>
           {mode === 'scanning' || mode === 'submitting' ? (

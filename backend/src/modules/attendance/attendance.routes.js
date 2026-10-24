@@ -31,7 +31,7 @@ const recorders = requireRole('student', 'supervisor'); // roles that have their
 // remain read-only and do not have a personal attendance record.
 attendanceRouter.get('/status', recorders, asyncHandler(async (req, res) => {
   const current = await attendance.getState(req.user.id);
-  ok(res, { ...current, office: req.user.office, timezone: env.timezone });
+  ok(res, { ...current, office: req.user.office, timezone: req.user.institution?.timezone ?? env.timezone });
 }));
 
 // Record my own time-in / time-out by presenting my office's QR code.

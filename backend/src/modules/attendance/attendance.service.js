@@ -111,7 +111,7 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
         event: { id: event.id, type: action, recordedAt: event.recorded_at },
         state: action === 'time_in' ? 'timed_in' : 'timed_out',
         office: { id: qr.office_id, code: qr.code, name: qr.name },
-        timezone: env.timezone,
+        timezone: user.institution?.timezone ?? env.timezone,
         session,
       };
     });
@@ -134,32 +134,32 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
 // ---------------------------------------------------------------- history
 export const isMonth = (value) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 
-// Month boundaries are LOCAL (APP_TIMEZONE), computed by PostgreSQL so DST rules are respected.
-async function resolveMonth(requested) {
+// Month boundaries use the institution timezone, computed by PostgreSQL so DST rules are respected.
+async function resolveMonth(requested, timezone = env.timezone) {
   const { rows } = await query(
     `SELECT to_char(now() AT TIME ZONE $1, 'YYYY-MM') AS current_month, now() AS db_now`,
-    [env.timezone],
+    [timezone],
   );
   const month = requested ?? rows[0].current_month;
   const [y, m] = month.split('-').map(Number);
   const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-  return { month, startDate: `${month}-01`, nextDate: `${next}-01`, now: rows[0].db_now };
+  return { month, timezone, startDate: `${month}-01`, nextDate: `${next}-01`, now: rows[0].db_now };
 }
 
 // Events in the month plus 2 days either side, so a session that straddles a
 // month boundary still pairs up correctly. Only sessions that START in the
 // month are reported for it.
-async function fetchEvents(userIds, { startDate, nextDate }) {
-  return effectiveEvents(userIds, { startDate, nextDate, timezone: env.timezone });
+async function fetchEvents(userIds, { startDate, nextDate, timezone }) {
+  return effectiveEvents(userIds, { startDate, nextDate, timezone });
 }
 
 const summarize = (events, range) =>
   summarizeMonth(
-    buildSessions(events, { now: range.now, timeZone: env.timezone, maxSessionSeconds: maxSessionSeconds() }),
+    buildSessions(events, { now: range.now, timeZone: range.timezone, maxSessionSeconds: maxSessionSeconds() }),
     range.month,
   );
 
-const meta = (range) => ({ month: range.month, timezone: env.timezone, maxSessionHours: env.maxSessionHours });
+const meta = (range) => ({ month: range.month, timezone: range.timezone, maxSessionHours: env.maxSessionHours });
 
 // Supervisor-verified seconds per (user, month): ONLY approved DTRs count.
 // Recorded hours are never promoted to verified hours by any other path.
@@ -181,7 +181,8 @@ const withVerified = (summary, secs) =>
     : { ...summary, totals: { ...summary.totals, verifiedHours: Math.round((secs / 3600) * 100) / 100, verificationAvailable: true } };
 
 export async function monthHistory(userId, requestedMonth) {
-  const range = await resolveMonth(requestedMonth);
+  const { rows } = await query('SELECT i.timezone FROM institutions i JOIN users u ON u.institution_id=i.id WHERE u.id=$1', [userId]);
+  const range = await resolveMonth(requestedMonth, rows[0]?.timezone ?? env.timezone);
   const events = (await fetchEvents([userId], range)).get(userId);
   const verified = await verifiedSeconds([userId], range.month);
   return { ...meta(range), ...withVerified(summarize(events, range), verified.get(userId)) };
@@ -189,7 +190,8 @@ export async function monthHistory(userId, requestedMonth) {
 
 // One row per student currently assigned to the office.
 export async function officeSummary(officeId, requestedMonth) {
-  const range = await resolveMonth(requestedMonth);
+  const { rows } = await query('SELECT i.timezone FROM institutions i JOIN offices o ON o.institution_id=i.id WHERE o.id=$1', [officeId]);
+  const range = await resolveMonth(requestedMonth, rows[0]?.timezone ?? env.timezone);
   const { rows: students } = await query(
     `SELECT u.id, u.full_name, u.email FROM duty_assignments d
      JOIN users u ON u.id = d.user_id
