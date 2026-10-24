@@ -42,6 +42,27 @@ test('notification center returns only recipient notifications and enforces owne
   assert.equal(ownInstitution.body.data.notifications.length, 1);
 });
 
+test('dismissed notifications stay hidden after reload and repeated creation', async () => {
+  const { rows: [student] } = await query('SELECT institution_id FROM users WHERE id = $1', [fixtures.ids.studentA]);
+  const institutionId = student.institution_id;
+  const notice = await createFor(fixtures.ids.studentA, institutionId, 'dismiss-persist', { important: true });
+  const before = await api.get('/notifications', { cookie: fixtures.cookies.studentA });
+  const dismiss = (cookie) => api.request('PATCH', `/notifications/${notice.id}/dismiss`, { cookie, body: {} });
+  assert.equal((await dismiss(fixtures.cookies.studentA2)).status, 404);
+  assert.equal((await dismiss(fixtures.cookies.studentA)).status, 200);
+  assert.equal((await dismiss(fixtures.cookies.studentA)).status, 200);
+  assert.equal(await createFor(fixtures.ids.studentA, institutionId, 'dismiss-persist', { important: true }), null);
+
+  for (const filter of ['all', 'unread', 'important', 'warning']) {
+    const reload = await api.get(`/notifications?filter=${filter}`, { cookie: fixtures.cookies.studentA });
+    assert.equal(reload.status, 200);
+    assert.equal(reload.body.data.notifications.some((item) => item.id === notice.id), false);
+    assert.equal(reload.body.data.unreadCount, before.body.data.unreadCount - 1);
+  }
+  const { rows: [stored] } = await query('SELECT dismissed_at FROM notifications WHERE id = $1', [notice.id]);
+  assert.ok(stored.dismissed_at, 'retain the dismissal so deduplication prevents recreation');
+});
+
 test('mark all read is scoped to the signed-in recipient', async () => {
   const institution = await query('SELECT institution_id FROM users WHERE id = $1', [fixtures.ids.studentA]);
   const before = await api.get('/notifications?filter=unread', { cookie: fixtures.cookies.studentA2 });
