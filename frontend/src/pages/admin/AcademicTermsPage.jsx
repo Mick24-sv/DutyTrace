@@ -217,6 +217,7 @@ export default function AcademicTermsPage() {
           <div>
             <label htmlFor="institution-timezone" className="mb-1 block text-xs font-medium text-muted">Default timezone</label>
             <TimezoneSelect id="institution-timezone" className={field} value={institutionForm.timezone} onChange={(event) => setInstitutionForm((f) => ({ ...f, timezone: event.target.value }))} required />
+            <p className="mt-1 text-xs text-muted">Used for QR scan times and attendance history. Select Philippine time (Asia/Manila) for offices in the Philippines, then save institution settings.</p>
           </div>
           {institutionMessage && <p role={institutionMessage.ok ? 'status' : 'alert'} className={`sm:col-span-2 text-sm ${institutionMessage.ok ? 'text-ok-fg' : 'text-bad-fg'}`}>{institutionMessage.text}</p>}
           <div><Button type="submit" disabled={institutionBusy}>{institutionBusy ? 'Saving…' : 'Save institution settings'}</Button></div>
@@ -269,8 +270,9 @@ export default function AcademicTermsPage() {
             <input id="completion-deadline" type="date" className={field} value={form.completionDeadline} onChange={set('completionDeadline')} disabled={Boolean(selected?.finalizedAt)} />
           </div>
           <div>
-            <label htmlFor="term-timezone" className="mb-1 block text-xs font-medium text-muted">Institution timezone</label>
+            <label htmlFor="term-timezone" className="mb-1 block text-xs font-medium text-muted">Academic term timezone</label>
             <TimezoneSelect id="term-timezone" className={field} value={form.timezone} onChange={set('timezone')} required disabled={Boolean(selected?.finalizedAt)} />
+            <p className="mt-1 text-xs text-muted">Used for this term's schedule and deadlines. To change QR scan display times, update Institution settings above.</p>
           </div>
           {error && <p role="alert" className="sm:col-span-2 text-sm text-bad-fg">{error}</p>}
           <div className="sm:col-span-2 flex flex-wrap gap-2">
