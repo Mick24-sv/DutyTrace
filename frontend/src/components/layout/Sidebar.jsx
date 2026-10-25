@@ -50,7 +50,7 @@ export default function Sidebar({ role, open, onClose }) {
       <img
         src="/logo.png"
         alt="DutyTrace Logo"
-        className="h-9 w-9 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-sm"
+        className="h-9 w-9 shrink-0 rounded-lg bg-white object-contain shadow-sm"
       />
       <div className="min-w-0 leading-tight">
         <p className="truncate text-base font-semibold text-white">DutyTrace</p>

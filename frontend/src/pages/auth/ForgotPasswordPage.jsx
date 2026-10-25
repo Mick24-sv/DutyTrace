@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
     <div className="flex min-h-screen flex-col bg-canvas">
       <header className="bg-navy px-6 py-4 shadow-sm">
         <div className="mx-auto flex max-w-4xl items-center gap-3">
-          <img src="/logo.png" alt="DutyTrace Logo" className="h-9 w-9 rounded-full bg-white object-contain p-0.5 shadow-sm" />
+          <img src="/logo.png" alt="DutyTrace Logo" className="h-9 w-9 rounded-lg bg-white object-contain shadow-sm" />
           <span className="text-xl font-semibold tracking-tight text-white">DutyTrace</span>
         </div>
       </header>

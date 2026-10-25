@@ -41,7 +41,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen w-full bg-surface">
       <header className="flex h-[76px] w-full items-center bg-navy px-6 sm:px-10 lg:px-12 xl:px-20">
-        <img src="/logo.png" alt="DutyTrace" className="h-11 w-11 shrink-0 rounded-full bg-white object-contain p-0.5 shadow-sm" />
+        <img src="/logo.png" alt="DutyTrace" className="h-11 w-11 shrink-0 rounded-lg bg-white object-contain shadow-sm" />
         <span className="ml-3 text-xl font-semibold tracking-tight text-white">DutyTrace</span>
       </header>
 
