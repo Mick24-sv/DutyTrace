@@ -57,3 +57,12 @@
   .no-print { display: none !important; }
   body { background: #fff; }
 }
+
+/* Fit the supplied logo's blue tile to its frame, excluding its white margin. */
+img[src="/logo.png"] {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  clip-path: inset(5.6% round 22%);
+  transform: scale(1.126);
+}
