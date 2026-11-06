@@ -91,9 +91,12 @@ export default function StudentDashboard() {
 
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4">
         <StatCard
           compact
+          mobileInline
+          hideHintOnMobile
+          className="col-span-2 sm:col-span-1"
           label="Today"
           value={status.loading ? '…' : timedIn ? 'Timed in' : 'Not timed in'}
           hint={
@@ -106,6 +109,7 @@ export default function StudentDashboard() {
         <StatCard
           compact
           label="Approved hours"
+          hideHintOnMobile
           value={selectedTerm ? formatHours(verifiedSemesterHours) : semesterTerms.loading ? '…' : '—'}
           hint={
             selectedTerm
@@ -116,12 +120,13 @@ export default function StudentDashboard() {
         />
         <StatCard
           compact
-          label="Remaining semester hours"
+          hideHintOnMobile
+          label={<><span className="sm:hidden">Remaining hours</span><span className="hidden sm:inline">Remaining semester hours</span></>}
           value={
             !selectedTerm && semesterTerms.loading
               ? '…'
               : !selectedTerm || !selectedTerm.requirementAssigned
-                ? 'No duty-hour requirement assigned'
+                ? 'Not assigned'
                 : formatHours(remainingSemesterHours)
           }
           hint={
