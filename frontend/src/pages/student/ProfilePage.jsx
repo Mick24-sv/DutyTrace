@@ -43,7 +43,7 @@ export default function ProfilePage(){
     }catch(err){setError(err.details?Object.values(err.details).join(' '):err.message);}finally{setBusy(false);}
   }
   return <>
-    <Link to="/student" className="mb-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-teal"><ArrowLeft aria-hidden="true" className="h-4 w-4"/>Back to home</Link>
+    <Link to="/student" className="mb-4 inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal shadow-sm transition-colors hover:border-teal/40 hover:bg-teal/5 active:bg-teal/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2 sm:px-4"><ArrowLeft aria-hidden="true" className="h-4 w-4 shrink-0"/><span>Back to home</span></Link>
     <PageHeader icon={UIActionUserRound} title="My Profile" description="Keep your name, year level, and course up to date."/>
     <Card title="Profile picture" className="mb-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">

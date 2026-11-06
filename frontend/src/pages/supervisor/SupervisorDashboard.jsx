@@ -74,7 +74,7 @@ export default function SupervisorDashboard() {
 
   return <>
     <PageHeader icon={UIActionLayoutDashboard} title="Home" description={user.office ? `${user.office.name} · Attendance and reviews that need your attention.` : 'Ask an administrator to assign your office.'}>
-      <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
+      <div className="flex w-fit max-w-full self-start flex-wrap items-center gap-2 sm:ml-auto">
         <Link to="/supervisor/assistants" className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white">View students</Link>
         <button type="button" disabled={loading} onClick={()=>setRefresh(value=>value+1)} className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-teal disabled:opacity-50">{loading?'Refreshing…':'Refresh overview'}</button>
       </div>

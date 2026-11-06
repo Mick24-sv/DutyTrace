@@ -72,7 +72,7 @@ export default function StudentDashboard() {
       >
         <Link
           to="/student/scan"
-          className="inline-flex items-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-teal/90 transition"
+          className="inline-flex min-h-11 w-fit max-w-full self-start items-center justify-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal/90"
         >
           <QrCode className="h-4 w-4" aria-hidden="true" />
           Scan QR to {timedIn ? 'time out' : 'time in'}
