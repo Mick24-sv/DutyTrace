@@ -1,3 +1,4 @@
+import { sessionVerifiedSeconds } from '../attendance/session-verification.service.js';
 import { query } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
@@ -257,6 +258,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   const dtrByUser = new Map(dtrs.map((d) => [d.user_id, d]));
   const adjustedVerified=await verifiedAdjustmentSeconds(studentIds,monthRange.month,monthRange.month);
 
+  const sessionVerified=await sessionVerifiedSeconds(studentIds,monthRange.startDate,new Date(Date.parse(monthRange.nextDate+'T00:00:00Z')-86400000).toISOString().slice(0,10),env.timezone);
   let totalRecordedSeconds = 0;
   let totalVerifiedSeconds = 0;
   let totalRequiredSeconds = 0;
@@ -280,11 +282,9 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
     const dtr = dtrByUser.get(s.id);
     const isApproved = dtr?.status === 'approved';
     const adjustmentSeconds = isApproved ? (adjustedVerified.get(s.id) ?? 0) : 0;
-    const verifiedSecs = isApproved && dtr.verified_seconds != null ? Number(dtr.verified_seconds) + adjustmentSeconds : 0;
+    const verifiedSecs = isApproved && dtr.verified_seconds != null ? Number(dtr.verified_seconds) + adjustmentSeconds : (sessionVerified.get(s.id) ?? 0);
     const verifiedHours = Math.round((verifiedSecs / 3600) * 100) / 100;
-    if (isApproved) {
-      totalVerifiedSeconds += verifiedSecs;
-    }
+    totalVerifiedSeconds += verifiedSecs;
 
     const remainingHours = Math.max(0, Math.round((studentRequiredHours - recordedHours) * 100) / 100);
     const variance = Math.round((recordedHours - verifiedHours) * 100) / 100;

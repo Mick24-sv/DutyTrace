@@ -1,3 +1,4 @@
+import { sessionVerifiedSeconds } from '../attendance/session-verification.service.js';
 import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
@@ -267,6 +268,7 @@ async function progressForStudents(term, students, now) {
   const adjustedVerified=await verifiedAdjustmentSeconds(ids,String(term.starts_on).slice(0,7),String(term.ends_on).slice(0,7),{query},
     {fromDate:term.starts_on,toDate:term.ends_on,timezone:term.timezone});
   const historicalVerified = await verifiedHistoricalSeconds(ids, term.id, { query });
+  const sessionVerified=await sessionVerifiedSeconds(ids,term.starts_on,term.ends_on,term.timezone);
 
   const requirements = await currentRequirements(term.id);
   return students.map((student) => {
@@ -278,7 +280,7 @@ async function progressForStudents(term, students, now) {
     const recordedSeconds = sessionSeconds(sessions, term.starts_on, term.ends_on);
     const verifiedSeconds = verifiedSecondsForTerm(
       dtrsByStudent.get(student.id), term.starts_on, term.ends_on, term.timezone,
-    ) + (adjustedVerified.get(student.id) ?? 0) + (historicalVerified.get(student.id) ?? 0);
+    ) + (sessionVerified.get(student.id) ?? 0) + (adjustedVerified.get(student.id) ?? 0) + (historicalVerified.get(student.id) ?? 0);
     const verifiedHours = roundHours(verifiedSeconds);
     const requirement = requirements.get(student.id);
     const progress=calculateSemesterProgress({
@@ -413,6 +415,8 @@ export async function myMonthlySummary(user, termId) {
       verifiedHours = roundHours(verifiedSeconds);
     }
 
+    const partial=await sessionVerifiedSeconds([user.id],monthStart,monthEnd,term.timezone);
+    if(verifiedSeconds==null && partial.has(user.id)) { verifiedSeconds=partial.get(user.id); verifiedHours=roundHours(verifiedSeconds); }
     const recordedHours = roundHours(recordedSeconds);
     months.push({
       month,

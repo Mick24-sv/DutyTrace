@@ -1,3 +1,5 @@
+import ConfirmDialog from '../ui/ConfirmDialog.jsx';
+import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
@@ -5,7 +7,7 @@ import EmptyState from '../ui/EmptyState.jsx';
 import SessionBadge from './SessionBadge.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
 import { formatDateKey, formatDuration, formatHours, formatTime } from '../../utils/format.js';
-import { apiGet } from '../../services/api.js';
+import { apiGet, apiPost } from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { findEligibleDiscrepancy } from '../../utils/discrepancyNavigation.js';
 import DutyTimeEditor from './DutyTimeEditor.jsx';
@@ -28,6 +30,16 @@ export default function AttendanceHistory({ endpoint }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [editor, setEditor] = useState(null);
+  const [verification,setVerification]=useState(null);
+  const [explanation,setExplanation]=useState('');
+  const [verifyBusy,setVerifyBusy]=useState(false);
+  const [verifyError,setVerifyError]=useState('');
+  const verify=async()=>{
+    setVerifyBusy(true);setVerifyError('');
+    try { await apiPost(endpoint+'/verify-session',{sessionId:verification.id,date:verification.date,timeIn:verification.timeIn,timeOut:verification.timeOut,explanation});setVerification(null);setRefresh(v=>v+1); }
+    catch(err){setVerifyError(err.message);}finally{setVerifyBusy(false);}
+  };
+  const verificationAction=(session)=>session.verified ? <span className="inline-flex items-center gap-1 px-2 text-xs font-medium text-teal"><ShieldCheck aria-hidden="true" className="h-4 w-4"/>Verified</span> : canEdit && session.counted && session.seconds>0 && !data.dtrApproved ? <button type="button" onClick={()=>{setVerification(session);setExplanation('');setVerifyError('');}} className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-line px-2 text-xs font-medium text-teal hover:bg-canvas"><ShieldCheck aria-hidden="true" className="h-4 w-4"/>Verify hours</button> : null;
   const [refresh, setRefresh] = useState(0);
   const { data, loading, error } = useApiData(`${endpoint}?refresh=${refresh}${month ? `&month=${month}` : ''}`);
   const canEdit = user?.role === 'supervisor' && data?.user?.role === 'student' && data.user.office?.id === user.office?.id;
@@ -93,6 +105,12 @@ export default function AttendanceHistory({ endpoint }) {
             className="mt-1 block h-10 max-w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal" />
         </label>
       </div>
+      <ConfirmDialog open={Boolean(verification)} title="Verify duty hours" confirmLabel="Verify hours" busy={verifyBusy} confirmDisabled={explanation.trim().length<5} onConfirm={verify} onCancel={()=>setVerification(null)}>
+        {verification && <p>{formatDateKey(verification.date)} ? {formatTime(verification.timeIn,tz)}?{formatTime(verification.timeOut,tz)} ? {formatHours(verification.seconds/3600)}</p>}
+        <p className="mt-2">Confirm these hours against your office records. QR attendance will continue recording.</p>
+        <label className="mt-3 block">Verification note<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} maxLength={2000} className="mt-1 block w-full rounded-lg border border-line bg-surface p-3 text-ink" rows={3}/></label>
+        {verifyError && <p role="alert" className="mt-2 text-bad-fg">{verifyError}</p>}
+      </ConfirmDialog>
       {loading && <p role="status" className="text-sm text-muted">Loading attendance…</p>}
       {error && <p role="alert" className="rounded-lg bg-bad-bg p-3 text-sm text-bad-fg">{error}</p>}
       {correctionState.message && <p role="status" className="rounded-lg bg-info-bg p-3 text-sm text-info-fg">{correctionState.message}</p>}
@@ -100,12 +118,12 @@ export default function AttendanceHistory({ endpoint }) {
         <dl className="grid grid-cols-2 overflow-hidden rounded-card border border-line bg-surface sm:grid-cols-4">
           {[
             ['Recorded', formatHours(data.totals.recordedHours)],
-            ['Approved', data.totals.verificationAvailable ? formatHours(data.totals.verifiedHours) : 'Pending DTR'],
+            ['Verified', data.totals.verificationAvailable ? formatHours(data.totals.verifiedHours) : 'Not verified'],
             ['Completed', data.totals.countedSessions],
             ['Need attention', data.totals.incompleteCount],
           ].map(([label, value]) => <div key={label} className="min-w-0 px-4 py-3"><dt className="text-xs text-muted">{label}</dt><dd className="mt-1 text-base font-semibold text-navy">{value}</dd></div>)}
         </dl>
-        <p className="text-xs text-muted">Recorded hours become verified after DTR approval. Incomplete or flagged sessions are not counted.</p>
+        <p className="text-xs text-muted">Completed sessions can be verified by your supervisor during the month. Monthly DTR approval finalizes the month without counting hours twice.</p>
         {days.length === 0 ? <EmptyState icon={Clock} title="No attendance this month">Nothing has been recorded for {data.month}.</EmptyState> :
           <div className="overflow-hidden rounded-card border border-line bg-surface">
             {visibleDays.map((day) => {
@@ -133,7 +151,7 @@ export default function AttendanceHistory({ endpoint }) {
                         <div><dt className="text-[11px] text-muted">Time out</dt><dd className="mt-0.5 tabular-nums text-ink">{formatTime(session.timeOut, tz)}</dd></div>
                       </dl>
                       {sessionNote(session) && <p className="mt-2 text-xs text-muted">{sessionNote(session)}</p>}
-                      {correctionButton(day, session)}
+                      {verificationAction(session)}{correctionButton(day, session)}
                     </article>)}
                   </div>
                   <table className="hidden w-full text-left text-sm md:table">
@@ -144,7 +162,7 @@ export default function AttendanceHistory({ endpoint }) {
                       <td className="py-3 pr-3 tabular-nums">{formatTime(session.timeOut, tz)}</td>
                       <td className="py-3 pr-3">{sessionDuration(session)}{!session.counted && session.seconds != null && <span className="block text-xs text-muted">Not counted</span>}</td>
                       <td className="py-3 pr-3"><SessionBadge status={session.status} />{sessionNote(session) && <p className="mt-1 max-w-48 text-xs text-muted">{sessionNote(session)}</p>}</td>
-                      {(user?.role === 'student' || canEdit) && <td className="py-1.5 text-right">{correctionButton(day, session)}</td>}
+                      {(user?.role === 'student' || canEdit) && <td className="py-1.5 text-right">{verificationAction(session)}{correctionButton(day, session)}</td>}
                     </tr>)}</tbody>
                   </table>
                 </div>

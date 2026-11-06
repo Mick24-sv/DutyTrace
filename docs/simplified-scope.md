@@ -59,3 +59,6 @@ Student Assistants edit their name, optional year level (1–8), and course/prog
 Monthly supervisor verification offers **Whole month** (the default) or a **Specific duty credit date**. Whole-month verification requires an assigned term that fully contains the month; its verified hours count once toward that covering term and monthly reports. Partial-month ranges do not prorate this monthly decision. Date-specific verification remains available for months crossing a term boundary. Both the student-visible document and PDF identify the selected period.
 
 This interface cleanup requires updated frontend and backend deployments, with no additional database migration. Existing migrations through 0029 are still required for supervisor attendance amendments.
+
+
+Supervisors can verify completed, unflagged attendance sessions from a student's attendance history before month-end. Each verification records the exact times, reviewer, explanation, and a student notification. Corrected times need verification again. These hours count immediately toward semester progress; an approved monthly DTR replaces session verification totals for its month, preventing double-counting. QR recording stays open.

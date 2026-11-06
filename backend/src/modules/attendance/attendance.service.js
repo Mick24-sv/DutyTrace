@@ -1,3 +1,5 @@
+import { sessionVerifiedSeconds } from './session-verification.service.js';
+import { matchesVerification } from './session-verification.rules.js';
 import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
@@ -140,9 +142,8 @@ const summarize = (events, range) =>
 
 const meta = (range) => ({ month: range.month, timezone: range.timezone, maxSessionHours: env.maxSessionHours });
 
-// Supervisor-verified seconds per (user, month): ONLY approved DTRs count.
-// Recorded hours are never promoted to verified hours by any other path.
-async function verifiedSeconds(userIds, month) {
+// Approved DTR totals take precedence; otherwise count individually verified sessions.
+async function verifiedSeconds(userIds, month, timezone = env.timezone) {
   const { rows } = await query(
     `SELECT user_id, verified_seconds FROM monthly_dtrs
      WHERE user_id = ANY($1::uuid[]) AND month = $2 AND status = 'approved'`,
@@ -151,7 +152,10 @@ async function verifiedSeconds(userIds, month) {
   const result=new Map(rows.map((r) => [r.user_id, r.verified_seconds]));
   const adjustments=await verifiedAdjustmentSeconds(userIds,month,month);
   for(const [id,seconds] of adjustments) if(result.has(id)) result.set(id,Number(result.get(id))+seconds);
-  return result;
+  const last=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+ const partial=await sessionVerifiedSeconds(userIds,month+'-01',last,timezone);
+ for(const [id,seconds] of partial) if(!result.has(id)) result.set(id,seconds);
+ return result;
 }
 
 const withVerified = (summary, secs) =>
@@ -163,8 +167,12 @@ export async function monthHistory(userId, requestedMonth) {
   const { rows } = await query('SELECT i.timezone FROM institutions i JOIN users u ON u.institution_id=i.id WHERE u.id=$1', [userId]);
   const range = await resolveMonth(requestedMonth, rows[0]?.timezone ?? env.timezone);
   const events = (await fetchEvents([userId], range)).get(userId);
-  const verified = await verifiedSeconds([userId], range.month);
-  return { ...meta(range), ...withVerified(summarize(events, range), verified.get(userId)) };
+  const verified = await verifiedSeconds([userId], range.month, range.timezone);
+  const summary=withVerified(summarize(events, range), verified.get(userId));
+ const {rows:verifications}=await query("SELECT * FROM attendance_session_verifications WHERE student_id=$1 AND to_char(work_date,'YYYY-MM')=$2",[userId,range.month]);
+ const {rows:[dtr]}=await query('SELECT status FROM monthly_dtrs WHERE user_id=$1 AND month=$2',[userId,range.month]);
+ for(const day of summary.days) for(const session of day.sessions) session.verified=dtr?.status==='approved' ? session.counted : verifications.some(v=>matchesVerification(session,v));
+ return {...meta(range),...summary,dtrApproved:dtr?.status==='approved'};
 }
 
 // One row per student currently assigned to the office.
@@ -191,7 +199,7 @@ export async function officeSummary(officeId, requestedMonth) {
     [ids],
   );
   const lastBy = new Map(last.map((r) => [r.user_id, r]));
-  const verified = await verifiedSeconds(ids, range.month);
+  const verified = await verifiedSeconds(ids, range.month, range.timezone);
 
   return {
     ...meta(range),

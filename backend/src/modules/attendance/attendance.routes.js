@@ -1,3 +1,4 @@
+import { verifySession } from './session-verification.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query } from '../../db/pool.js';
@@ -87,4 +88,9 @@ attendanceRouter.get('/office/:officeId/summary', requireRole('supervisor', 'adm
     : await query('SELECT id, code, name FROM offices WHERE id = $1', [officeId]);
   if (!office.rowCount) throw new AppError(404, 'NOT_FOUND', 'Office not found.');
   ok(res, { office: office.rows[0], ...(await attendance.officeSummary(officeId, month)) });
+}));
+
+attendanceRouter.post('/users/:userId/verify-session', requireRole('supervisor'), asyncHandler(async (req,res)=>{
+ const input=parse(z.object({sessionId:z.string().min(1).max(200),date:z.iso.date(),timeIn:z.iso.datetime(),timeOut:z.iso.datetime(),explanation:z.string().trim().min(5).max(2000)}).strict(),req.body);
+ ok(res,await verifySession(req.user,parseId(req.params.userId),input));
 }));
