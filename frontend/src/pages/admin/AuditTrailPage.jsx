@@ -1,3 +1,4 @@
+import {ScrollText as UIActionScrollText} from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ScrollText,
@@ -173,7 +174,7 @@ export default function AuditTrailPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <PageHeader icon={UIActionScrollText}
         title="Audit Trail"
         description="Immutable, chronological record of system operations, authentication events, attendance, and administrative changes."
       >

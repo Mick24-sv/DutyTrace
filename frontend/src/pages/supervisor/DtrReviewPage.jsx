@@ -1,3 +1,4 @@
+import {ClipboardCheck as UIActionClipboardCheck} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -27,7 +28,7 @@ export default function DtrReviewPage() {
 
   return (
     <>
-      <PageHeader title="DTR Review" description={user.office ? `${user.office.name}: submitted monthly DTRs.` : undefined}>
+      <PageHeader icon={UIActionClipboardCheck} title="DTR Review" description={user.office ? `${user.office.name}: submitted monthly DTRs.` : undefined}>
         <StatusFilter value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={['submitted', 'under_review', 'approved', 'needs_correction']} />
       </PageHeader>
       {!user.office && (

@@ -52,6 +52,18 @@
   }
 }
 
+@media (max-width: 639px) {
+  /* Keep native date/time controls inside narrow grids and avoid iOS input zoom. */
+  :where(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px;
+    min-height: 44px;
+  }
+  :where(form label, fieldset) { min-width: 0; }
+  :where(button) { min-height: 44px; }
+}
+
 /* Printer-friendly: hide app chrome, keep content white (used for DTRs later) */
 @media print {
   .no-print { display: none !important; }

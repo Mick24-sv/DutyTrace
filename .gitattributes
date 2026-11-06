@@ -1,0 +1,5 @@
+
+database/migrations/*.sql text eol=lf
+database/migrations/0008_institutions_and_semesters.sql text eol=crlf
+database/migrations/0009_institution_dtr_policies.sql text eol=crlf
+database/migrations/0010_institution_case_types.sql text eol=crlf

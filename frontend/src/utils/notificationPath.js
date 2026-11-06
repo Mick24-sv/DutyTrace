@@ -10,8 +10,8 @@ export function notificationPath(role, item) {
   if (relatedType === 'compliance_case') return `/${role}/cases/${relatedId}`;
   if (relatedType === 'academic_term') return role === 'admin' ? '/admin/semesters' : `/${role}`;
   if (relatedType === 'student') return role === 'admin' ? '/admin/users' : `/${role}/assistants/${relatedId}`;
-  if (relatedType === 'duty_schedule') return '/student/schedule';
-  if (relatedType === 'duty_recovery_plan') return role === 'student' ? '/student/schedule' : '/supervisor/recovery-review';
+  if (relatedType === 'duty_schedule') return role === 'student' ? '/student/attendance' : `/${role}`;
+  if (relatedType === 'duty_recovery_plan') return role === 'student' ? '/student/attendance' : '/supervisor/assistants';
   if (relatedType === 'attendance_discrepancy') return `/${role}/discrepancies${relatedId ? `?discrepancyId=${encodeURIComponent(relatedId)}` : ''}`;
   return `/${role}`;
 }

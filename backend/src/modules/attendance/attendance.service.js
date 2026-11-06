@@ -1,11 +1,10 @@
-﻿import { query, withTransaction } from '../../db/pool.js';
+import { query, withTransaction } from '../../db/pool.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
 import { readPayload } from '../qr/qr.service.js';
 import { buildSessions, summarizeMonth } from './calc.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
-import { effectivePolicyForCurrentDate } from '../policy-templates/policy-templates.service.js';
 
 const maxSessionSeconds = () => env.maxSessionHours * 3600;
 
@@ -19,7 +18,7 @@ export async function getState(userId, db = { query }) {
        UNION ALL
        SELECT x.value->>'eventType', (x.value->>'recordedAt')::timestamptz, NULL::bigint
          FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value)
-         WHERE a.student_id=$1
+         WHERE a.student_id=$1 AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id)
      ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1`,
     [userId],
   );
@@ -70,30 +69,10 @@ export async function scan({ user, action, qrPayload, ip, userAgent }) {
         throw reject(409, 'NO_ACTIVE_SESSION', 'You are not timed in, so there is nothing to time out of.');
       }
 
-      const effectivePolicy=await effectivePolicyForCurrentDate({institutionId:user.institutionId,officeId:qr.office_id,studentId:user.id,db});
-      const attendanceRules=effectivePolicy?.configuration?.attendance??{};
-      if(action==='time_in'&&attendanceRules.attendanceOutsideApprovedShift==='block'){
-        const hasApprovedWindow=await db.query(`SELECT EXISTS(
-          SELECT 1 FROM student_duty_schedules s JOIN academic_terms t ON t.id=s.term_id
-          JOIN student_duty_schedule_days d ON d.schedule_id=s.id
-          WHERE s.student_id=$1 AND s.institution_id=$2 AND s.office_id=$3 AND s.status='approved'
-            AND s.effective_starts_on<=(now() AT TIME ZONE t.timezone)::date
-            AND (s.effective_ends_on IS NULL OR s.effective_ends_on>=(now() AT TIME ZONE t.timezone)::date)
-            AND d.weekday=extract(isodow FROM (now() AT TIME ZONE t.timezone)::date)
-            AND ((now() AT TIME ZONE t.timezone)::time BETWEEN d.starts_at-($4*interval '1 minute') AND d.ends_at+($5*interval '1 minute')
-              OR (d.afternoon_starts_at IS NOT NULL AND (now() AT TIME ZONE t.timezone)::time BETWEEN d.afternoon_starts_at-($4*interval '1 minute') AND d.afternoon_ends_at+($5*interval '1 minute')))
-        ) AS allowed`,[user.id,user.institutionId,qr.office_id,
-          attendanceRules.earlyClockInToleranceMinutes??0,attendanceRules.lateClockOutToleranceMinutes??0]);
-        if(!hasApprovedWindow.rows[0]?.allowed)throw reject(403,'OUTSIDE_APPROVED_SHIFT','This institution policy only allows attendance scans during an approved duty shift.');
-      }
-      const versionId=effectivePolicy?.assignments?.at(-1)?.versionId??null;
-      const policySnapshot=effectivePolicy?{term:effectivePolicy.term,effectiveDate:effectivePolicy.effectiveDate,
-        configuration:effectivePolicy.configuration,origins:effectivePolicy.origins,assignments:effectivePolicy.assignments}:null;
-
       const { rows } = await db.query(
-        `INSERT INTO attendance_events (user_id, office_id, event_type, qr_code_id, source, ip_address, user_agent,policy_version_id,policy_snapshot)
-         VALUES ($1, $2, $3, $4, 'qr', $5, $6,$7,$8::jsonb) RETURNING id, recorded_at`,
-        [user.id, qr.office_id, action, qr.id, ip, userAgent?.slice(0, 300) ?? null,versionId,policySnapshot?JSON.stringify(policySnapshot):null],
+        `INSERT INTO attendance_events (user_id, office_id, event_type, qr_code_id, source, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, 'qr', $5, $6) RETURNING id, recorded_at`,
+        [user.id, qr.office_id, action, qr.id, ip, userAgent?.slice(0, 300) ?? null],
       );
       const event = rows[0];
 
@@ -207,7 +186,7 @@ export async function officeSummary(officeId, requestedMonth) {
        SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
          AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
        UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
-         FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+         FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id)
      ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1) last ON true WHERE u.id=ANY($1::uuid[])`,
     [ids],
   );

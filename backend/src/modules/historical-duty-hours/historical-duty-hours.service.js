@@ -69,6 +69,40 @@ export async function listForSupervisor(actor) {
   return rows.map(mapCredit);
 }
 
+export async function eligibility(actor, {studentId, termId, month}) {
+  if(actor.role !== 'supervisor' || !actor.office?.id) throw forbidden();
+  const {rows:[term]}=await query(`SELECT t.*, (now() AT TIME ZONE t.timezone)::date::text AS today
+    FROM academic_terms t WHERE t.id=$1 AND t.institution_id=$2 AND EXISTS(
+      SELECT 1 FROM semester_requirement_assignments a JOIN users u ON u.id=a.student_id
+      WHERE a.term_id=t.id AND a.student_id=$3 AND a.office_id=$4 AND u.role='student' AND u.status='active')`,
+    [termId,actor.institutionId,studentId,actor.office.id]);
+  if(!term) throw forbidden();
+  if(month>=term.today.slice(0,7)) throw fail(400,'MONTH_NOT_ENDED','Choose a month that has already ended.');
+  const {rows:dates}=await query(`SELECT DISTINCT day FROM (
+    SELECT (recorded_at AT TIME ZONE $4)::date::text AS day FROM attendance_events
+      WHERE user_id=$1 AND recorded_at >= ($2::date::timestamp AT TIME ZONE $4)
+        AND recorded_at < (($3::date+1)::timestamp AT TIME ZONE $4)
+    UNION ALL SELECT ((e->>'recordedAt')::timestamptz AT TIME ZONE $4)::date::text FROM attendance_adjustments a
+      CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) e WHERE a.student_id=$1
+      AND (e->>'recordedAt')::timestamptz >= ($2::date::timestamp AT TIME ZONE $4)
+      AND (e->>'recordedAt')::timestamptz < (($3::date+1)::timestamp AT TIME ZONE $4)
+    ) events ORDER BY day`, [studentId,monthStart(month),monthEnd(month),term.timezone]);
+  const {rows:credits}=await query(`SELECT granularity,work_date::text FROM historical_duty_credits
+    WHERE student_id=$1 AND term_id=$2 AND credit_month=$3 AND status IN ('approved','pending_admin')`,[studentId,termId,month]);
+  const {rows:[dtr]}=await query(`SELECT EXISTS(SELECT 1 FROM monthly_dtrs WHERE user_id=$1 AND month=$2
+    AND status='approved' AND verified_seconds>0) AS approved`,[studentId,month]);
+  const qrDates=dates.map(row=>row.day);
+  const blocked=new Set([...qrDates,...credits.map(row=>row.work_date).filter(Boolean)]);
+  const hasMonthlyCredit=credits.some(row=>row.granularity==='monthly_total');
+  const availableDates=[];
+  for(let day=1;day<=Number(monthEnd(month).slice(-2));day++){
+    const date=`${month}-${String(day).padStart(2,'0')}`;
+    if(!hasMonthlyCredit && date>=term.starts_on && date<=term.ends_on && !blocked.has(date)) availableDates.push(date);
+  }
+  return {qrDates,availableDates,hasMonthlyCredit,monthlyAllowed:!qrDates.length&&!dtr.approved&&!credits.length
+    &&monthStart(month)>=term.starts_on&&monthEnd(month)<=term.ends_on};
+}
+
 export async function oversight(actor) {
   if (actor.role !== 'admin') throw forbidden();
   const { rows } = await query(`${SELECT_CREDIT} WHERE c.institution_id=$1 AND c.status='pending_admin'

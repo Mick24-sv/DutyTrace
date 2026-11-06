@@ -1,72 +1,36 @@
+import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
+import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
+import ProgressBar from '../../components/ui/ProgressBar.jsx';
 import { Link } from 'react-router-dom';
-import {
-  Users,
-  Timer,
-  AlertTriangle,
-  ClipboardCheck,
-  CalendarOff,
-  FolderCheck,
-  TrendingDown,
-  BarChart3,
-  QrCode,
-  AlertCircle,
-  CalendarDays,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, Timer, ClipboardCheck } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
-import StatCard from '../../components/ui/StatCard.jsx';
 import Card from '../../components/ui/Card.jsx';
+import StatCard from '../../components/ui/StatCard.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
-import ProgressBar from '../../components/ui/ProgressBar.jsx';
+import { formatDutyTime, formatHours, formatMonth } from '../../utils/format.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { formatDutyTime, formatHours, formatMonth, formatTime } from '../../utils/format.js';
-import HistoricalDutyHoursPanel from '../../components/attendance/HistoricalDutyHoursPanel.jsx';
 
 export default function SupervisorDashboard() {
-  const { user } = useAuth();
-  const { data, loading, error, reload } = useApiData('/reports/dashboard-stats');
-  const scheduleOverview = useApiData('/duty-schedules/overview');
-  const forecastData = useApiData(user?.office?.id ? `/forecast/office/${user.office.id}` : null);
-  const recoveryData = useApiData('/recovery/review');
-  const discrepancySummary = useApiData('/attendance-discrepancies/summary');
-
-  const stats = data?.stats ?? {
-    totalAssistants: 0,
-    timedInToday: 0,
-    incompleteSessions: 0,
-    pendingDtrs: 0,
-    absencesAwaitingReview: 0,
-    studentsBelowRequirement: 0,
-    openCases: 0,
-  };
-
+  const {user} = useAuth();
+  const [refresh, setRefresh] = useState(0);
+  const {data, loading, error} = useApiData(`/reports/dashboard-stats?refresh=${refresh}`);
+  useEffect(() => {
+    const refreshOverview=()=>setRefresh(value=>value+1);
+    window.addEventListener('focus',refreshOverview);
+    return ()=>window.removeEventListener('focus',refreshOverview);
+  },[]);
+  const corrections = useApiData('/attendance-discrepancies/summary');
+  const stats = data?.stats;
+  const scheduleOverview = useApiData(user.office?.id ? '/duty-schedules/overview' : null);
   const assistants = data?.assistants ?? [];
   const monthColumns = data?.monthColumns ?? [];
-  const todayAttendance = data?.todayAttendance ?? [];
   const studentsBelow = data?.studentsBelowRequirement ?? [];
-
-  const todayColumns = [
-    { key: 'fullName', header: 'Student Assistant' },
-    { key: 'email', header: 'Email' },
-    {
-      key: 'state',
-      header: 'Today’s Status',
-      render: (a) => (
-        <Badge tone={a.state === 'timed_in' ? 'pending' : 'neutral'}>
-          {a.state === 'timed_in' ? 'Timed In' : 'Not Timed In'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'since',
-      header: 'Event Time',
-      render: (a) => (a.since ? formatTime(a.since) : '—'),
-    },
-  ];
-
   const belowColumns = [
     { key: 'studentName', header: 'Student Assistant' },
+    {key:'semesterStatus',header:'Semester status',render:s=><SemesterStatusBadge status={s.semesterStatus}/>},
     {
       key: 'progress',
       header: 'Semester Progress',
@@ -108,225 +72,31 @@ export default function SupervisorDashboard() {
     },
   ];
 
-  return (
-    <>
-      <PageHeader
-        title="Supervisor Dashboard"
-        description={
-          user?.office
-            ? `${user.office.name} (${user.office.code}). Scoped strictly to your authorized office.`
-            : 'You are not assigned to an office yet. Contact an administrator.'
-        }
-      >
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/supervisor/duty-schedules"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas transition"
-          >
-            <CalendarDays className="h-4 w-4 text-teal" />
-            Review duty schedules
-          </Link>
-          <Link
-            to="/supervisor/recovery-review"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas transition"
-          >
-            <CalendarDays className="h-4 w-4 text-teal" />
-            Recovery requests{recoveryData.data?.plans?.filter((plan) => plan.status === 'pending_review').length ? ` (${recoveryData.data.plans.filter((plan) => plan.status === 'pending_review').length})` : ''}
-          </Link>
-          <Link
-            to="/supervisor/reports"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-canvas transition"
-          >
-            <BarChart3 className="h-4 w-4 text-teal" />
-            View Reports
-          </Link>
-          <Link
-            to="/supervisor/office-qr"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-teal px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-teal/90 transition"
-          >
-            <QrCode className="h-4 w-4" />
-            Show Office QR
-          </Link>
-        </div>
-      </PageHeader>
-
-      {error && (
-        <div role="alert" className="mb-6 rounded-lg bg-bad-bg p-4 text-sm text-bad-fg flex items-start gap-2">
-          <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold">Unable to load supervisor dashboard data</p>
-            <p className="mt-1">{error}</p>
-          </div>
-        </div>
-      )}
-
-
-
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard
-          compact
-          label="Assigned Assistants"
-          value={loading ? '…' : stats.totalAssistants}
-          hint={user?.office ? user.office.name : undefined}
-          icon={Users}
-        />
-        <StatCard
-          compact
-          label="Today's Attendance"
-          value={loading ? '…' : `${stats.timedInToday} / ${stats.totalAssistants}`}
-          hint={stats.timedInToday > 0 ? `${stats.timedInToday} currently timed in` : 'None timed in yet today'}
-          icon={Timer}
-        />
-        <StatCard
-          compact
-          label="Incomplete Records"
-          value={loading ? '…' : stats.incompleteSessions}
-          hint="Missing time-out or over length limit"
-          icon={AlertTriangle}
-        />
-        <StatCard
-          compact
-          label="Pending DTR Reviews"
-          value={loading ? '…' : stats.pendingDtrs}
-          hint="Awaiting your review or revision check"
-          icon={ClipboardCheck}
-        />
+  return <>
+    <PageHeader icon={UIActionLayoutDashboard} title="Home" description={user.office ? `${user.office.name} · Attendance and reviews that need your attention.` : 'Ask an administrator to assign your office.'}>
+      <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:items-center">
+        <Link to="/supervisor/assistants" className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white">View students</Link>
+        <button type="button" disabled={loading} onClick={()=>setRefresh(value=>value+1)} className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg border border-line px-4 py-2 text-sm font-medium text-teal disabled:opacity-50">{loading?'Refreshing…':'Refresh overview'}</button>
       </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-4 sm:gap-4 lg:grid-cols-3">
-        <StatCard
-          compact
-          label="Below Duty Requirement"
-          value={loading ? '…' : stats.studentsBelowRequirement}
-          hint={data?.semesterSummary?.term ? `${data.semesterSummary.term.academicYear} · ${data.semesterSummary.term.semester} requirements not met` : 'No active academic term'}
-          icon={TrendingDown}
-        />
-        <StatCard
-          compact
-          label="Absence Notices Attention"
-          value={loading ? '…' : stats.absencesAwaitingReview}
-          hint="Pending review or awaiting follow-up"
-          icon={CalendarOff}
-        />
-        <StatCard
-          compact
-          label="Open Compliance Cases"
-          value={loading ? '…' : stats.openCases}
-          hint="Active cases in your office"
-          icon={FolderCheck}
-        />
+    </PageHeader>
+    {loading && <p role="status" className="mb-4 text-sm text-muted">Loading office overview…</p>}
+    {error && <p role="alert" className="mb-4 text-sm text-bad-fg">{error}</p>}
+    <div className="grid gap-3 sm:grid-cols-3">
+      <StatCard label="Assigned students" value={stats?.totalAssistants ?? '—'} icon={Users} />
+      <StatCard label="Currently timed in" value={stats?.timedInToday ?? '—'} icon={Timer} />
+      <StatCard label="DTRs awaiting review" value={stats?.pendingDtrs ?? '—'} icon={ClipboardCheck} />
+    </div>
+    <Card className="mt-5" title="Next actions">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link to="/supervisor/dtr-review" className="rounded-lg border border-line p-4 hover:bg-canvas"><b className="block text-sm text-teal">Review monthly DTRs</b><span className="mt-1 block text-sm text-muted">Approve hours or return a DTR with feedback.</span></Link>
+        <Link to="/supervisor/discrepancies" className="rounded-lg border border-line p-4 hover:bg-canvas"><b className="block text-sm text-teal">Attendance corrections</b><span className="mt-1 block text-sm text-muted">{corrections.error ? 'Unable to load the correction count. Open the queue to retry.' : corrections.loading ? 'Loading correction requests…' : `${corrections.data?.pendingReview ?? 0} records awaiting review.`} To edit a student's times directly, open their attendance.</span></Link>
       </div>
-
-      {/* Duty Completion Forecast Overview Card */}
-      <Card
-        className="mt-6"
-        title="Duty completion forecast overview"
-        action={
-          <Link to="/supervisor/assistants" className="text-sm font-medium text-teal hover:underline">
-            View all assistant forecasts
-          </Link>
-        }
-      >
-        {forecastData.loading && <p className="text-sm text-muted">Loading forecast data…</p>}
-        {forecastData.error && <p className="text-sm text-bad-fg">Unable to load forecast: {forecastData.error}</p>}
-        {forecastData.data && (
-          <div className="min-w-0 space-y-4">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-              <div className="flex min-h-24 min-w-0 flex-col items-start justify-center rounded-lg border border-line bg-canvas p-3 text-left sm:items-center sm:text-center">
-                <span className="text-xs text-muted block">On Track</span>
-                <span className="mt-1 block text-xl font-semibold text-ok-fg font-mono">
-                  {forecastData.data.summary.onTrack}
-                </span>
-                <span className="block text-[11px] leading-snug text-muted">Projected on/before deadline</span>
-              </div>
-              <div className="flex min-h-24 min-w-0 flex-col items-start justify-center rounded-lg border border-line bg-canvas p-3 text-left sm:items-center sm:text-center">
-                <span className="text-xs text-muted block">At Risk</span>
-                <span className="mt-1 block text-xl font-semibold text-bad-fg font-mono">
-                  {forecastData.data.summary.atRisk}
-                </span>
-                <span className="block text-[11px] leading-snug text-muted">Behind pace or past deadline</span>
-              </div>
-              <div className="flex min-h-24 min-w-0 flex-col items-start justify-center rounded-lg border border-line bg-canvas p-3 text-left sm:items-center sm:text-center">
-                <span className="text-xs text-muted block">Completed</span>
-                <span className="mt-1 block text-xl font-semibold text-teal font-mono">
-                  {forecastData.data.summary.completed}
-                </span>
-                <span className="block text-[11px] leading-snug text-muted">Requirements met</span>
-              </div>
-              <div className="flex min-h-24 min-w-0 flex-col items-start justify-center rounded-lg border border-line bg-canvas p-3 text-left sm:items-center sm:text-center">
-                <span className="text-xs text-muted block">Insufficient Data</span>
-                <span className="mt-1 block text-xl font-semibold text-muted font-mono">
-                  {forecastData.data.summary.insufficientData}
-                </span>
-                <span className="block text-[11px] leading-snug text-muted">Need initial attendance history</span>
-              </div>
-            </div>
-
-            {forecastData.data.items?.filter((item) => item.status === 'at_risk').length > 0 && (
-              <div className="mt-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-bad-fg">
-                  Students Requiring Attention (At Risk)
-                </p>
-                <div className="divide-y divide-line rounded-lg border border-line bg-surface">
-                  {forecastData.data.items
-                    .filter((item) => item.status === 'at_risk')
-                    .slice(0, 5)
-                    .map((item) => (
-                      <div key={item.student.id} className="grid min-w-0 gap-2 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-                        <div className="min-w-0">
-                          <span className="font-medium text-ink">{item.student.fullName}</span>
-                          <span className="ml-2 text-xs text-muted">({item.remainingHours}h remaining)</span>
-                          <p className="mt-1 break-words text-xs leading-relaxed text-bad-fg">{item.reason}</p>
-                        </div>
-                        <div className="text-left text-xs text-muted font-mono md:text-right">
-                          {item.actualWeeklyPace} h/wk actual · {item.requiredWeeklyPace} h/wk required
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* Two-column layout for Today's Attendance and Students Below Requirement */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+    </Card>
         <Card
-          title="Today's Attendance Overview"
-          action={
-            <Link to="/supervisor/assistants" className="text-sm font-medium text-teal hover:underline">
-              All Assistants
-            </Link>
-          }
-        >
-          <div className="hidden 2xl:block">
-          <DataTable
-            columns={todayColumns}
-            rows={todayAttendance}
-            caption="Today's live attendance status for your office"
-            empty={loading ? 'Loading attendance…' : 'No student assistants assigned to your office.'}
-          />
-          </div>
-          <div className="divide-y divide-line 2xl:hidden">
-            {todayAttendance.length === 0 ? <p className="py-4 text-center text-sm text-muted">{loading ? 'Loading attendance...' : 'No student assistants assigned to your office.'}</p> : todayAttendance.map((assistant) => (
-              <div key={assistant.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                <div className="min-w-0">
-                  <p className="break-words text-sm font-medium text-ink">{assistant.fullName}</p>
-                  <p className="break-all text-xs text-muted">{assistant.email}</p>
-                  {assistant.since && <p className="mt-1 text-xs text-muted">Event time: {formatTime(assistant.since)}</p>}
-                </div>
-                <Badge tone={assistant.state === 'timed_in' ? 'pending' : 'neutral'}>{assistant.state === 'timed_in' ? 'Timed In' : 'Not Timed In'}</Badge>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card
+          className="mt-5"
           title="Students Below Duty-Hour Requirements"
           action={
-            <Link to="/supervisor/reports" className="text-sm font-medium text-teal hover:underline">
+            <Link to="/supervisor/reports?tab=semester-hours" className="text-sm font-medium text-teal hover:underline">
               Detailed Hours Report
             </Link>
           }
@@ -346,7 +116,7 @@ export default function SupervisorDashboard() {
           <div className="divide-y divide-line 2xl:hidden">
             {studentsBelow.length === 0 ? <p className="py-4 text-center text-sm text-muted">{loading ? 'Checking hours...' : 'No assigned semester requirements are currently below target.'}</p> : studentsBelow.map((student) => (
               <article key={student.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
-                <p className="break-words text-sm font-medium text-ink">{student.studentName}</p>
+                <p className="break-words text-sm font-medium text-ink">{student.studentName}</p><SemesterStatusBadge status={student.semesterStatus}/>
                 {student.semesterRequirementAssigned && (
                   <div>
                     <div className="mb-1 flex justify-between text-xs text-muted"><span>Semester progress</span><span>{student.completionPercentage ?? 0}%</span></div>
@@ -363,18 +133,8 @@ export default function SupervisorDashboard() {
             ))}
           </div>
         </Card>
-      </div>
-
-      <Card title="Attendance discrepancy review" className="mt-4 [&>div:last-child]:!p-3" action={<Link to="/supervisor/discrepancies" className="text-sm font-medium text-teal hover:underline">Open review queue</Link>}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm leading-snug text-muted">Review student explanations and correction requests for your office.</p>
-          <div className="flex flex-wrap gap-2 text-sm"><Badge tone="pending">{discrepancySummary.data?.pendingReview??0} pending review</Badge><Badge tone="neutral">{discrepancySummary.data?.open??0} unresolved</Badge></div>
-        </div>
-        {discrepancySummary.error&&<p className="mt-2 text-xs text-bad-fg">Could not load discrepancy counts: {discrepancySummary.error}</p>}
-      </Card>
-
       <Card title="Student Assistants’ preferred duty times" className="mt-4 mb-6" action={
-        <Link to="/supervisor/duty-schedules" className="text-sm font-medium text-teal hover:underline">Review preferences</Link>
+        <Link to="/supervisor/schedule-review" className="text-sm font-medium text-teal hover:underline">Review preferences</Link>
       }>
         {scheduleOverview.loading && <p role="status" className="text-sm text-muted">Loading submitted preferences…</p>}
         {scheduleOverview.error && <p role="alert" className="text-sm text-bad-fg">Unable to load schedule preferences: {scheduleOverview.error}</p>}
@@ -412,34 +172,37 @@ export default function SupervisorDashboard() {
         className="mt-4"
         action={<span className="whitespace-nowrap text-right text-xs text-muted">{data?.semesterSummary?.term ? `${data.semesterSummary.term.academicYear} · ${data.semesterSummary.term.semester}` : 'No active academic term'}</span>}
       >
-        <p className="mb-3 text-xs text-muted">QR-recorded and historical paper-DTR credits are shown separately. Remaining hours use approved DTRs and verified historical credits.</p>
+        <p className="mb-3 text-xs text-muted">DTR verified shows the supervisor-approved monthly hours, including a documented final monthly total. QR recorded is shown separately. Total verified and hours left use approved DTRs plus historical credits within this semester.</p>
         <div className="hidden overflow-x-auto sm:block"><table className="min-w-max border-collapse text-left text-sm"><thead><tr>
           <th className="border border-line bg-canvas p-2">Student Assistant</th>
           <th className="border border-line bg-canvas p-2">Duty Hours Requirement</th>
           {monthColumns.map((month) => <th key={month} className="border border-line bg-canvas p-2">{formatMonth(month).toUpperCase()}</th>)}
           <th className="border border-line bg-canvas p-2">Hours Left</th>
-          <th className="border border-line bg-canvas p-2">Total Hours</th>
+          <th className="border border-line bg-canvas p-2">Total Verified (Semester)</th>
         </tr></thead><tbody>{assistants.map((assistant) => <tr key={assistant.id}>
-          <th className="whitespace-nowrap border border-line p-2 font-medium">{assistant.studentName}</th>
+          <th className="whitespace-nowrap border border-line p-2 font-medium">{assistant.studentName}<span className="mt-2 block"><SemesterStatusBadge status={assistant.semesterStatus}/></span></th>
           <td className="whitespace-nowrap border border-line p-2">{assistant.semesterRequirementAssigned ? formatHours(assistant.semesterRequiredHours) : 'No requirement'}</td>
-          {monthColumns.map((month) => <td key={month} className="whitespace-nowrap border border-line p-2"><span className="block text-[10px] text-muted">QR recorded</span>{formatHours(assistant.monthlyHours?.[month] ?? 0)}<span className="mt-1 block text-[10px] text-muted">Historical verified</span>{formatHours(assistant.historicalMonthlyHours?.[month] ?? 0)}</td>)}
+          {monthColumns.map((month) => <td key={month} className="whitespace-nowrap border border-line p-2 align-top"><span className="block text-[10px] text-muted">DTR verified</span><span className="block font-semibold text-navy">{assistant.monthlyDtrStatuses?.[month]==='approved' ? formatHours(assistant.monthlyVerifiedHours?.[month]??0) : (assistant.monthlyHours?.[month]??0)>0 ? 'Pending approval' : formatHours(0)}</span><span className="mt-2 block text-[10px] text-muted">QR recorded</span>{formatHours(assistant.monthlyHours?.[month] ?? 0)}<span className="mt-1 block text-[10px] text-muted">Historical verified</span>{formatHours(assistant.historicalMonthlyHours?.[month] ?? 0)}</td>)}
           <td className="whitespace-nowrap border border-line p-2">{assistant.recordedHoursLeft == null ? '—' : formatHours(assistant.recordedHoursLeft)}</td>
-          <td className="whitespace-nowrap border border-line p-2 font-semibold">{formatHours(assistant.totalRecordedTermHours ?? 0)}</td>
+          <td className="whitespace-nowrap border border-line p-2 font-semibold">{formatHours(assistant.semesterVerifiedHours ?? 0)}</td>
         </tr>)}</tbody></table></div>
         <div className="space-y-3 sm:hidden">{assistants.map((assistant) => <article key={assistant.id} className="rounded-lg border border-line p-3">
-          <h3 className="break-words text-sm font-semibold">{assistant.studentName}</h3>
+          <h3 className="break-words text-sm font-semibold">{assistant.studentName}</h3><div className="mt-2"><SemesterStatusBadge status={assistant.semesterStatus}/></div>
           <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Duty hours requirement</dt><dd className="mt-1 font-semibold text-ink">{assistant.semesterRequirementAssigned ? formatHours(assistant.semesterRequiredHours) : 'No requirement'}</dd></div>
             <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Hours left</dt><dd className="mt-1 font-semibold text-ink">{assistant.recordedHoursLeft == null ? '—' : formatHours(assistant.recordedHoursLeft)}</dd></div>
-            <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Total hours</dt><dd className="mt-1 font-semibold text-ink">{formatHours(assistant.totalRecordedTermHours ?? 0)}</dd></div>
+            <div className="rounded-md bg-canvas p-2"><dt className="text-muted">Total verified this semester</dt><dd className="mt-1 font-semibold text-ink">{formatHours(assistant.semesterVerifiedHours ?? 0)}</dd></div>
           </dl>
-          {monthColumns.length > 0 && <div className="mt-3"><p className="mb-2 text-xs font-semibold text-muted">Hours by month</p><dl className="grid grid-cols-2 gap-2">{monthColumns.map((month) => <div key={month} className="flex min-w-0 items-start justify-between gap-2 rounded-md border border-line px-2 py-1.5 text-xs"><dt className="truncate text-muted">{formatMonth(month)}</dt><dd className="whitespace-nowrap text-right font-medium"><span className="block">QR {formatHours(assistant.monthlyHours?.[month] ?? 0)}</span><span className="block text-teal">Historical {formatHours(assistant.historicalMonthlyHours?.[month] ?? 0)}</span></dd></div>)}</dl></div>}
+          {monthColumns.length > 0 && <div className="mt-3"><p className="mb-2 text-xs font-semibold text-muted">Hours by month</p><dl className="grid gap-2">{monthColumns.map((month) => <div key={month} className="min-w-0 rounded-md border border-line p-3 text-xs"><dt className="mb-2 font-semibold text-navy">{formatMonth(month)}</dt><dd className="grid grid-cols-2 gap-3"><span><span className="block text-muted">DTR verified</span><b className="mt-1 block text-navy">{assistant.monthlyDtrStatuses?.[month]==='approved' ? formatHours(assistant.monthlyVerifiedHours?.[month]??0) : (assistant.monthlyHours?.[month]??0)>0 ? 'Pending approval' : formatHours(0)}</b></span><span><span className="block text-muted">Historical verified</span><span className="mt-1 block">{formatHours(assistant.historicalMonthlyHours?.[month]??0)}</span></span><span className="col-span-2 text-muted">QR recorded: {formatHours(assistant.monthlyHours?.[month]??0)}</span></dd></div>)}</dl></div>}
         </article>)}</div>
         {assistants.length === 0 && <p className="py-4 text-center text-sm text-muted">{loading ? 'Loading hour summaries…' : 'No assistants assigned to your office.'}</p>}
       </Card>
 
-      <HistoricalDutyHoursPanel />
-
-    </>
-  );
+    <Card className="mt-5" title="Office attendance" action={<Link to="/supervisor/assistants" className="text-sm text-teal underline">All students</Link>}>
+      <DataTable rows={(data?.todayAttendance ?? []).slice(0, 7)} columns={[
+        {key:'fullName',header:'Student'},
+        {key:'state',header:'Status',render:row=><Badge tone={row.state === 'timed_in' ? 'pending' : 'neutral'}>{row.state === 'timed_in' ? 'Timed in' : 'Not timed in'}</Badge>},
+      ]} empty="No office attendance to show." />
+    </Card>
+  </>;
 }

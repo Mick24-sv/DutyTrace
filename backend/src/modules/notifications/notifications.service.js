@@ -1,6 +1,7 @@
 import { query } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { emailConfigured } from '../auth/email.service.js';
+import { CORE_NOTIFICATION_SQL } from './core-notifications.js';
 
 const policyCategories = new Set([
   'completion_risk', 'deadline', 'upcoming_shift', 'attendance', 'missed_shift', 'recovery',
@@ -86,14 +87,14 @@ export async function listNotifications(user, filter = 'all', { limit = 50, curs
       `SELECT id, recipient_id, type, title, message, related_type, related_id, important, created_at, read_at,
               severity, action_url, resolved_at
        FROM notifications WHERE recipient_id = $1 AND institution_id = $2
-         AND dismissed_at IS NULL
+         AND dismissed_at IS NULL AND ${CORE_NOTIFICATION_SQL}
          AND ($3 = 'all' OR ($3 = 'unread' AND read_at IS NULL) OR ($3 = 'important' AND important)
            OR severity = $3)
          AND ($4::uuid IS NULL OR (created_at,id)<(SELECT created_at,id FROM notifications WHERE id=$4 AND recipient_id=$1 AND institution_id=$2))
        ORDER BY created_at DESC,id DESC LIMIT $5`,
       [user.id, user.institutionId, filter,cursor,pageSize],
     ),
-    query('SELECT count(*)::int AS unread FROM notifications WHERE recipient_id = $1 AND institution_id = $2 AND read_at IS NULL AND dismissed_at IS NULL', [user.id, user.institutionId]),
+    query(`SELECT count(*)::int AS unread FROM notifications WHERE recipient_id = $1 AND institution_id = $2 AND read_at IS NULL AND dismissed_at IS NULL AND ${CORE_NOTIFICATION_SQL}`, [user.id, user.institutionId]),
   ]);
   return { notifications: list.rows.map(mapNotification), unreadCount: counts.rows[0].unread,
     nextCursor:list.rows.length===pageSize?list.rows.at(-1).id:null,limit:pageSize };

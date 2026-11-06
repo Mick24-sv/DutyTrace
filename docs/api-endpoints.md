@@ -1,5 +1,11 @@
 # API Endpoints
 
+### Supervisor duty-time amendment
+
+`POST /api/attendance-discrepancies/supervisor-correction` (Office Supervisor only) accepts `studentId`, `remarks` (required reason, max 2000 characters), and two `events` in order: `{ eventType: "time_in", recordedAt: "<ISO timestamp with offset>" }` and `{ eventType: "time_out", recordedAt: "<ISO timestamp with offset>" }`.
+
+To edit an existing session, also supply its `sessionId`, `originalTimeIn`, and `originalTimeOut` (nullable). These original values detect stale edits. Omit them to add a missed completed session. The target must currently belong to the supervisor's office and institution. Returns the approved discrepancy with its correction history (201). Validation rejects overlapping, future, over-length, cross-month, and stale corrections. Repeated amendments preserve all earlier adjustments. Approved DTR snapshots remain immutable; only the amendment's hour difference affects verified totals. Students receive an in-app notification.
+
 Base path: `/api`. Responses are `{ success: true, data }` or `{ success: false, error: { code, message, details? } }`. `details` holds field-level validation messages on `400 VALIDATION_ERROR`.
 
 Authentication is a cookie (`dt_session`, httpOnly). Status codes: `401` = not signed in, `403` = signed in but not allowed, `404` = not found, `409` = conflict, `429` = rate limited.

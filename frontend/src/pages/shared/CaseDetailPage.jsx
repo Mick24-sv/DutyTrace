@@ -1,3 +1,4 @@
+import {FolderCheck as UIActionFolderCheck,Send as UIActionSend,ClipboardCheck as UIActionClipboardCheck,PlusCircle as UIActionPlusCircle,X as UIActionX} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react';
@@ -89,7 +90,7 @@ export default function CaseDetailPage() {
       <Link to={BACK[user.role]} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-teal">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Compliance Cases
       </Link>
-      <PageHeader title={`${c.reference}: ${c.type.name}`} description={`${c.student.fullName} · ${c.office.name} · ${formatDateRange(c.periodStart, c.periodEnd)}`}>
+      <PageHeader icon={UIActionFolderCheck} title={`${c.reference}: ${c.type.name}`} description={`${c.student.fullName} · ${c.office.name} · ${formatDateRange(c.periodStart, c.periodEnd)}`}>
         <CaseStatusBadge status={c.status} />
       </PageHeader>
 
@@ -106,14 +107,14 @@ export default function CaseDetailPage() {
       )}
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {can('submit') && <Button onClick={() => setDialog({ name: 'submit' })} disabled={c.missingRequirements > 0} title={c.missingRequirements > 0 ? 'Upload every requested document first' : undefined}>Submit for review</Button>}
+        {can('submit') && <Button icon={UIActionSend} onClick={() => setDialog({ name: 'submit' })} disabled={c.missingRequirements > 0} title={c.missingRequirements > 0 ? 'Upload every requested document first' : undefined}>Submit for review</Button>}
         {can('respond') && <Button onClick={() => setDialog({ name: 'respond' })} disabled={c.missingRequirements > 0}>Respond to correction request</Button>}
-        {can('start_review') && <Button variant="accent" onClick={() => setDialog({ name: 'start_review' })}>Start review</Button>}
+        {can('start_review') && <Button icon={UIActionClipboardCheck} variant="accent" onClick={() => setDialog({ name: 'start_review' })}>Start review</Button>}
         {can('request_correction') && <Button variant="secondary" onClick={() => setDialog({ name: 'request_correction' })}>Request correction</Button>}
         {can('resolve') && <Button onClick={() => setDialog({ name: 'resolve' })}>Resolve</Button>}
         {can('reopen') && <Button variant="secondary" onClick={() => setDialog({ name: 'reopen' })}>Reopen</Button>}
-        {can('add_note') && <Button variant="secondary" onClick={() => setDialog({ name: 'add_note' })}>Add note</Button>}
-        {can('close') && <Button variant="secondary" onClick={() => setDialog({ name: 'close' })}>Close case</Button>}
+        {can('add_note') && <Button icon={UIActionPlusCircle} variant="secondary" onClick={() => setDialog({ name: 'add_note' })}>Add note</Button>}
+        {can('close') && <Button icon={UIActionX} variant="secondary" onClick={() => setDialog({ name: 'close' })}>Close case</Button>}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -1,3 +1,4 @@
+import {CalendarOff as UIActionCalendarOff,ClipboardCheck as UIActionClipboardCheck} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -64,7 +65,7 @@ export default function AbsenceDetailPage() {
       <Link to={BACK[user.role]} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-teal">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Absence Notices
       </Link>
-      <PageHeader title={`${ABSENCE_TYPE[a.type]}: ${formatDateRange(a.startDate, a.endDate)}`} description={`${a.student.fullName} · ${a.office.name}`}>
+      <PageHeader icon={UIActionCalendarOff} title={`${ABSENCE_TYPE[a.type]}: ${formatDateRange(a.startDate, a.endDate)}`} description={`${a.student.fullName} · ${a.office.name}`}>
         <AbsenceStatusBadge status={a.status} />
       </PageHeader>
 
@@ -79,7 +80,7 @@ export default function AbsenceDetailPage() {
       {(can('acknowledge') || can('review') || can('follow_up') || can('respond')) && (
         <div className="mb-6 flex flex-wrap gap-2">
           {can('acknowledge') && <Button variant="secondary" onClick={() => setDialog('acknowledge')}>Acknowledge</Button>}
-          {can('review') && <Button onClick={() => setDialog('review')}>Mark reviewed</Button>}
+          {can('review') && <Button icon={UIActionClipboardCheck} onClick={() => setDialog('review')}>Mark reviewed</Button>}
           {can('follow_up') && <Button variant="secondary" onClick={() => setDialog('follow_up')}>Request follow-up</Button>}
           {can('respond') && <Button onClick={() => setDialog('respond')}>Answer follow-up request</Button>}
         </div>

@@ -1,3 +1,4 @@
+import {Send as UIActionSend} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiPost } from '../../services/api.js';
@@ -82,7 +83,7 @@ export default function ForgotPasswordPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full" disabled={submitting || !email.trim()}>
+              <Button icon={UIActionSend} type="submit" className="w-full" disabled={submitting || !email.trim()}>
                 {submitting ? 'Sending…' : 'Send reset link'}
               </Button>
             </form>

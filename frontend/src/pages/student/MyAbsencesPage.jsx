@@ -1,3 +1,5 @@
+import {CalendarOff as UIActionCalendarOff,Send as UIActionSend,X as UIActionX} from 'lucide-react';
+import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Info } from 'lucide-react';
@@ -47,7 +49,8 @@ export default function MyAbsencesPage() {
   const today = data ? todayKey(data.timezone) : undefined;
   return (
     <>
-      <PageHeader title="Absence Notices" description="Tell your supervisor about an absence and follow how it is being reviewed.">
+      <SectionLinks links={[['/student' + '/absences', 'Absence notices'], ['/student' + '/cases', 'Compliance cases']]} />
+      <PageHeader icon={UIActionCalendarOff} title="Absence Notices" description="Tell your supervisor about an absence and follow how it is being reviewed.">
         {!showForm && <Button onClick={() => setShowForm(true)}>New absence notice</Button>}
       </PageHeader>
 
@@ -84,8 +87,8 @@ export default function MyAbsencesPage() {
             </div>
             {formError && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg sm:col-span-2">{formError}</p>}
             <div className="flex gap-2 sm:col-span-2">
-              <Button type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit notice'}</Button>
-              <Button variant="secondary" onClick={() => setShowForm(false)} disabled={busy}>Cancel</Button>
+              <Button icon={UIActionSend} type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit notice'}</Button>
+              <Button icon={UIActionX} variant="secondary" onClick={() => setShowForm(false)} disabled={busy}>Cancel</Button>
             </div>
           </form>
         </Card>

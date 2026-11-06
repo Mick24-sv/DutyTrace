@@ -5,6 +5,8 @@ For Student Assistant
 
 **A QR-enabled Student Assistant duty verification and compliance platform for universities and colleges**
 
+> **Current interface:** QR attendance, attendance corrections, monthly DTR approval, and semester completion. The simplified menus have 4 student pages, 4 supervisor pages, and 6 administrator pages. Scheduling, recovery planning, forecasts, advanced alert pages, policy templates, and the transition planner are deferred. See [current scope and navigation](docs/simplified-scope.md). Older feature descriptions below document retained backend capabilities rather than the current interface.
+
 An academic capstone project. DutyTrace aims to digitize Student Assistant (SA) attendance, duty-hour compliance, monthly DTRs, supervisor verification, absence notices, and compliance-case tracking.
 
 > **Status: Phases 1–8, with security hardening and QA updates.** DutyTrace includes institution-scoped in-app notifications and a configurable risk-alert service for completion forecasts, upcoming approved duty shifts, recovery review, schedule conflicts, attendance discrepancies, deadlines, and finalized term transitions. External scheduled processing is required for time-based detection and email retries. Academic terms, requirement thresholds, notification rules, and reminder timing are institution-configurable. An absence notice **never excuses an absence or changes required hours**, and nothing marks a student compliant or noncompliant automatically. The DTR template remains provisional until an institution supplies its official form. See [docs/open-questions.md](docs/open-questions.md).
@@ -108,6 +110,14 @@ A session belongs to the local day it started (in `APP_TIMEZONE`). **Recorded is
 ### Limits of QR attendance (be honest in your capstone defense)
 
 A printed QR code is static: a photo of it could be scanned from somewhere else. This build reduces the risk (sign-in required, the code must match the user's *assigned* office, server-side timestamps, revocable and regenerable codes, every accepted and refused scan audited with IP/device) but does **not** prove physical presence. Stronger options for later: a rotating code shown on a screen at the office, or office Wi-Fi/location checks. Both need institutional approval.
+
+### Supervisor duty-time corrections
+
+Open **Student Assistants**, choose a student, and expand a day in their attendance history. **Edit duty time** corrects clock-in/out times, including the current month and missing time-outs. **Add missed duty** records a completed session that was not scanned. Both require a reason and are limited to students currently assigned to the supervisor's office.
+
+Original scans and previous corrections are preserved. The student receives a notification, and calculated attendance updates immediately. Corrections cannot overlap another completed session, use future times, exceed the configured maximum session length, or cross a calendar-month boundary. An approved DTR retains its original snapshot; changes to its hours are recorded as separate verified adjustments. Unapproved DTR snapshots must be regenerated to include corrections.
+
+Apply pending migrations (`npm run db:migrate`) before using these controls; migration `0029_supervisor_attendance_amendments.sql` supports amendments to earlier corrections.
 
 ## Monthly DTR: how to use it
 
@@ -218,7 +228,7 @@ All colors are defined once in `frontend/src/styles/index.css` (`@theme` block) 
 - Password-reset links are single-use, expire after 30 minutes, and only a token hash is stored. Reset-token verification sends the token in a POST body instead of a URL. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, and `SMTP_FROM` to send email. In production, reset requests do not create undeliverable tokens when SMTP is missing; the page tells the user to contact an administrator. Development may return a reset URL for testing.
 - Run tests only with a separate `TEST_DATABASE_URL` whose database name contains `test` and differs from `DATABASE_URL`; the test helper drops and recreates its schema. Never use the production Supabase URL for tests.
 - **Uploaded documents are sensitive.** They are private and access-checked, but there is no virus scanning, no encryption at rest beyond what the disk provides, and no retention/deletion policy yet. Institutional data-privacy review (open question 8 and 11) must happen before real student documents are stored.
-- Not yet implemented: attendance corrections (a returned DTR cannot fix attendance by itself; corrections need their own auditable records), partial approval, email verification, multi-factor authentication, outbound workflow email, admin forms for creating users in the UI (the API supports it).
+- Not yet implemented: partial DTR approval, email verification, multi-factor authentication, and outbound workflow email. Attendance corrections are available through student discrepancy requests and supervisor duty-time amendments; returning a DTR alone does not correct attendance.
 - This is a development build. It has not had a security review and must not be called production-ready.
 
 ## Roadmap

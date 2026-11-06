@@ -1,18 +1,14 @@
+import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
+import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarRange,
   CheckCircle2,
-  Hourglass,
   QrCode,
   Timer,
   AlertCircle,
-  FileText,
-  CalendarOff,
-  FolderCheck,
   TrendingUp,
-  Compass,
-  AlertTriangle,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
@@ -23,7 +19,7 @@ import SessionBadge from '../../components/attendance/SessionBadge.jsx';
 import DtrStatusBadge from '../../components/dtr/DtrStatusBadge.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { formatDutyTime, formatDuration, formatHours, formatMonth, formatTime } from '../../utils/format.js';
+import { formatDuration, formatHours, formatMonth, formatTime } from '../../utils/format.js';
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -32,10 +28,6 @@ export default function StudentDashboard() {
   const month = useApiData('/attendance/me');
   const dtrs = useApiData('/dtrs/mine');
   const semesterTerms = useApiData('/semesters/mine');
-  const dutySchedules = useApiData('/duty-schedules/mine');
-  const absences = useApiData('/absences/summary');
-  const cases = useApiData('/cases/summary');
-  const forecast = useApiData(selectedTermId ? `/forecast/mine?termId=${selectedTermId}` : '/forecast/mine');
   const discrepancySummary = useApiData('/attendance-discrepancies/summary');
 
   const terms = semesterTerms.data?.terms ?? [];
@@ -66,18 +58,11 @@ export default function StudentDashboard() {
     : [];
 
   const lastMonth = dtrs.data?.months?.[0];
-  const scheduleTerms = dutySchedules.data?.terms ?? [];
-  const scheduleEntry = scheduleTerms.find((entry) => entry.term.isCurrent)
-    ?? scheduleTerms.find((entry) => entry.term.id === selectedTermId)
-    ?? scheduleTerms[0];
-  const assignedSchedule = scheduleEntry?.approvedSchedule;
-
-  const anyLoading = status.loading || month.loading || dtrs.loading || semesterTerms.loading || dutySchedules.loading;
-  const anyError = status.error || month.error || dtrs.error || semesterTerms.error || dutySchedules.error;
+  const anyError = status.error || month.error || dtrs.error || semesterTerms.error;
 
   return (
     <>
-      <PageHeader
+      <PageHeader icon={UIActionLayoutDashboard}
         title={`Welcome, ${user?.fullName || 'Student Assistant'}`}
         description={
           user?.office
@@ -91,13 +76,6 @@ export default function StudentDashboard() {
         >
           <QrCode className="h-4 w-4" aria-hidden="true" />
           Scan QR to {timedIn ? 'time out' : 'time in'}
-        </Link>
-        <Link
-          to="/student/schedule"
-          className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-canvas transition"
-        >
-          <CalendarRange className="h-4 w-4" aria-hidden="true" />
-          My Duty Preferences
         </Link>
       </PageHeader>
 
@@ -113,10 +91,10 @@ export default function StudentDashboard() {
 
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatCard
           compact
-          label="Today's status"
+          label="Today"
           value={status.loading ? '…' : timedIn ? 'Timed in' : 'Not timed in'}
           hint={
             timedIn
@@ -127,19 +105,12 @@ export default function StudentDashboard() {
         />
         <StatCard
           compact
-          label="Recorded hours"
-          value={selectedTerm ? formatHours(recordedSemesterHours) : semesterTerms.loading ? '…' : '—'}
-          hint={selectedTerm ? `${selectedTerm.academicYear} · ${selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}` : 'Semester attendance hours'}
-          icon={Hourglass}
-        />
-        <StatCard
-          compact
-          label="Verified hours"
+          label="Approved hours"
           value={selectedTerm ? formatHours(verifiedSemesterHours) : semesterTerms.loading ? '…' : '—'}
           hint={
             selectedTerm
               ? 'Approved DTR sessions within this semester'
-              : 'Only approved attendance counts as verified'
+              : 'Hours approved by your supervisor'
           }
           icon={CheckCircle2}
         />
@@ -164,14 +135,14 @@ export default function StudentDashboard() {
         />
       </div>
 
-      <Link to="/student/discrepancies" className="mt-5 flex min-w-0 items-start justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-card transition hover:border-teal/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:flex-row sm:items-center sm:p-4">
-        <span className="min-w-0"><b className="block text-sm text-ink">Attendance discrepancies</b><span className="mt-1 block text-xs leading-relaxed text-muted sm:text-sm">Review flagged records, submit explanations, and track supervisor decisions.</span></span>
+      {(discrepancySummary.data?.open ?? 0) > 0 && <Link to="/student/discrepancies" className="mt-5 flex min-w-0 items-start justify-between gap-3 rounded-xl border border-line bg-surface p-3 shadow-card transition hover:border-teal/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:flex-row sm:items-center sm:p-4">
+        <span className="min-w-0"><b className="block text-sm text-ink">Attendance corrections</b><span className="mt-1 block text-xs leading-relaxed text-muted sm:text-sm">Review flagged records, submit explanations, and track supervisor decisions.</span></span>
         <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-warn-bg px-2.5 py-1 text-xs font-medium text-warn-fg sm:px-3 sm:text-sm">{discrepancySummary.loading?'…':`${discrepancySummary.data?.open??0} unresolved`}</span>
-      </Link>
+      </Link>}
 
       <Card
         className="mt-6"
-        title="Semester progress"
+        title={<span className="flex flex-wrap items-center gap-2">Semester progress <SemesterStatusBadge status={selectedTerm?.semesterStatus}/></span>}
         action={terms.length > 0 && (
           <select
             aria-label="Academic term"
@@ -223,7 +194,7 @@ export default function StudentDashboard() {
             </div>
           </div>
           <p className="text-sm text-ink">
-            {formatHours(verifiedSemesterHours)} verified of {formatHours(requiredSemesterHours)} required
+            {formatHours(verifiedSemesterHours)} approved of {formatHours(requiredSemesterHours)} required
           </p>
           <ProgressBar value={verifiedSemesterHours} max={requiredSemesterHours} label="Semester duty-hour progress" />
           <p className="text-xs text-muted">
@@ -232,131 +203,6 @@ export default function StudentDashboard() {
           {selectedTerm.completionDeadline && <p className="text-xs text-muted">Completion deadline: {selectedTerm.completionDeadline}</p>}
           </div>
         )}
-      </Card>
-
-      {/* Duty Completion Forecast Card */}
-      <Card
-        className="mt-5"
-        title="Duty completion forecast"
-        action={
-          forecast.data?.status && (
-            <Badge tone={forecast.data.statusTone || 'neutral'}>
-              {forecast.data.statusLabel}
-            </Badge>
-          )
-        }
-      >
-        {forecast.loading && (
-          <p className="text-sm text-muted">Calculating completion forecast…</p>
-        )}
-        {forecast.error && (
-          <p className="text-sm text-bad-fg">Unable to load forecast: {forecast.error}</p>
-        )}
-        {!forecast.loading && !forecast.error && forecast.data && (
-          !forecast.data.status ? (
-            <p className="text-sm text-muted">{forecast.data.message || 'No completion forecast available for this term.'}</p>
-          ) : (
-          <div className="min-w-0 space-y-4">
-            {/* 4-stat forecast grid */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
-                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Projected Completion</span>
-                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
-                  {forecast.data.isCompleted
-                    ? 'Requirement Met'
-                    : forecast.data.projectedCompletionDate || '—'}
-                </span>
-                <span className="block break-words text-[11px] leading-snug text-muted">
-                  {forecast.data.isCompleted
-                    ? 'All required hours verified'
-                    : forecast.data.estimatedWeeksRemaining != null
-                    ? `~${forecast.data.estimatedWeeksRemaining} weeks remaining`
-                    : 'Cannot project date'}
-                </span>
-              </div>
-
-              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
-                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Actual Attendance Pace</span>
-                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
-                  {forecast.data.actualWeeklyPace > 0
-                    ? `${forecast.data.actualWeeklyPace.toFixed(2)} h/wk`
-                    : '0.00 h/wk'}
-                </span>
-                <span className="block break-words text-[11px] leading-snug text-muted">
-                  Over past {forecast.data.historicalPeriodWeeks || 4}-week period
-                </span>
-              </div>
-
-              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
-                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Required Weekly Pace</span>
-                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
-                  {forecast.data.requiredWeeklyPace != null
-                    ? `${forecast.data.requiredWeeklyPace.toFixed(2)} h/wk`
-                    : '—'}
-                </span>
-                <span className="block break-words text-[11px] leading-snug text-muted">
-                  {forecast.data.deadline
-                    ? `To meet deadline of ${forecast.data.deadline}`
-                    : 'No deadline set'}
-                </span>
-              </div>
-
-              <div className="min-w-0 rounded-lg border border-line bg-canvas/60 p-2.5 sm:p-3">
-                <span className="block text-[11px] leading-snug text-muted sm:text-xs">Confirmed Schedule</span>
-                <span className="mt-1 block break-words font-mono text-sm font-semibold text-ink sm:text-base">
-                  {forecast.data.hasConfirmedSchedule
-                    ? `${forecast.data.confirmedWeeklyHours.toFixed(2)} h/wk`
-                    : 'None'}
-                </span>
-                <span className="block break-words text-[11px] leading-snug text-muted">
-                  {forecast.data.hasConfirmedSchedule
-                    ? `${forecast.data.confirmedFutureHours.toFixed(2)} h future shifts`
-                    : 'No approved schedule'}
-                </span>
-              </div>
-            </div>
-
-            {/* Explanation / reason callout */}
-            <div
-              className={`flex min-w-0 items-start gap-2.5 rounded-lg p-3 text-sm ${
-                forecast.data.status === 'completed' || forecast.data.status === 'on_track'
-                  ? 'bg-ok-bg text-ok-fg'
-                  : forecast.data.status === 'at_risk'
-                  ? 'bg-bad-bg text-bad-fg'
-                  : 'bg-warn-bg text-warn-fg'
-              }`}
-            >
-              {forecast.data.status === 'completed' || forecast.data.status === 'on_track' ? (
-                <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5" />
-              ) : forecast.data.status === 'at_risk' ? (
-                <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-              ) : (
-                <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-              )}
-              <div className="min-w-0">
-                <p className="font-semibold">{forecast.data.statusLabel}</p>
-                <p className="mt-0.5 break-words text-xs leading-relaxed opacity-95">{forecast.data.reason}</p>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted">
-              Note: This forecast is calculated from verified attendance pace over recent active weeks and confirmed future shifts. It is distinct from schedule availability estimates.
-            </p>
-          </div>
-        ))}
-      </Card>
-
-      <Card className="mt-5" title="Weekly duty schedule" action={<Link to="/student/schedule" className="text-sm font-medium text-teal hover:underline">Manage preferences</Link>}>
-        {assignedSchedule ? <>
-          <p className="mb-3 text-sm text-muted">Confirmed schedule · {assignedSchedule.effectiveStartsOn} to {assignedSchedule.effectiveEndsOn}</p>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{assignedSchedule.days.map((day) => <div key={day.weekday} className="min-w-0 rounded-lg border border-line p-3 text-sm">
-            <p className="font-medium">{['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day.weekday - 1]}</p>
-            <div className={`mt-2 grid gap-2 ${day.afternoonStartsAt ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <div className="min-w-0 rounded-md bg-canvas p-2"><span className="block text-[10px] font-medium uppercase tracking-wide text-muted">Morning</span><span className="mt-0.5 block break-words text-[11px] leading-snug text-ink">{formatDutyTime(day.startsAt)}–{formatDutyTime(day.endsAt)}</span></div>
-              {day.afternoonStartsAt && <div className="min-w-0 rounded-md bg-canvas p-2"><span className="block text-[10px] font-medium uppercase tracking-wide text-muted">Afternoon</span><span className="mt-0.5 block break-words text-[11px] leading-snug text-ink">{formatDutyTime(day.afternoonStartsAt)}–{formatDutyTime(day.afternoonEndsAt)}</span></div>}
-            </div>
-          </div>)}</div>
-        </> : <p className="text-sm text-muted">{scheduleEntry?.proposal ? `Preference ${scheduleEntry.proposal.status.replaceAll('_', ' ')}. The supervisor has not confirmed your duty schedule yet.` : 'No confirmed duty schedule for this term. Submit your preferred duty days and times for supervisor review.'}</p>}
       </Card>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3 lg:gap-6">
@@ -449,51 +295,6 @@ export default function StudentDashboard() {
             )}
           </Card>
 
-          <Card title="Notices & Compliance">
-            <ul className="space-y-3 text-sm">
-              <li className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-canvas transition">
-                <div className="flex items-center gap-2">
-                  <CalendarOff className="h-4 w-4 text-muted" />
-                  <Link to="/student/absences" className="font-medium text-ink hover:text-teal">
-                    Absence notices
-                  </Link>
-                </div>
-                <div>
-                  {absences.loading ? (
-                    <span className="text-muted text-xs">…</span>
-                  ) : absences.data?.needsFollowUp > 0 ? (
-                    <Badge tone="rejected">{absences.data.needsFollowUp} action needed</Badge>
-                  ) : (
-                    <span className="text-xs text-muted font-medium">
-                      {(absences.data?.pending || 0) + (absences.data?.acknowledged || 0)} active
-                    </span>
-                  )}
-                </div>
-              </li>
-              <li className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-canvas transition">
-                <div className="flex items-center gap-2">
-                  <FolderCheck className="h-4 w-4 text-muted" />
-                  <Link to="/student/cases" className="font-medium text-ink hover:text-teal">
-                    Compliance cases
-                  </Link>
-                </div>
-                <div>
-                  {cases.loading ? (
-                    <span className="text-muted text-xs">…</span>
-                  ) : cases.data?.needsCorrection > 0 ? (
-                    <Badge tone="rejected">{cases.data.needsCorrection} needs correction</Badge>
-                  ) : (
-                    <span className="text-xs text-muted font-medium">
-                      {(cases.data?.open || 0) +
-                        (cases.data?.documentsPending || 0) +
-                        (cases.data?.underReview || 0)}{' '}
-                      active
-                    </span>
-                  )}
-                </div>
-              </li>
-            </ul>
-          </Card>
         </div>
       </div>
     </>

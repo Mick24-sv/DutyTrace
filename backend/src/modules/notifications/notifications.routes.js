@@ -15,10 +15,10 @@ export const notificationsRouter = Router();
 notificationsRouter.post('/sweep',asyncHandler(async(req,res)=>{
   const secret=env.attendanceReconcileSecret;
   if(!secret||req.get('x-attendance-reconcile-secret')!==secret) throw new AppError(403,'FORBIDDEN','A valid scheduler credential is required.');
-  const [riskAlertsResult,reminders,attendanceReconciliation]=await Promise.all([
-    riskAlerts.runRiskDetectionSweep(),runReminderSweep(),reconcileDiscrepancies(),
+  const [emails,reminders,attendanceReconciliation]=await Promise.all([
+    riskAlerts.deliverPendingEmailAlerts(),runReminderSweep(),reconcileDiscrepancies(),
   ]);
-  ok(res,{riskAlerts:riskAlertsResult,reminders,attendanceReconciliation});
+  ok(res,{emails,reminders,attendanceReconciliation});
 }));
 notificationsRouter.use(requireAuth);
 

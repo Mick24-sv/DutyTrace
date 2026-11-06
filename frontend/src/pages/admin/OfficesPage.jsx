@@ -1,3 +1,4 @@
+import {Building2 as UIActionBuilding2,Save as UIActionSave} from 'lucide-react';
 import { useState } from 'react';
 import { Search } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
@@ -57,7 +58,7 @@ export default function OfficesPage() {
 
   return (
     <>
-      <PageHeader title="Offices" description="Offices where Student Assistants and supervisors are assigned." />
+      <PageHeader icon={UIActionBuilding2} title="Offices" description="Offices where Student Assistants and supervisors are assigned." />
       <Card title="Add an office" className="mb-6">
         <form onSubmit={create} className="grid gap-3 sm:grid-cols-3">
           <div>
@@ -69,7 +70,7 @@ export default function OfficesPage() {
             <input id="office-name" value={name} onChange={(e) => setName(e.target.value)} required className={field} />
           </div>
           {formError && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg sm:col-span-3">{formError}</p>}
-          <div className="sm:col-span-3"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Add office'}</Button></div>
+          <div className="sm:col-span-3"><Button icon={UIActionSave} type="submit" disabled={busy}>{busy ? 'Saving…' : 'Add office'}</Button></div>
         </form>
       </Card>
       <Card>
@@ -97,7 +98,7 @@ export default function OfficesPage() {
                   <label className="min-w-0 text-xs text-muted">Students per overlapping slot
                     <input aria-label={`${office.name} schedule capacity`} type="number" min="1" max="500" className="mt-1 w-full rounded-lg border border-line bg-surface px-2 py-2 text-sm text-ink" value={capacityValues[office.id] ?? office.scheduleCapacity} onChange={(event) => setCapacityValues((current) => ({ ...current, [office.id]: event.target.value }))} />
                   </label>
-                  <Button className="min-w-16" disabled={capacityBusy === office.id || Number(capacityValues[office.id] ?? office.scheduleCapacity) < 1} onClick={() => saveCapacity(office)}>{capacityBusy === office.id ? 'Saving…' : 'Save'}</Button>
+                  <Button icon={UIActionSave} className="min-w-16" disabled={capacityBusy === office.id || Number(capacityValues[office.id] ?? office.scheduleCapacity) < 1} onClick={() => saveCapacity(office)}>{capacityBusy === office.id ? 'Saving…' : 'Save'}</Button>
                 </div>
               </div>)}
             </div>

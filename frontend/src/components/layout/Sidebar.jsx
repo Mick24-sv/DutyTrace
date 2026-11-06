@@ -1,9 +1,10 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
-import { ROLE_CONFIG } from '../../routes/navConfig.js';
+import { ROLE_CONFIG, matchesSection } from '../../routes/navConfig.js';
 
 export default function Sidebar({ role, open, onClose }) {
   const config = ROLE_CONFIG[role];
+  const { pathname } = useLocation();
   const sections = config.nav.reduce((result, item) => {
     const title = item.section ?? '';
     const current = result[result.length - 1];
@@ -19,15 +20,16 @@ export default function Sidebar({ role, open, onClose }) {
           <li key={title || 'main-navigation'}>
             {title && <h2 className="mb-1.5 px-3 text-[10px] font-semibold tracking-[0.14em] text-white/50">{title}</h2>}
             <ul className="space-y-0.5">
-              {items.map(({ to, label, icon: Icon }) => (
+              {items.map(({ to, label, icon: Icon, related }) => (
                 <li key={label}>
                   <NavLink
                     to={to ? `${config.base}/${to}` : config.base}
                     end={!to}
+                    aria-current={matchesSection(config, {to, related}, pathname) ? 'page' : undefined}
                     onClick={onClose}
-                    className={({ isActive }) =>
+                    className={() =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
+                        matchesSection(config, {to, related}, pathname)
                           ? 'bg-teal text-white'
                           : 'text-white/80 hover:bg-white/10 hover:text-white'
                       }`

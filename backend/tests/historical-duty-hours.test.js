@@ -121,6 +121,14 @@ describe('historical duty-hour credits', () => {
     const qrConflict = await api.post('/historical-duty-hours', { ...as('supervisorA'), body: payload });
     assert.equal(qrConflict.status, 409);
     assert.equal(qrConflict.body.error.code, 'QR_ATTENDANCE_EXISTS');
+    const eligibilityPath = `/historical-duty-hours/eligibility?studentId=${payload.studentId}&termId=${termId}&month=${month}`;
+    const availability = await api.get(eligibilityPath, as('supervisorA'));
+    assert.equal(availability.status, 200, JSON.stringify(availability.body));
+    assert.equal(availability.body.data.monthlyAllowed, false);
+    assert.ok(availability.body.data.qrDates.includes(payload.workDate));
+    assert.ok(!availability.body.data.availableDates.includes(payload.workDate));
+    assert.equal((await api.get(eligibilityPath, as('supervisorB'))).status, 403);
+    assert.equal((await api.get(eligibilityPath, as('studentA'))).status, 403);
     const wrongOffice = await api.post('/historical-duty-hours', { ...as('supervisorB'), body: payload });
     assert.equal(wrongOffice.status, 403);
   });

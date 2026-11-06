@@ -1,35 +1,23 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import {FileText as UIActionFileText} from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { FileText, ShieldCheck, Target } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
-import Button from '../../components/ui/Button.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import DataTable from '../../components/ui/DataTable.jsx';
-import DtrDocument from '../../components/dtr/DtrDocument.jsx';
 import DtrStatusBadge from '../../components/dtr/DtrStatusBadge.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { apiPost } from '../../services/api.js';
 import { formatHours, formatMonth } from '../../utils/format.js';
 
 // Student Assistant: my ended months, preview a month, generate its DTR, open existing ones.
 export default function MyDtrPage() {
-  const navigate = useNavigate();
   const { data, loading, error } = useApiData('/dtrs/mine');
-  const [month, setMonth] = useState(null);
-  const preview = useApiData(month ? `/dtrs/preview?month=${month}` : null);
-  const [busy, setBusy] = useState(false);
-  const [genError, setGenError] = useState('');
-
-  async function generate() {
-    setBusy(true); setGenError('');
-    try {
-      const dtr = await apiPost('/dtrs', { month });
-      navigate(dtr.id);
-    } catch (err) {
-      setGenError(err.message);
-    } finally { setBusy(false); }
-  }
+  const monthAction = (row) => {
+    const status = row.dtr?.status;
+    const label = !row.dtr ? 'Prepare DTR' : status === 'draft' ? 'Continue draft' : status === 'needs_correction' ? 'Review corrections' : 'View DTR';
+    const to = row.dtr ? '/student/dtr/' + row.dtr.id : '/student/dtr/preview/' + row.month;
+    return <Link to={to} aria-label={label + ' for ' + formatMonth(row.month)} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal hover:bg-canvas">{label}</Link>;
+  };
 
   const columns = [
     { key: 'month', header: 'Month', render: (r) => <span className="font-medium">{formatMonth(r.month)}</span> },
@@ -38,18 +26,14 @@ export default function MyDtrPage() {
     { key: 'verified', header: 'Verified', render: (r) => (r.dtr?.verifiedHours != null ? formatHours(r.dtr.verifiedHours) : <span className="text-muted">Not verified</span>) },
     { key: 'historical', header: 'Historical verified', render: (r) => formatHours(r.historicalHours) },
     {
-      key: 'action', header: '',
-      render: (r) => (r.dtr ? (
-        <Link to={r.dtr.id} className="font-medium text-teal underline">Open</Link>
-      ) : (
-        <button type="button" onClick={() => { setMonth(r.month); setGenError(''); }} className="font-medium text-teal underline">Preview &amp; create</button>
-      )),
+      key: 'action', header: 'Next step',
+      render: monthAction,
     },
   ];
 
   return (
     <>
-      <PageHeader
+      <PageHeader icon={UIActionFileText}
         title="Monthly DTR"
         description={data ? `A DTR can be created once a month has ended (${data.timezone}). It is built from your saved QR attendance.` : undefined}
       />
@@ -64,7 +48,8 @@ export default function MyDtrPage() {
             <StatCard label="DTRs created" value={data.months.filter((m) => m.dtr).length} hint="Last 12 ended months" icon={FileText} />
           </div>
 
-          <Card title="Last 12 months" className="mt-6">
+          <Card title="Choose a month" className="mt-6">
+            <p className="mb-4 text-sm text-muted">Prepare DTR opens that month’s preview. Continue draft opens your saved document so you can submit it. Submitted DTRs stay available under View DTR while your supervisor reviews them.</p>
             <div className="hidden sm:block">
               <DataTable columns={columns} rows={data.months.map((m) => ({ ...m, id: m.month }))} caption="Monthly DTRs by month" />
             </div>
@@ -73,13 +58,9 @@ export default function MyDtrPage() {
                 <p className="py-4 text-center text-sm text-muted">No ended months available yet.</p>
               ) : data.months.map((row) => (
                 <article key={row.month} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 flex-col items-start gap-2">
                     <h3 className="font-medium text-ink">{formatMonth(row.month)}</h3>
-                    {row.dtr ? (
-                      <Link to={row.dtr.id} className="shrink-0 font-medium text-teal underline">Open</Link>
-                    ) : (
-                      <button type="button" onClick={() => { setMonth(row.month); setGenError(''); }} className="shrink-0 text-right text-sm font-medium text-teal underline">Preview &amp; create</button>
-                    )}
+                    {monthAction(row)}
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                     <div>
@@ -104,23 +85,7 @@ export default function MyDtrPage() {
             </div>
           </Card>
 
-          {month && (
-            <Card title={`Preview: ${formatMonth(month)}`} className="mt-6">
-              {preview.loading && <p role="status" className="text-sm text-muted">Loading preview…</p>}
-              {preview.error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{preview.error}</p>}
-              {preview.data && (
-                <>
-                  <DtrDocument snapshot={preview.data} />
-                  {genError && <p role="alert" className="mt-4 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{genError}</p>}
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Button onClick={generate} disabled={busy}>{busy ? 'Creating…' : `Create ${formatMonth(month)} DTR`}</Button>
-                    <Button variant="secondary" onClick={() => setMonth(null)} disabled={busy}>Close preview</Button>
-                    <span className="text-xs text-muted">Creating saves a draft. You can submit it afterwards.</span>
-                  </div>
-                </>
-              )}
-            </Card>
-          )}
+
         </>
       )}
     </>

@@ -1,10 +1,11 @@
+import {Users as UIActionUsers,PlusCircle as UIActionPlusCircle} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { ChevronDown, Eye, EyeOff, Search } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Search, UserRound, ArrowUpRight, GraduationCap, Briefcase, ShieldCheck } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
@@ -13,6 +14,11 @@ import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
 const PAGE_SIZE = 7;
+const USER_GROUPS = [
+  {role:'student',label:'Student Assistants',icon:GraduationCap},
+  {role:'supervisor',label:'Office Supervisors',icon:Briefcase},
+  {role:'admin',label:'Administrators',icon:ShieldCheck},
+];
 
 function StudentHoursInput({ user, onUpdate }) {
   const [editing, setEditing] = useState(false);
@@ -90,12 +96,14 @@ export default function UsersPage() {
   const [formError, setFormError] = useState('');
   const [rowError, setRowError] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [selectedRole, setSelectedRole] = useState('student');
   const [page, setPage] = useState(1);
   const [expandedUserId, setExpandedUserId] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const reload = () => setTick((t) => t + 1);
   const officeList = offices.data?.offices ?? [];
   const filteredUsers = (data?.users ?? []).filter((user) => {
+    if(user.role!==selectedRole) return false;
     const query = userSearch.trim().toLocaleLowerCase();
     if (!query) return true;
     return [user.fullName, user.email, ROLE_CONFIG[user.role]?.label, user.office?.name, user.status]
@@ -103,6 +111,8 @@ export default function UsersPage() {
   });
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE)));
   const visibleUsers = filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const groupLabel = USER_GROUPS.find(group=>group.role===selectedRole).label;
+  const selectGroup = role => {setSelectedRole(role);setUserSearch('');setPage(1);setExpandedUserId(null);setRowError('');};
   const changePage = (nextPage) => { setPage(nextPage); setExpandedUserId(null); };
 
   async function create(e) {
@@ -114,6 +124,7 @@ export default function UsersPage() {
         officeId: form.role === 'admin' || !form.officeId ? undefined : form.officeId,
         requiredHours: form.role === 'student' && form.requiredHours ? Number(form.requiredHours) : undefined,
       });
+      selectGroup(form.role);
       setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
       reload();
     } catch (err) { setFormError(err.details ? Object.values(err.details).join(' ') : err.message); } finally { setBusy(false); }
@@ -125,7 +136,7 @@ export default function UsersPage() {
   }
 
   const columns = [
-    { key: 'fullName', header: 'Name' },
+    { key: 'fullName', header: 'Name', render:u=>u.role==='student'?<Link to={`/admin/users/${u.id}`} className="inline-flex items-center gap-2 font-medium text-teal underline"><UserRound aria-hidden="true" className="h-4 w-4 shrink-0"/>{u.fullName}<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></Link>:u.fullName },
     { key: 'email', header: 'Email' },
     { key: 'role', header: 'Role', render: (u) => ROLE_CONFIG[u.role].label },
     {
@@ -165,11 +176,11 @@ export default function UsersPage() {
         </button>
       ),
     },
-  ];
+  ].filter(column=>column.key!=='role' && (column.key!=='office'||selectedRole!=='admin') && (column.key!=='requiredHours'||selectedRole==='student'));
 
   return (
     <>
-      <PageHeader title="Users & Roles" description="Manage accounts and office assignments. Set term-specific duty-hour requirements under Academic Terms." />
+      <PageHeader icon={UIActionUsers} title="Students & Staff" description="Open a student's name to view their profile and progress. Manage accounts and office assignments here; semester requirements are under Academic Terms." />
       <div role="note" className="mb-4 rounded-lg bg-info-bg p-3 text-sm text-info-fg">
         The Monthly DTR target below is used for monthly DTR requirements. It does not set a student's semester-hour requirement; assign semester hours under <Link to="/admin/semesters" className="font-medium underline">Academic Terms</Link>.
       </div>
@@ -243,16 +254,23 @@ export default function UsersPage() {
             <p className="mt-1 text-xs text-muted">Tell the person their password privately. There is no password-reset flow yet.</p>
           </div>
           {formError && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg sm:col-span-2">{formError}</p>}
-          <div className="sm:col-span-2"><Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button></div>
+          <div className="sm:col-span-2"><Button icon={UIActionPlusCircle} type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button></div>
         </form>
       </Card>
-      <Card title="Users">
+      <Card title="Users by role">
         {loading && <p role="status" className="text-sm text-muted">Loading users…</p>}
         {error && <p role="alert" className="text-sm text-bad-fg">{error}</p>}
         {rowError && <p role="alert" className="mb-3 rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{rowError}</p>}
         {data && (
           <>
-            <label htmlFor="user-search" className="sr-only">Search users</label>
+            <nav aria-label="User role groups" className="mb-5 grid gap-2 sm:grid-cols-3">
+              {USER_GROUPS.map(({role,label,icon:Icon})=><button key={role} type="button" aria-pressed={selectedRole===role} onClick={()=>selectGroup(role)}
+                className={`flex min-h-12 items-center gap-2 rounded-lg border px-3 py-3 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal ${selectedRole===role?'border-teal bg-teal text-white':'border-line bg-surface text-ink hover:bg-canvas'}`}>
+                <Icon aria-hidden="true" className="h-5 w-5 shrink-0"/><span className="min-w-0 flex-1">{label}</span><span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${selectedRole===role?'bg-white/20':'bg-canvas text-muted'}`}>{data.users.filter(user=>user.role===role).length}</span>
+              </button>)}
+            </nav>
+            <h3 className="mb-3 text-sm font-semibold text-navy">{groupLabel}</h3>
+            <label htmlFor="user-search" className="sr-only">Search {groupLabel.toLowerCase()}</label>
             <div className="relative mb-3 w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <input
@@ -260,16 +278,16 @@ export default function UsersPage() {
                 type="search"
                 value={userSearch}
                 onChange={(event) => { setUserSearch(event.target.value); setPage(1); setExpandedUserId(null); }}
-                placeholder="Search users by name or email"
+                placeholder={`Search ${groupLabel.toLowerCase()} by name or email`}
                 className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted"
               />
             </div>
             <div className="hidden sm:block">
-              <DataTable columns={columns} rows={visibleUsers} caption="Users" empty={userSearch ? 'No matching users.' : 'No users yet.'} />
+              <DataTable columns={columns} rows={visibleUsers} caption={groupLabel} empty={userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`} />
             </div>
             <div className="divide-y divide-line sm:hidden">
               {filteredUsers.length === 0 ? (
-                <p className="py-5 text-center text-sm text-muted">{userSearch ? 'No matching users.' : 'No users yet.'}</p>
+                <p className="py-5 text-center text-sm text-muted">{userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`}</p>
               ) : visibleUsers.map((user) => (
                 <article key={user.id} className="py-2 first:pt-0 last:pb-0">
                   <button
@@ -290,7 +308,8 @@ export default function UsersPage() {
                     <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform ${expandedUserId === user.id ? 'rotate-180' : ''}`} aria-hidden="true" />
                   </button>
                   {expandedUserId === user.id && <div id={`user-details-${user.id}`} className="mt-2 space-y-2 border-t border-line pt-2 pl-1">
-                    <div className="col-span-2 min-w-0">
+                    {user.role==='student'&&<Link to={`/admin/users/${user.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-teal"><UserRound aria-hidden="true" className="h-4 w-4"/>View student overview<ArrowUpRight aria-hidden="true" className="h-4 w-4"/></Link>}
+                    {user.role!=='admin'&&<div className="col-span-2 min-w-0">
                       <p className="mb-1 text-xs text-muted">Office</p>
                       {user.role === 'admin' ? <span className="text-muted">—</span> : (
                         <select
@@ -301,7 +320,7 @@ export default function UsersPage() {
                           {officeList.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
                         </select>
                       )}
-                    </div>
+                    </div>}
                     {user.role === 'student' && (
                       <div>
                         <p className="mb-1 text-xs text-muted">Monthly DTR target</p>
@@ -319,7 +338,7 @@ export default function UsersPage() {
                 </article>
               ))}
             </div>
-            <Pagination page={currentPage} total={filteredUsers.length} pageSize={PAGE_SIZE} onPageChange={changePage} disabled={loading} label="Users pagination" recordLabel="Users" />
+            <Pagination page={currentPage} total={filteredUsers.length} pageSize={PAGE_SIZE} onPageChange={changePage} disabled={loading} label={`${groupLabel} pagination`} recordLabel={groupLabel} />
           </>
         )}
       </Card>

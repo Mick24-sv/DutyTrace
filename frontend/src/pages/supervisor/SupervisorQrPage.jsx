@@ -1,3 +1,5 @@
+import {QrCode as UIActionQrCode} from 'lucide-react';
+import AttendanceLinks from '../../components/attendance/AttendanceLinks.jsx';
 import { Printer, QrCode } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -15,7 +17,8 @@ export default function SupervisorQrPage() {
 
   return (
     <>
-      <PageHeader
+      <AttendanceLinks />
+      <PageHeader icon={UIActionQrCode}
         title="Office QR Code"
         description="Show this code to Student Assistants or print and post it in your office. They scan it to time in and out."
       />

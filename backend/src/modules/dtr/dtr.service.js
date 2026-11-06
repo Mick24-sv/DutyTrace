@@ -5,7 +5,6 @@ import { recordAudit } from '../audit/audit.service.js';
 import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { monthHistory } from '../attendance/attendance.service.js';
 import { buildSnapshot, canTransition, endedMonths, isMonthEnded, secondsToHours } from './dtr.rules.js';
-import { effectivePolicyForDate } from '../policy-templates/policy-templates.service.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 
@@ -127,16 +126,13 @@ async function requireMonthEnded(month, now) {
 async function liveSnapshot(user, month, now) {
   await requireMonthEnded(month, now);
   if (!user.office) throw new AppError(403, 'NOT_ASSIGNED', 'You are not assigned to an office. Ask an administrator.');
-  const [history, policy,templatePolicy] = await Promise.all([
+  const [history, policy] = await Promise.all([
     monthHistory(user.id, month),getPolicy(user.institutionId),
-    effectivePolicyForDate({institutionId:user.institutionId,date:`${month}-01`,officeId:user.office.id,studentId:user.id}),
   ]);
-  const templateDtr=templatePolicy?.configuration?.dtr??{};
   const effectiveRequiredHours = user.requiredHours != null ? Number(user.requiredHours) :
-    templateDtr.requiredMonthlyHours??policy.requiredMonthlyHours;
+    policy.requiredMonthlyHours;
   return buildSnapshot({
     history, student: user, office: user.office, requiredHours: effectiveRequiredHours, generatedAt: now,
-    policy:{configuration:templatePolicy?.configuration??{},origins:templatePolicy?.origins??{},assignments:templatePolicy?.assignments??[]},
   });
 }
 
@@ -253,9 +249,17 @@ export async function getDetail({ user, id, revision }, db = { query }) {
   const wanted = revision ?? raw.current_revision;
   const chosen = revs.rows.find((r) => r.revision_no === wanted);
   if (!chosen) throw new AppError(404, 'NOT_FOUND', 'That revision does not exist.');
+  const corrections=await db.query(`SELECT id,status,student_explanation,proposed_correction,original_details,reviewed_at
+    FROM attendance_discrepancies WHERE institution_id=$1 AND student_id=$2 AND original_details->>'dtrId'=$3
+    ORDER BY detected_at DESC`,[raw.institution_id,raw.user_id,id]);
 
   return {
     ...mapDtr(rows[0]),
+    supervisorEditing:raw.status==='under_review'&&events.rows.some(e=>e.revision_no===raw.current_revision&&e.action==='review_started'&&e.reason?.startsWith('[Supervisor editing] ')),
+    supervisorEditNotice:[...events.rows].reverse().find(e=>e.revision_no===raw.current_revision&&e.action==='review_started'&&e.reason?.startsWith('[Supervisor editing] '))?.reason?.replace('[Supervisor editing] ','')??null,
+    correctionRequests:corrections.rows.map(r=>({id:r.id,status:r.status,reason:r.student_explanation,
+      sessionId:r.original_details?.originalSession?.id,proposedEvents:r.proposed_correction?.events,reviewedAt:r.reviewed_at})),
+    correctionRegenerationRequired:raw.status!=='approved'&&corrections.rows.some(r=>r.status==='approved_correction'&&new Date(r.reviewed_at)>new Date(revs.rows.find(r=>r.revision_no===raw.current_revision).generated_at)),
     revision: { number: chosen.revision_no, generatedAt: chosen.generated_at, generatedBy: chosen.generated_by_name, snapshot: chosen.snapshot },
     revisions: revs.rows.map((r) => ({
       number: r.revision_no, generatedAt: r.generated_at, generatedBy: r.generated_by_name,
@@ -330,13 +334,73 @@ export const submit = ({ user, id, ip }) =>
 export const startReview = ({ user, id, ip }) =>
   transition({ user, id, to: 'under_review', action: 'review_started', ip, check: reviewerOnly(user) });
 
+export async function takeOverEditing({user,id,reason,ip}) {
+  return withTransaction(async db=>{
+    const dtr=await loadRow(id,db,true);assertCanView(user,dtr);reviewerOnly(user)(dtr);
+    if(dtr.status!=='under_review') throw new AppError(409,'INVALID_TRANSITION','Start reviewing this DTR first.');
+    await db.query(`INSERT INTO dtr_events(dtr_id,revision_no,action,from_status,to_status,actor_id,reason)
+      VALUES($1,$2,'review_started','under_review','under_review',$3,$4)`,[id,dtr.current_revision,user.id,`[Supervisor editing] ${reason}`]);
+    await createNotification(db,{recipientId:dtr.user_id,institutionId:dtr.institution_id,type:'dtr_supervisor_editing',
+      title:'Your supervisor is correcting your DTR',message:`Your supervisor will edit your ${dtr.month} duty record. ${reason}`,
+      relatedType:'monthly_dtr',relatedId:id,important:true,dedupeKey:`dtr:${id}:supervisor-editing:${Date.now()}`});
+    await recordAudit({actorId:user.id,institutionId:user.institutionId,action:'dtr.supervisor_editing',targetType:'monthly_dtr',targetId:id,after:{reason},ip},db);
+    return getDetail({user,id},db);
+  });
+}
+
+export async function verifyEditedMonth({user,id,verifiedHours,effectiveDate,creditScope='date',reason,acknowledgeIncomplete,ip}) {
+  return withTransaction(async db=>{
+    // Match the attendance amendment lock order before locking the DTR.
+    const initial=await loadRow(id,db);assertCanView(user,initial);reviewerOnly(user)(initial);
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance-correction:${initial.user_id}`]);
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance:${initial.user_id}`]);
+    const dtr=await loadRow(id,db,true);
+    if(dtr.status!=='under_review') throw new AppError(409,'INVALID_TRANSITION','Only a DTR under review can be verified.');
+    const notice=await db.query(`SELECT 1 FROM dtr_events WHERE dtr_id=$1 AND revision_no=$2 AND action='review_started'
+      AND reason LIKE '[Supervisor editing] %'`,[id,dtr.current_revision]);
+    if(!notice.rowCount) throw new AppError(409,'NOTICE_REQUIRED','Notify the student before taking over corrections.');
+    const periodStart=`${dtr.month}-01`;
+    const periodEnd=new Date(Date.UTC(Number(dtr.month.slice(0,4)),Number(dtr.month.slice(5,7)),0)).toISOString().slice(0,10);
+    if(creditScope==='date' && (!effectiveDate||effectiveDate.slice(0,7)!==dtr.month)) throw new AppError(400,'INVALID_DATE','The duty credit date must be in this DTR month.');
+    if(creditScope==='month') {
+      const coveringTerm=await db.query(`SELECT t.id FROM academic_terms t WHERE t.institution_id=$1
+        AND t.starts_on<=$2::date AND t.ends_on>=$3::date AND EXISTS(
+          SELECT 1 FROM semester_requirement_assignments a WHERE a.term_id=t.id AND a.student_id=$4)`,[dtr.institution_id,periodStart,periodEnd,dtr.user_id]);
+      if(!coveringTerm.rowCount) throw new AppError(400,'MONTH_SPLITS_TERM','Whole-month verification requires an assigned academic term covering the entire month. Choose a specific duty credit date for a partial term month.');
+    }
+    const pending=await db.query(`SELECT 1 FROM attendance_discrepancies WHERE institution_id=$1 AND student_id=$2
+      AND original_details->>'dtrId'=$3 AND status IN ('open','explanation_submitted','under_review')`,[dtr.institution_id,dtr.user_id,id]);
+    if(pending.rowCount) throw new AppError(409,'CORRECTIONS_PENDING','Approve or reject outstanding student correction requests first.');
+    const previous=(await db.query('SELECT snapshot FROM dtr_revisions WHERE dtr_id=$1 AND revision_no=$2',[id,dtr.current_revision])).rows[0].snapshot;
+    const history=await monthHistory(dtr.user_id,dtr.month);
+    const now=await dbNow(db);
+    const snapshot=buildSnapshot({history,student:previous.student,office:previous.office,requiredHours:previous.totals.requiredHours,generatedAt:now,policy:previous.policy});
+    if(snapshot.totals.incompleteCount&&!acknowledgeIncomplete) throw new AppError(409,'INCOMPLETE_NOT_ACKNOWLEDGED','Acknowledge the flagged sessions before verifying this month.');
+    const verifiedSeconds=Math.round(verifiedHours*3600);
+    snapshot.supervisorVerification={seconds:verifiedSeconds,deltaSeconds:verifiedSeconds-snapshot.totals.recordedSeconds,creditScope,
+      effectiveDate:creditScope==='date'?effectiveDate:null,periodStart,periodEnd,reason,supervisorName:user.fullName,verifiedAt:now.toISOString()};
+    const revision=dtr.current_revision+1;
+    await db.query(`INSERT INTO dtr_revisions(dtr_id,revision_no,snapshot,generated_by,generated_at) VALUES($1,$2,$3,$4,$5)`,[id,revision,snapshot,user.id,now]);
+    await db.query(`INSERT INTO dtr_events(dtr_id,revision_no,action,from_status,to_status,actor_id,reason)
+      VALUES($1,$2,'regenerated','under_review','under_review',$3,$4)`,[id,revision,user.id,`Supervisor final verification: ${verifiedHours} hours. ${reason}`]);
+    return transitionInside(db,{user,dtr:{...dtr,current_revision:revision},to:'approved',action:'approved',ip,
+      extra:{current_revision:revision,verified_seconds:verifiedSeconds,verified_revision:revision,decided_by:user.id,decided_at:now}});
+  });
+}
+
 export async function approve({ user, id, acknowledgeIncomplete, ip }) {
   return withTransaction(async (db) => {
     const dtr = await loadRow(id, db, true);
     assertCanView(user, dtr);
     reviewerOnly(user)(dtr);
     if (dtr.status === 'under_review') {
+      const corrections=await db.query(`SELECT status,reviewed_at FROM attendance_discrepancies
+        WHERE institution_id=$1 AND student_id=$2 AND original_details->>'dtrId'=$3`,[dtr.institution_id,dtr.user_id,id]);
+      if(corrections.rows.some(r=>['open','explanation_submitted','under_review'].includes(r.status)))
+        throw new AppError(409,'CORRECTIONS_PENDING','Review this student’s pending time corrections before approving the DTR.');
       const { rows } = await db.query('SELECT snapshot FROM dtr_revisions WHERE dtr_id = $1 AND revision_no = $2', [id, dtr.current_revision]);
+      if(corrections.rows.some(r=>r.status==='approved_correction'&&new Date(r.reviewed_at)>new Date(rows[0].snapshot.generatedAt)))
+        throw new AppError(409,'DTR_REGENERATION_REQUIRED','Return this DTR for correction so the student can regenerate it with the approved times and resubmit.');
       const totals = rows[0].snapshot.totals;
       // Incomplete attendance is flagged, never silently counted: approving a DTR that has
       // flagged sessions needs an explicit acknowledgement that those sessions are NOT verified.
@@ -374,7 +438,7 @@ async function transitionInside(db, { user, dtr, to, action, ip, extra }) {
   if (to === 'approved') {
     await createNotification(db, {
       recipientId: dtr.user_id, institutionId: dtr.institution_id, type: 'dtr_approved',
-      title: 'DTR approved', message: `Your ${dtr.month} DTR was approved.`,
+      title: 'DTR approved', message: `Your ${dtr.month} DTR was approved with ${secondsToHours(extra.verified_seconds).toFixed(2)} verified hours. Open it to view the supervisor's decision.`,
       relatedType: 'monthly_dtr', relatedId: dtr.id, important: true,
       dedupeKey: `dtr:${dtr.id}:approved:${dtr.current_revision}`,
     });

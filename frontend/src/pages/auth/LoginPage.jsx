@@ -1,3 +1,4 @@
+import {Send as UIActionSend} from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Check, Clock3, Eye, EyeOff, LockKeyhole } from 'lucide-react';
@@ -69,7 +70,7 @@ export default function LoginPage() {
               <Field id="email" label="Email address" placeholder="you@example.com" type="email" autoComplete="username" value={email} onChange={setEmail} error={fieldErrors.email} />
               <Field id="password" label="Password" placeholder="Enter your password" type="password" autoComplete="current-password" value={password} onChange={setPassword} error={fieldErrors.password} />
               <div className="login-forgot"><Link to="/forgot-password">Forgot password?</Link></div>
-              <Button type="submit" className="login-submit" disabled={submitting} aria-busy={submitting}>{submitting ? 'Signing in\u2026' : <>Sign in <ArrowRight size={18} aria-hidden="true" /></>}</Button>
+              <Button icon={UIActionSend} type="submit" className="login-submit" disabled={submitting} aria-busy={submitting}>{submitting ? 'Signing in\u2026' : <>Sign in <ArrowRight size={18} aria-hidden="true" /></>}</Button>
             </form>
             <div className="login-security"><LockKeyhole size={15} aria-hidden="true" /><span>Secure access. A clearer day ahead.</span></div>
             <p className="login-help">Need an account? <button type="button" onClick={() => accountHelpRef.current.showModal()} aria-haspopup="dialog">Contact the Admission Office.</button></p>

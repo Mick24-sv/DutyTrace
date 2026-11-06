@@ -7,8 +7,6 @@ import { apiGet, apiPatch, apiPut } from '../../services/api.js';
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'unread', label: 'Unread' },
-  { id: 'warning', label: 'Warning' },
-  { id: 'critical', label: 'Critical' },
 ];
 
 
@@ -163,10 +161,6 @@ export default function NotificationCenter({ role }) {
                   <label className="flex items-start gap-2">
                     <input type="checkbox" disabled={savingPreferences || !preferences.emailAvailable} checked={preferences.emailReminders} onChange={(event) => updatePreference('emailReminders', event.target.checked)} />
                     <span>Email alerts for institution-enabled high-priority notices{!preferences.emailAvailable && <span className="block text-muted">Email is unavailable until SMTP is configured.</span>}</span>
-                  </label>
-                  <label className="flex items-start gap-2">
-                    <input type="checkbox" disabled={savingPreferences} checked={preferences.upcomingShiftReminders} onChange={(event) => updatePreference('upcomingShiftReminders', event.target.checked)} />
-                    <span>Upcoming approved shift reminders</span>
                   </label>
                 </div>
               )}

@@ -26,6 +26,19 @@ const correctionLimiter=rateLimit({windowMs:15*60*1000,limit:8,standardHeaders:t
   handler:(_req,_res,next)=>next(new AppError(429,'RATE_LIMITED','Too many attendance submissions. Please try again later.'))});
 
 attendanceDiscrepanciesRouter.get('/summary',requireRole('student','supervisor','admin'),asyncHandler(async(req,res)=>ok(res,await discrepancies.summary(req.user))));
+attendanceDiscrepanciesRouter.post('/student-correction',requireRole('student'),correctionLimiter,asyncHandler(async(req,res)=>{
+  const b=parse(z.object({dtrId:z.string().uuid(),sessionId:z.string().min(1).max(120),
+    originalTimeIn:z.string().datetime({offset:true}).nullable(),originalTimeOut:z.string().datetime({offset:true}).nullable(),
+    events:z.tuple([event.extend({eventType:z.literal('time_in')}),event.extend({eventType:z.literal('time_out')})]),remarks:text(2000)}),req.body??{});
+  ok(res,await discrepancies.correctDutyTime({user:req.user,...b,ip:req.ip}),201);
+}));
+attendanceDiscrepanciesRouter.post('/supervisor-correction',requireRole('supervisor'),asyncHandler(async(req,res)=>{
+  const b=parse(z.object({studentId:z.string().uuid(),dtrId:z.string().uuid().optional(),sessionId:z.string().max(120).optional(),
+    originalTimeIn:z.string().datetime({offset:true}).nullable().optional(),
+    originalTimeOut:z.string().datetime({offset:true}).nullable().optional(),
+    events:z.tuple([event.extend({eventType:z.literal('time_in')}),event.extend({eventType:z.literal('time_out')})]),remarks:text(2000)}),req.body??{});
+  ok(res,await discrepancies.correctDutyTime({user:req.user,...b,ip:req.ip}),201);
+}));
 attendanceDiscrepanciesRouter.get('/',requireRole('student','supervisor','admin'),asyncHandler(async(req,res)=>{
   const f=parse(querySchema,req.query);ok(res,await discrepancies.list({user:req.user,...f}));
 }));

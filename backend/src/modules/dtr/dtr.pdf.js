@@ -144,7 +144,10 @@ export function renderDtrPdf(dtr) {
   if (dtr.status === 'approved' && dtr.verifiedRevision === dtr.revision.number) {
     doc.text(`Supervisor-verified hours: ${hrs(dtr.verifiedHours)}`, left, doc.y, { width });
     doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)
-      .text(`Approved ${dateTime.format(new Date(dtr.decidedAt))}. Only counted sessions are verified; flagged sessions are not.`, { width });
+      .text(`Approved ${dateTime.format(new Date(dtr.decidedAt))}. ${snap.supervisorVerification ? 'Monthly hours verified by the supervisor against supporting records.' : 'Only counted sessions are verified; flagged sessions are not.'}`, { width });
+    if(snap.supervisorVerification) {
+      doc.moveDown(0.5).text(pdfSafe(`Supervisor: ${snap.supervisorVerification.supervisorName}. ${snap.supervisorVerification.creditScope==='month'?`Whole month: ${snap.supervisorVerification.periodStart} to ${snap.supervisorVerification.periodEnd}`:`Duty credit date: ${snap.supervisorVerification.effectiveDate}`}. ${snap.supervisorVerification.reason}`),{width});
+    }
   } else {
     doc.text('Supervisor-verified hours: not verified', left, doc.y, { width });
     doc.font('Helvetica').fontSize(8.5).fillColor(C.muted)

@@ -94,6 +94,18 @@ dtrRouter.post('/:id/approve', requireRole('supervisor'), asyncHandler(async (re
   ok(res, await dtr.approve({ user: req.user, id: idOf(req), acknowledgeIncomplete: acknowledgeIncomplete === true, ip: req.ip }));
 }));
 
+dtrRouter.post('/:id/take-over',requireRole('supervisor'),asyncHandler(async(req,res)=>{
+  const {reason}=parse(z.object({reason:z.string().trim().min(5).max(1000)}),req.body??{});
+  ok(res,await dtr.takeOverEditing({user:req.user,id:idOf(req),reason,ip:req.ip}));
+}));
+dtrRouter.post('/:id/verify-edited-month',requireRole('supervisor'),asyncHandler(async(req,res)=>{
+  const b=parse(z.object({verifiedHours:z.number().min(0).max(744).refine(n=>Math.abs(n*100-Math.round(n*100))<1e-8),
+    creditScope:z.enum(['month','date']).default('date'),
+    effectiveDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s=>!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s).optional(),
+    reason:z.string().trim().min(5).max(1000),acknowledgeIncomplete:z.boolean()}).refine(b=>b.creditScope==='month'||!!b.effectiveDate,{message:'Choose a duty credit date.',path:['effectiveDate']}),req.body??{});
+  ok(res,await dtr.verifyEditedMonth({user:req.user,id:idOf(req),...b,ip:req.ip}));
+}));
+
 dtrRouter.post('/:id/return', requireRole('supervisor'), asyncHandler(async (req, res) => {
   const { reason } = parse(
     z.object({ reason: z.string().trim().min(1, 'Tell the student what to correct.').max(1000, 'Keep the reason under 1000 characters.') }),

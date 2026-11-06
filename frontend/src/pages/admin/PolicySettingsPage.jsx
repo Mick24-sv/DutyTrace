@@ -1,3 +1,5 @@
+import {Settings as UIActionSettings,Save as UIActionSave} from 'lucide-react';
+import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useEffect, useState } from 'react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -55,7 +57,11 @@ export default function PolicySettingsPage() {
 
   return (
     <>
-      <PageHeader title="Policy Settings" description="Monthly DTR settings for your institution. Semester targets are assigned individually under Academic Terms." />
+      <PageHeader icon={UIActionSettings} title="Settings" description="Monthly DTR settings for your institution. Semester targets are assigned individually under Academic Terms." />
+      <SectionLinks links={[
+        ['/admin/qr-codes', 'Office QR codes'], ['/admin/discrepancies', 'Attendance corrections'],
+        ['/admin/audit', 'Audit history'], ['/admin/historical-hours', 'Previous official records'], ['/admin/cases', 'Compliance cases'],
+      ]} label="Administration tools" />
       {loading && <p role="status" className="text-sm text-muted">Loading…</p>}
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg">{error}</p>}
       {policy && (
@@ -67,7 +73,7 @@ export default function PolicySettingsPage() {
               className="w-40 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
             <p className="mt-2 text-xs text-muted">
-              This serves as the default baseline requirement for student assistants. You can configure and customize individual required duty hours for any specific student under the <strong className="text-ink">Users & Roles</strong> page.
+              This serves as the default baseline requirement for student assistants. You can configure and customize individual required duty hours for any specific student under the <strong className="text-ink">Students & Staff</strong> page.
               {policy.updatedBy && <> Last changed by {policy.updatedBy} on {formatDateTime(policy.updatedAt, policy.timezone)}.</>}
             </p>
             <label htmlFor="review-sla-hours" className="mb-1 mt-5 block text-sm font-medium">Review time limit (optional)</label>
@@ -85,7 +91,7 @@ export default function PolicySettingsPage() {
             {message && (
               <p role={message.ok ? 'status' : 'alert'} className={`mt-3 rounded-lg px-3 py-2 text-sm ${message.ok ? 'bg-ok-bg text-ok-fg' : 'bg-bad-bg text-bad-fg'}`}>{message.text}</p>
             )}
-            <Button type="submit" className="mt-4" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+            <Button icon={UIActionSave} type="submit" className="mt-4" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
           </form>
         </Card>
       )}
@@ -96,7 +102,7 @@ export default function PolicySettingsPage() {
         {!attendanceSettings.loading&&attendanceSettings.data&&<form onSubmit={saveAttendancePolicy} className="space-y-4">
           {[['discrepancyGraceMinutes','Grace period after shift ends','minutes'],['earlyToleranceMinutes','Allowed early clock-in tolerance','minutes'],['lateToleranceMinutes','Allowed late clock-out tolerance','minutes']].map(([key,label,unit])=><label key={key} className="block text-sm font-medium text-ink">{label}<div className="mt-1 flex items-center gap-2"><input type="number" min="0" max="1440" step="1" required value={attendancePolicy[key]} onChange={e=>setAttendancePolicy(p=>({...p,[key]:Number(e.target.value)}))} className="w-32 rounded-lg border border-line bg-surface px-3 py-2"/><span className="text-sm text-muted">{unit}</span></div></label>)}
           {attendanceMessage&&<p role={attendanceMessage.ok?'status':'alert'} className={`rounded-lg px-3 py-2 text-sm ${attendanceMessage.ok?'bg-ok-bg text-ok-fg':'bg-bad-bg text-bad-fg'}`}>{attendanceMessage.text}</p>}
-          <Button type="submit" disabled={attendanceBusy}>{attendanceBusy?'Saving…':'Save attendance policy'}</Button>
+          <Button icon={UIActionSave} type="submit" disabled={attendanceBusy}>{attendanceBusy?'Saving…':'Save attendance policy'}</Button>
         </form>}
       </Card>
       <Card title="Other settings" className="mt-6 max-w-xl">

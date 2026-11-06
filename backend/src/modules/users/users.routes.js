@@ -7,6 +7,9 @@ import { parse, parseId } from '../../utils/validate.js';
 import { MIN_PASSWORD_LENGTH, hashPassword } from '../../utils/password.js';
 import { USER_WITH_OFFICE_SQL, revokeAllSessions, toPublicUser } from '../auth/auth.service.js';
 import { recordAudit } from '../audit/audit.service.js';
+import { myTerms } from '../semesters/semesters.service.js';
+import { rawUpload, uploadedFile } from '../documents/upload.js';
+import { validateUpload } from '../documents/files.js';
 
 const ROLES = ['student', 'supervisor', 'admin'];
 
@@ -34,6 +37,8 @@ const assignmentSchema = z.object({ officeId: z.string().uuid().nullable() });
 const auditView = (u) => ({
   email: u.email,
   fullName: u.fullName,
+  yearLevel: u.yearLevel,
+  course: u.course,
   role: u.role,
   status: u.status,
   requiredHours: u.requiredHours,
@@ -51,10 +56,70 @@ const fetchUser = async (id, db = { query }, institutionId = null) => {
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
+usersRouter.post('/me/photo',requireRole('student'),rawUpload,asyncHandler(async(req,res)=>{
+  const {buffer,rawName}=uploadedFile(req);
+  const file=validateUpload(buffer,rawName,2*1024*1024);
+  if(!['image/png','image/jpeg'].includes(file.mime)) throw new AppError(400,'BAD_FILE_TYPE','Choose a PNG or JPEG photo.');
+  await withTransaction(async db=>{
+    await db.query(`UPDATE users SET profile_photo=$2,profile_photo_mime=$3,profile_photo_updated_at=clock_timestamp()
+      WHERE id=$1 AND institution_id=$4 AND role='student'`,[req.user.id,buffer,file.mime,req.user.institutionId]);
+    await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_updated',targetType:'user',targetId:req.user.id,after:{mime:file.mime,size:file.size},ip:req.ip},db);
+  });
+  ok(res,{user:await fetchUser(req.user.id,{query},req.user.institutionId)});
+}));
+usersRouter.delete('/me/photo',requireRole('student'),asyncHandler(async(req,res)=>{
+  await withTransaction(async db=>{
+    await db.query('UPDATE users SET profile_photo=NULL,profile_photo_mime=NULL,profile_photo_updated_at=NULL WHERE id=$1 AND institution_id=$2',[req.user.id,req.user.institutionId]);
+    await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_removed',targetType:'user',targetId:req.user.id,ip:req.ip},db);
+  });
+  ok(res,{user:await fetchUser(req.user.id,{query},req.user.institutionId)});
+}));
+usersRouter.get('/:id/photo',asyncHandler(async(req,res)=>{
+  const target=await fetchUser(parseId(req.params.id),{query},req.user.institutionId);
+  const allowed=target&&(target.id===req.user.id||req.user.role==='admin'||(req.user.role==='supervisor'&&target.role==='student'&&target.office?.id&&target.office.id===req.user.office?.id));
+  if(!allowed) throw new AppError(404,'NOT_FOUND','Profile photo not found.');
+  if(!target.photoUrl) throw new AppError(404,'NOT_FOUND','Profile photo not found.');
+  const etag=`"profile-photo-${target.id}-${target.photoUrl.split('v=')[1]}"`;
+  res.set({'Cache-Control':'private, no-cache','ETag':etag,'X-Content-Type-Options':'nosniff'});
+  if(req.get('if-none-match')===etag) return res.status(304).end();
+  const {rows:[photo]}=await query('SELECT profile_photo,profile_photo_mime FROM users WHERE id=$1 AND institution_id=$2',[target.id,req.user.institutionId]);
+  if(!photo?.profile_photo) throw new AppError(404,'NOT_FOUND','Profile photo not found.');
+  res.set({'Content-Type':photo.profile_photo_mime}).send(photo.profile_photo);
+}));
+
+usersRouter.patch('/me/profile',requireRole('student'),asyncHandler(async(req,res)=>{
+  const input=parse(z.object({fullName:z.string().trim().min(1).max(120),yearLevel:z.number().int().min(1).max(8).nullable(),
+    course:z.string().trim().min(1).max(160).nullable()}).strict(),req.body??{});
+  const updated=await withTransaction(async db=>{
+    const before=await fetchUser(req.user.id,db,req.user.institutionId);
+    const result=await db.query(`UPDATE users SET full_name=$2,year_level=$3,course=$4
+      WHERE id=$1 AND institution_id=$5 AND role='student' RETURNING id`,[req.user.id,input.fullName,input.yearLevel,input.course,req.user.institutionId]);
+    if(!result.rowCount) throw new AppError(403,'FORBIDDEN','Only Student Assistants can edit their profile here.');
+    const after=await fetchUser(req.user.id,db,req.user.institutionId);
+    await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.profile_updated',targetType:'user',targetId:req.user.id,
+      before:auditView(before),after:auditView(after),ip:req.ip},db);
+    return after;
+  });
+  ok(res,{user:updated});
+}));
+
 // List users: admin only.
 usersRouter.get('/', requireRole('admin'), asyncHandler(async (_req, res) => {
   const { rows } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.institution_id = $1 ORDER BY u.role, u.full_name`, [_req.user.institutionId]);
   ok(res, { users: rows.map(toPublicUser) });
+}));
+
+usersRouter.get('/:id/student-overview',requireRole('admin'),asyncHandler(async(req,res)=>{
+  const student=await fetchUser(parseId(req.params.id),{query},req.user.institutionId);
+  if(!student || student.role!=='student') throw new AppError(404,'NOT_FOUND','Student Assistant not found.');
+  const terms=await myTerms(student);
+  const {rows}=await query(`SELECT d.id,d.month,d.status,r.snapshot->'totals'->>'recordedHours' AS recorded_hours,
+      CASE WHEN d.status='approved' THEN d.verified_seconds+COALESCE((SELECT sum(a.verified_delta_seconds)
+        FROM attendance_adjustments a WHERE a.student_id=d.user_id AND a.dtr_month=d.month),0) ELSE NULL END AS verified_seconds
+    FROM monthly_dtrs d JOIN users u ON u.id=d.user_id JOIN dtr_revisions r ON r.dtr_id=d.id AND r.revision_no=d.current_revision
+    WHERE d.user_id=$1 AND u.institution_id=$2 ORDER BY d.month DESC LIMIT 12`,[student.id,req.user.institutionId]);
+  ok(res,{student,terms,dtrs:rows.map(r=>({id:r.id,month:r.month,status:r.status,recordedHours:Number(r.recorded_hours??0),
+    verifiedHours:r.verified_seconds==null?null:Math.round(Number(r.verified_seconds)/36)/100}))});
 }));
 
 // Create account: admin only. Admin sets an initial password.

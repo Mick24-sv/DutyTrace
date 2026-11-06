@@ -1,3 +1,4 @@
+import {Files as UIActionFiles} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -23,7 +24,7 @@ export default function DtrOverviewPage() {
   const visibleDtrs = dtrs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   return (
     <>
-      <PageHeader title="DTR Overview" description="All monthly DTRs across offices. Read-only: approval belongs to office supervisors.">
+      <PageHeader icon={UIActionFiles} title="DTR Overview" description="All monthly DTRs across offices. Read-only: approval belongs to office supervisors.">
         <StatusFilter value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={['draft', 'submitted', 'under_review', 'approved', 'needs_correction']} />
       </PageHeader>
       <Card>

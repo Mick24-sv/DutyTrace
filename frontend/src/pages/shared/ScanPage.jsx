@@ -1,3 +1,5 @@
+import {Send as UIActionSend,QrCode as UIActionQrCode,X as UIActionX} from 'lucide-react';
+import AttendanceLinks from '../../components/attendance/AttendanceLinks.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CircleCheck, CircleX, QrCode, TriangleAlert } from 'lucide-react';
@@ -77,7 +79,7 @@ export default function ScanPage() {
         autoComplete="off" spellCheck="false" placeholder="DT1.…"
         className="w-full rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs"
       />
-      <Button type="submit" variant="accent" className="mt-3 w-full" disabled={!manualText.trim() || mode === 'submitting'}>
+      <Button icon={UIActionSend} type="submit" variant="accent" className="mt-3 w-full" disabled={!manualText.trim() || mode === 'submitting'}>
         Submit code &amp; {actionLabel.toLowerCase()}
       </Button>
     </form>
@@ -85,7 +87,8 @@ export default function ScanPage() {
 
   return (
     <>
-      <PageHeader title="Scan QR" description="Scan your office's QR code to record your own time-in or time-out." />
+      <AttendanceLinks />
+      <PageHeader icon={UIActionQrCode} title="Scan QR" description="Scan your office's QR code to record your own time-in or time-out." />
 
       <div className="mx-auto max-w-xl space-y-6">
         <Card title="Your status">
@@ -163,7 +166,7 @@ export default function ScanPage() {
                   )}
                   {manualOpen && manualForm}
                   <div className="mt-4 text-center">
-                    <Button variant="secondary" onClick={() => setMode('idle')}>Cancel</Button>
+                    <Button icon={UIActionX} variant="secondary" onClick={() => setMode('idle')}>Cancel</Button>
                   </div>
                 </>
               )}

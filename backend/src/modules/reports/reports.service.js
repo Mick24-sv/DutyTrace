@@ -765,6 +765,7 @@ export async function getDashboardStats(user) {
         : { term, students: [] };
   const assignedTermStudents = semesterProgress.students.filter((student) => student.requirementAssigned);
   const termSummary = {
+    statusCounts:Object.fromEntries(['on_track','at_risk','overdue','completed','insufficient_data','not_configured'].map(status=>[status,semesterProgress.students.filter(student=>student.semesterStatus===status).length])),
     term: semesterProgress.term,
     totalRecordedHours: hoursSum(semesterProgress.students, 'recordedHours'),
     totalVerifiedHours: hoursSum(semesterProgress.students, 'verifiedHours'),
@@ -797,7 +798,7 @@ export async function getDashboardStats(user) {
          SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
            AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
          UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
-           FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+           FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id)
        ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1) last ON true
        WHERE u.institution_id=$1 AND u.role='student'`,
       [user.institutionId],
@@ -949,10 +950,16 @@ export async function getDashboardStats(user) {
       }
     }
     const monthlyHoursByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
+    const monthlyVerifiedByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
+    const monthlyStatusByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
     const historicalMonthlyHoursByStudent = new Map(hoursData.items.map((student) => [student.id, new Map()]));
     for (const month of monthColumns) {
       const monthData = month === monthRange.month ? hoursData : await hoursReport({ user, officeId, month, page: 1, limit: 1000 });
-      for (const student of monthData.items) monthlyHoursByStudent.get(student.id)?.set(month, student.recordedHours);
+      for (const student of monthData.items) {
+        monthlyHoursByStudent.get(student.id)?.set(month, student.recordedHours);
+        monthlyVerifiedByStudent.get(student.id)?.set(month, student.verifiedHours);
+        monthlyStatusByStudent.get(student.id)?.set(month, student.dtrStatus);
+      }
     }
     if (semesterProgress.term) {
       const { rows: historicalRows } = await query(`SELECT student_id,credit_month,sum(hours)::numeric AS hours
@@ -981,9 +988,12 @@ export async function getDashboardStats(user) {
         semesterRequiredHours: semester?.requiredHours ?? null,
         semesterRemainingHours: semester?.remainingHours ?? null,
         semesterCompletionPercentage: semester?.completionPercentage ?? null,
+        semesterStatus:semester?.semesterStatus??'not_configured',
         semesterRequirementAssigned: semester?.requirementAssigned ?? false,
         meetsRequirement: semester?.requirementAssigned ? semester.remainingHours === 0 : null,
         monthlyHours: Object.fromEntries(monthColumns.map((month) => [month, monthlyHoursByStudent.get(student.id)?.get(month) ?? 0])),
+        monthlyVerifiedHours: Object.fromEntries(monthColumns.map((month) => [month, monthlyVerifiedByStudent.get(student.id)?.get(month) ?? 0])),
+        monthlyDtrStatuses: Object.fromEntries(monthColumns.map((month) => [month, monthlyStatusByStudent.get(student.id)?.get(month) ?? 'none'])),
         historicalMonthlyHours: Object.fromEntries(monthColumns.map((month) => [month, historicalMonthlyHoursByStudent.get(student.id)?.get(month) ?? 0])),
         totalRecordedTermHours: monthColumns.reduce((total, month) => total + (monthlyHoursByStudent.get(student.id)?.get(month) ?? 0), 0),
         recordedHoursLeft: semester?.remainingHours ?? null,
@@ -1001,7 +1011,7 @@ export async function getDashboardStats(user) {
            SELECT e.event_type::text AS event_type,e.recorded_at,e.seq FROM attendance_events e WHERE e.user_id=u.id
              AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_sources src WHERE src.event_id=e.id)
            UNION ALL SELECT x.value->>'eventType',(x.value->>'recordedAt')::timestamptz,NULL::bigint
-             FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id
+             FROM attendance_adjustments a CROSS JOIN LATERAL jsonb_array_elements(a.effective_events) x(value) WHERE a.student_id=u.id AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id)
          ) effective ORDER BY recorded_at DESC,seq DESC NULLS LAST LIMIT 1
        ) last ON true
        WHERE d.office_id = $1 AND d.ends_on IS NULL

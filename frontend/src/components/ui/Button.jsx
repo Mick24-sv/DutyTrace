@@ -9,14 +9,16 @@ export default function Button({
   className = '',
   type = 'button',
   children,
+  icon: Icon,
   ...props
 }) {
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-center text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
       {...props}
     >
+      {Icon && <Icon aria-hidden="true" className="h-4 w-4 shrink-0"/>}
       {children}
     </button>
   );

@@ -27,6 +27,11 @@ export function verifiedSecondsForTerm(dtrRows, fromDate, toDate, timeZone) {
   return dtrRows.reduce((total, dtr) => {
     if (dtr.status !== 'approved') return total;
     const sessions = (dtr.snapshot?.days ?? []).flatMap((day) => day.sessions ?? []);
+    const verification=dtr.snapshot?.supervisorVerification;
+    if(verification && Number.isFinite(verification.seconds)) {
+      if(verification.creditScope==='month') return total+(verification.periodStart>=fromDate&&verification.periodEnd<=toDate?verification.seconds:0);
+      return total+(verification.effectiveDate>=fromDate&&verification.effectiveDate<=toDate?verification.seconds:0);
+    }
     return total + sessions.reduce((seconds, session) => {
       if (!session.counted || !session.timeIn || !Number.isFinite(session.seconds)) return seconds;
       const date = localDateKey(new Date(session.timeIn), timeZone);

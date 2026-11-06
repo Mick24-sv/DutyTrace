@@ -1,0 +1,47 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {insertEvent,loadFixtures,makeClient,setupTestServer} from './helpers/testEnv.js';
+let fx;
+const ctx=setupTestServer({},async()=>{fx=await loadFixtures(api);});
+const api=makeClient(ctx);
+const as=who=>({cookie:fx.cookies[who]});
+
+test('student QR corrections remain pending until supervisor review and require a fresh DTR',async()=>{
+  const now=new Date();
+  const date=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-1,15)).toISOString().slice(0,10);
+  const month=date.slice(0,7);
+  const iso=hour=>`${date}T${hour}:00:00.000Z`;
+  await insertEvent(fx.ids.studentA,fx.officeIds.A,'time_in',iso('08'));
+  await insertEvent(fx.ids.studentA,fx.officeIds.A,'time_out',iso('10'));
+  const created=await api.post('/dtrs',{...as('studentA'),body:{month}});
+  assert.equal(created.status,201,JSON.stringify(created.body));
+  const dtrId=created.body.data.id;
+  const original=await api.get(`/dtrs/${dtrId}`,as('studentA'));
+  const session=original.body.data.revision.snapshot.days.flatMap(day=>day.sessions)[0];
+  assert.equal((await api.post(`/dtrs/${dtrId}/submit`,as('studentA'))).status,200);
+  assert.equal((await api.post(`/dtrs/${dtrId}/start-review`,as('supervisorA'))).status,200);
+  const body={dtrId,sessionId:session.id,originalTimeIn:session.timeIn,originalTimeOut:session.timeOut,
+    events:[{eventType:'time_in',recordedAt:iso('08')},{eventType:'time_out',recordedAt:iso('12')}],remarks:'The QR clock-out was scanned before I finished work.'};
+  assert.equal((await api.post('/attendance-discrepancies/student-correction',{...as('supervisorA'),body})).status,403);
+  assert.notEqual((await api.post('/attendance-discrepancies/student-correction',{...as('studentB'),body})).status,201);
+  const requested=await api.post('/attendance-discrepancies/student-correction',{...as('studentA'),body});
+  assert.equal(requested.status,201,JSON.stringify(requested.body));
+  assert.equal(requested.body.data.status,'under_review');
+  assert.equal((await api.get(`/attendance/me?month=${month}`,as('studentA'))).body.data.totals.recordedHours,2);
+  assert.equal((await api.post('/attendance-discrepancies/student-correction',{...as('studentA'),body})).status,409);
+  let approval=await api.post(`/dtrs/${dtrId}/approve`,{...as('supervisorA'),body:{}});
+  assert.equal(approval.body.error.code,'CORRECTIONS_PENDING');
+  const correctionId=requested.body.data.id;
+  assert.equal((await api.post(`/attendance-discrepancies/${correctionId}/approve`,{...as('supervisorB'),body:{remarks:'Reviewed.'}})).status,404);
+  const accepted=await api.post(`/attendance-discrepancies/${correctionId}/approve`,{...as('supervisorA'),body:{remarks:'Confirmed against the office log.'}});
+  assert.equal(accepted.status,200,JSON.stringify(accepted.body));
+  assert.equal((await api.get(`/attendance/me?month=${month}`,as('studentA'))).body.data.totals.recordedHours,4);
+  approval=await api.post(`/dtrs/${dtrId}/approve`,{...as('supervisorA'),body:{}});
+  assert.equal(approval.body.error.code,'DTR_REGENERATION_REQUIRED');
+  assert.equal((await api.post(`/dtrs/${dtrId}/return`,{...as('supervisorA'),body:{reason:'Regenerate to include your approved correction.'}})).status,200);
+  assert.equal((await api.post('/dtrs',{...as('studentA'),body:{month}})).status,201);
+  assert.equal((await api.post(`/dtrs/${dtrId}/submit`,as('studentA'))).status,200);
+  assert.equal((await api.post(`/dtrs/${dtrId}/start-review`,as('supervisorA'))).status,200);
+  assert.equal((await api.post(`/dtrs/${dtrId}/approve`,{...as('supervisorA'),body:{}})).status,200);
+  assert.equal((await api.get(`/dtrs/${dtrId}`,as('studentA'))).body.data.verifiedHours,4);
+});

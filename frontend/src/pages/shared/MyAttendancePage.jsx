@@ -1,3 +1,5 @@
+import {Clock as UIActionClock} from 'lucide-react';
+import AttendanceLinks from '../../components/attendance/AttendanceLinks.jsx';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import AttendanceHistory from '../../components/attendance/AttendanceHistory.jsx';
 import MonthlyDutySummary from '../../components/attendance/MonthlyDutySummary.jsx';
@@ -9,7 +11,8 @@ export default function MyAttendancePage() {
   const { user } = useAuth();
   return (
     <>
-      <PageHeader title="My Attendance" description="Daily and monthly time-in/time-out records." />
+      <AttendanceLinks />
+      <PageHeader icon={UIActionClock} title="My Attendance" description="Daily and monthly time-in/time-out records." />
       <AttendanceHistory endpoint="/attendance/me" />
       {user?.role === 'student' && (
         <details className="group mt-5">

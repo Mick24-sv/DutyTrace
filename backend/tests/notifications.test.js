@@ -21,6 +21,9 @@ test('notification center returns only recipient notifications and enforces owne
   await createFor(fixtures.ids.studentA, institution.rows[0].institution_id, 'student-a-one', { important: true });
   await createFor(fixtures.ids.studentA, institution.rows[0].institution_id, 'student-a-one', { important: true });
   await createFor(fixtures.ids.studentA2, institution.rows[0].institution_id, 'student-a2-one');
+  // Deferred workflow messages must not inflate the visible inbox or unread count.
+  await createFor(fixtures.ids.studentA, institution.rows[0].institution_id, 'archived-forecast', { type: 'completion_risk_warning' });
+  await createFor(fixtures.ids.studentA, institution.rows[0].institution_id, 'archived-schedule', { relatedType: 'duty_schedule' });
   const foreignInstitution = await query(
     `INSERT INTO institutions (name, timezone) VALUES ('Notification Isolation ' || gen_random_uuid()::text, 'UTC') RETURNING id`,
   );

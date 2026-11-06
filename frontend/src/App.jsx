@@ -1,10 +1,13 @@
+import DtrPreviewPage from './pages/student/DtrPreviewPage.jsx';
+import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import StudentOverviewPage from './pages/admin/StudentOverviewPage.jsx';
+import ProfilePage from './pages/student/ProfilePage.jsx';
 import AppShell from './components/layout/AppShell.jsx';
 import FullPageMessage from './components/layout/FullPageMessage.jsx';
 import LoginPage from './pages/auth/LoginPage.jsx';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
-import ComingSoon from './pages/ComingSoon.jsx';
 import NotFound from './pages/NotFound.jsx';
 import StudentDashboard from './pages/student/StudentDashboard.jsx';
 import SupervisorDashboard from './pages/supervisor/SupervisorDashboard.jsx';
@@ -21,12 +24,7 @@ import DtrReviewPage from './pages/supervisor/DtrReviewPage.jsx';
 import DtrOverviewPage from './pages/admin/DtrOverviewPage.jsx';
 import PolicySettingsPage from './pages/admin/PolicySettingsPage.jsx';
 import AcademicTermsPage from './pages/admin/AcademicTermsPage.jsx';
-import SemesterTransitionsPage from './pages/admin/SemesterTransitionsPage.jsx';
-import DutyRequirementsPage from './pages/admin/DutyRequirementsPage.jsx';
 import AuditTrailPage from './pages/admin/AuditTrailPage.jsx';
-import DutySchedulePage from './pages/student/DutySchedulePage.jsx';
-import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
-import RecoveryReviewPage from './pages/supervisor/RecoveryReviewPage.jsx';
 import SupervisorQrPage from './pages/supervisor/SupervisorQrPage.jsx';
 import DtrDetailPage from './pages/shared/DtrDetailPage.jsx';
 import MyAbsencesPage from './pages/student/MyAbsencesPage.jsx';
@@ -36,9 +34,7 @@ import CasesListPage from './pages/shared/CasesListPage.jsx';
 import CaseDetailPage from './pages/shared/CaseDetailPage.jsx';
 import ReportsPage from './pages/shared/ReportsPage.jsx';
 import AttendanceDiscrepanciesPage from './pages/shared/AttendanceDiscrepanciesPage.jsx';
-import DutyAlertsPage from './pages/shared/DutyAlertsPage.jsx';
-import PolicyTemplatesPage from './pages/admin/PolicyTemplatesPage.jsx';
-import EffectivePolicyPage from './pages/shared/EffectivePolicyPage.jsx';
+import HistoricalHoursPage from './pages/shared/HistoricalHoursPage.jsx';
 import RequireRole from './routes/RequireRole.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { ROLE_CONFIG } from './routes/navConfig.js';
@@ -49,16 +45,18 @@ const DASHBOARDS = {
   admin: AdminDashboard,
 };
 
-// Pages that are really built; every other nav item falls back to <ComingSoon>.
+// Active pages, including secondary tools reached from their parent section.
 const BUILT_PAGES = {
-  student: { scan: ScanPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, schedule: DutySchedulePage, policies: EffectivePolicyPage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
-  supervisor: { 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, assistants: AssistantsPage, 'dtr-review': DtrReviewPage, 'schedule-review': DutyScheduleReviewPage, 'recovery-review': RecoveryReviewPage, policies: EffectivePolicyPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage, 'duty-alerts': DutyAlertsPage },
-  admin: { users: UsersPage, semesters: AcademicTermsPage, 'semester-transitions': SemesterTransitionsPage, 'duty-requirements': DutyRequirementsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, discrepancies: AttendanceDiscrepanciesPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage, 'duty-alerts': DutyAlertsPage, 'policy-templates': PolicyTemplatesPage, 'effective-policies': EffectivePolicyPage },
+  student: { scan: ScanPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
+  supervisor: { 'schedule-review': DutyScheduleReviewPage, 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, assistants: AssistantsPage, scan: ScanPage, 'historical-hours': HistoricalHoursPage, 'dtr-review': DtrReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
+  admin: { users: UsersPage, 'historical-hours': HistoricalHoursPage, semesters: AcademicTermsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, discrepancies: AttendanceDiscrepanciesPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).
 const EXTRA_ROUTES = {
   student: [
+    { path: 'profile', Page: ProfilePage },
+    { path: 'dtr/preview/:month', Page: DtrPreviewPage },
     { path: 'dtr/:id', Page: DtrDetailPage },
     { path: 'absences/:id', Page: AbsenceDetailPage },
     { path: 'cases/:id', Page: CaseDetailPage },
@@ -70,6 +68,7 @@ const EXTRA_ROUTES = {
     { path: 'cases/:id', Page: CaseDetailPage },
   ],
   admin: [
+    { path: 'users/:userId', Page: StudentOverviewPage },
     { path: 'dtrs/:id', Page: DtrDetailPage },
     { path: 'cases/:id', Page: CaseDetailPage },
     { path: 'absences/:id', Page: AbsenceDetailPage },
@@ -96,20 +95,9 @@ export default function App() {
           <Route key={role} element={<RequireRole role={role} />}>
             <Route path={config.base} element={<AppShell role={role} />}>
               <Route index element={<Dashboard />} />
-              {config.nav
-                .filter((item) => item.to)
-                .map((item) => {
-                  const Built = BUILT_PAGES[role]?.[item.to];
-                  return (
-                    <Route
-                      key={item.to}
-                      path={item.to}
-                      element={
-                        Built ? <Built /> : <ComingSoon label={item.label} phase={item.phase} icon={item.icon} />
-                      }
-                    />
-                  );
-                })}
+              {Object.entries(BUILT_PAGES[role]).map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
+              {['schedule', 'recovery-review', 'duty-alerts', 'policies', 'effective-policies', 'policy-templates', 'semester-transitions', 'duty-requirements'].map(path =>
+                <Route key={path} path={path} element={<Navigate to={role === 'admin' ? '/admin/settings' : role === 'supervisor' ? '/supervisor/assistants' : '/student/attendance'} replace />} />)}
               {(EXTRA_ROUTES[role] ?? []).map(({ path, Page }) => (
                 <Route key={path} path={path} element={<Page />} />
               ))}

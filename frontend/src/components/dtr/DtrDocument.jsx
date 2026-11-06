@@ -13,7 +13,7 @@ const NOTE = {
 
 // Renders ONE revision of a DTR (its frozen snapshot). `verified` is shown separately
 // from recorded hours and only has a value once the DTR is approved.
-export default function DtrDocument({ snapshot, verifiedHours = null, isApprovedRevision = false }) {
+export default function DtrDocument({ snapshot, verifiedHours = null, isApprovedRevision = false, onRequestCorrection, pendingSessionIds = [] }) {
   const { totals, timezone } = snapshot;
   const dtrPolicy=snapshot.policy?.configuration?.dtr??{};
   const formatPolicyDate=(key)=>{
@@ -28,6 +28,7 @@ export default function DtrDocument({ snapshot, verifiedHours = null, isApproved
   const rows = snapshot.days.flatMap((day) =>
     day.sessions.map((s, i) => ({
       id: s.id,
+      session: s,
       date: i === 0 ? formatPolicyDate(day.date) : '',
       timeIn: formatPolicyClock(s.timeIn),
       timeOut: formatPolicyClock(s.timeOut),
@@ -46,6 +47,7 @@ export default function DtrDocument({ snapshot, verifiedHours = null, isApproved
       key: 'note', header: 'Notes',
       render: (r) => (r.note ? <span className={r.counted ? 'text-muted' : 'font-medium text-bad-fg'}>{r.note}</span> : <span className="text-muted">—</span>),
     },
+    ...(onRequestCorrection ? [{key:'correction',header:'Correction',render:row=><button type="button" disabled={pendingSessionIds.includes(row.id)} onClick={()=>onRequestCorrection(row.session)} className="inline-flex min-h-11 items-center rounded-lg border border-line px-3 py-2 text-sm font-medium text-teal hover:bg-canvas disabled:opacity-50">{pendingSessionIds.includes(row.id) ? 'Awaiting review' : 'Edit duty time'}</button>}] : []),
   ];
 
   return (
@@ -82,8 +84,24 @@ export default function DtrDocument({ snapshot, verifiedHours = null, isApproved
         />
       </div>
 
+      {snapshot.supervisorVerification && <section className="mt-4 rounded-card border border-line bg-info-bg p-4 text-sm text-info-fg">
+        <h2 className="font-semibold">Supervisor's final monthly verification</h2>
+        <p className="mt-2">{formatHours(snapshot.supervisorVerification.seconds/3600)} verified by {snapshot.supervisorVerification.supervisorName}. {snapshot.supervisorVerification.creditScope==='month' ? `Whole month: ${snapshot.supervisorVerification.periodStart} to ${snapshot.supervisorVerification.periodEnd}` : `Duty credit date: ${snapshot.supervisorVerification.effectiveDate}`}.</p>
+        <p className="mt-2 whitespace-pre-wrap break-words">{snapshot.supervisorVerification.reason}</p>
+        <p className="mt-2 text-xs">Recorded QR hours remain visible separately. The final verified total reflects the supervisor's documented review.</p>
+      </section>}
+
       {dtrPolicy.includeAttendanceColumns!==false&&<Card title="Daily time records" className="mt-6">
+        {onRequestCorrection && <p className="mb-3 text-sm text-muted">Edit duty time proposes a correction for your supervisor. The displayed hours stay unchanged until the correction is approved and this DTR is regenerated.</p>}
+        <div className="hidden sm:block">
         <DataTable columns={columns} rows={rows} caption="Daily time-in and time-out records" empty="No attendance was recorded this month." />
+        </div>
+        <div className="space-y-3 sm:hidden">{rows.map(row=><article key={row.id} className="rounded-lg border border-line p-3">
+          <p className="text-sm font-semibold text-navy">{formatPolicyDate(row.session.date)}</p>
+          <dl className="my-3 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-xs text-muted">Time in</dt><dd>{row.timeIn}</dd></div><div><dt className="text-xs text-muted">Time out</dt><dd>{row.timeOut}</dd></div><div><dt className="text-xs text-muted">Hours</dt><dd>{row.hours}</dd></div></dl>
+          {row.note && <p className="mb-2 text-xs text-muted">{row.note}</p>}
+          {onRequestCorrection&&<button type="button" disabled={pendingSessionIds.includes(row.id)} onClick={()=>onRequestCorrection(row.session)} className="min-h-11 w-full rounded-lg border border-line px-3 py-2 text-sm font-medium text-teal disabled:opacity-50">{pendingSessionIds.includes(row.id) ? 'Awaiting review' : 'Edit duty time'}</button>}
+        </article>)}{!rows.length&&<p className="text-sm text-muted">No attendance was recorded this month.</p>}</div>
       </Card>}
 
       {isApprovedRevision&&dtrPolicy.includeVerifiedAdjustments!==false&&<p className="mt-4 text-sm text-muted">Supervisor-verified hours: {formatHours(verifiedHours)}</p>}

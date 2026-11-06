@@ -20,7 +20,7 @@ export async function effectiveEvents(userIds, { startDate, nextDate, timezone, 
         AND recorded_at < (($3::date + 2)::timestamp AT TIME ZONE $4) ORDER BY user_id,recorded_at,seq`,
     [userIds, startDate, nextDate, timezone]),
     db.query(`SELECT a.id,a.student_id,COALESCE(array_agg(s.event_id) FILTER(WHERE s.event_id IS NOT NULL),ARRAY[]::uuid[]) AS replaces_event_ids,
-        a.effective_events FROM attendance_adjustments a LEFT JOIN attendance_adjustment_sources s ON s.adjustment_id=a.id
+        a.effective_events, EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id) AS superseded FROM attendance_adjustments a LEFT JOIN attendance_adjustment_sources s ON s.adjustment_id=a.id
       WHERE a.student_id=ANY($1::uuid[]) AND (
         EXISTS(SELECT 1 FROM jsonb_array_elements(a.effective_events) x
           WHERE (x->>'recordedAt')::timestamptz >= (($2::date-2)::timestamp AT TIME ZONE $4)
@@ -39,6 +39,7 @@ export async function effectiveEvents(userIds, { startDate, nextDate, timezone, 
     result.get(e.user_id).push({ id: e.id, eventType: e.event_type, recordedAt: e.recorded_at, officeId: e.office_id });
   }
   for (const a of adjustments.rows) {
+    if (a.superseded) continue;
     const list = Array.isArray(a.effective_events) ? a.effective_events : [];
     for (const e of list) result.get(a.student_id)?.push({
       id: `adjustment:${a.student_id}:${e.id}`, eventType: e.eventType, recordedAt: new Date(e.recordedAt), officeId: e.officeId,
@@ -178,6 +179,10 @@ export async function explain({user,id,explanation,correction,ip}) {
     if(user.role!=='student'||row.student_id!==user.id) throw fail(403,'FORBIDDEN','Only the Student Assistant can submit an explanation.');
     if(!ACTIVE.includes(row.status)) throw fail(409,'INVALID_TRANSITION','This discrepancy is no longer accepting explanations.');
     if(correction){
+      if(row.original_details?.studentInitiated) {
+        correction.replacesEventIds=row.original_details.eventIds??[];
+        correction.replacesAdjustmentIds=row.proposed_correction?.replacesAdjustmentIds??[];
+      }
       const required=row.original_details?.eventIds??(row.original_details?.attendanceEventId?[row.original_details.attendanceEventId]:[]);
       const supplied=new Set(correction.replacesEventIds??[]);
       if(required.some(eventId=>!supplied.has(eventId))) throw fail(400,'CORRECTION_EVENTS_REQUIRED','Include the original attendance event(s) being corrected.');
@@ -197,8 +202,8 @@ export async function explain({user,id,explanation,correction,ip}) {
   });
 }
 
-async function reviewAction({user,id,action,remarks,ip,approve=false,reject=false,clarify=false}) {
-  return withTransaction(async db=>{
+async function reviewAction({user,id,action,remarks,ip,approve=false,reject=false,clarify=false}, transaction=withTransaction) {
+  return transaction(async db=>{
     const row=await rawRow(id,db,true);visible(row,user);
     if(user.role!=='supervisor' || row.office_id!==user.office?.id) throw fail(403,'FORBIDDEN','Only the assigned Office Supervisor can review this record.');
     if(!ACTIVE.includes(row.status)) throw fail(409,'INVALID_TRANSITION','This discrepancy has already been decided.');
@@ -209,11 +214,12 @@ async function reviewAction({user,id,action,remarks,ip,approve=false,reject=fals
       if(!row.proposed_correction?.events?.length) throw fail(400,'CORRECTION_REQUIRED','The student must submit proposed clock times before a correction can be approved.');
       const proposal=row.proposed_correction;
       await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance-correction:${row.student_id}`]);
+      await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance:${row.student_id}`]);
       const events=proposal.events.map(e=>({id:crypto.randomUUID(),eventType:e.eventType,recordedAt:new Date(e.recordedAt).toISOString(),officeId:row.office_id}));
       if(events.length!==2 || events[0].eventType!=='time_in'||events[1].eventType!=='time_out' || new Date(events[0].recordedAt)>=new Date(events[1].recordedAt))
         throw fail(400,'INVALID_CORRECTION','A correction must contain one valid clock-in and a later clock-out.');
       const start=new Date(events[0].recordedAt),end=new Date(events[1].recordedAt);
-      if((end-start)/3600000>12 || start>new Date() || end>new Date()) throw fail(400,'INVALID_CORRECTION','Corrected times must be in the past and no longer than 12 hours.');
+      if((end-start)/3600000>env.maxSessionHours || start>new Date() || end>new Date()) throw fail(400,'INVALID_CORRECTION',`Corrected times must be in the past and no longer than ${env.maxSessionHours} hours.`);
       const {rows:policyRows}=await db.query(`SELECT timezone,attendance_early_tolerance_minutes,attendance_late_tolerance_minutes
         FROM institutions WHERE id=$1`,[row.institution_id]);
       const timezone=policyRows[0]?.timezone??'UTC';
@@ -221,8 +227,18 @@ async function reviewAction({user,id,action,remarks,ip,approve=false,reject=fals
       if(row.shift_date && localDateKey(start,timezone)!==String(row.shift_date).slice(0,10))
         throw fail(400,'INVALID_CORRECTION','The corrected clock-in must be on the date of the approved duty shift.');
       const replaceIds=proposal.replacesEventIds??[];
+      const replaceAdjustmentIds=proposal.replacesAdjustmentIds??[];
+      const replacedEffectiveIds=new Set(replaceIds);
+      for(const adjustmentId of replaceAdjustmentIds){
+        const old=await db.query(`SELECT a.effective_events FROM attendance_adjustments a
+          WHERE a.id=$1 AND a.student_id=$2 AND a.office_id=$3
+          AND NOT EXISTS(SELECT 1 FROM attendance_adjustment_replacements r WHERE r.replaced_adjustment_id=a.id)`,
+          [adjustmentId,row.student_id,row.office_id]);
+        if(!old.rowCount) throw fail(409,'STALE_ATTENDANCE','This attendance correction has changed. Refresh and try again.');
+        for(const e of old.rows[0].effective_events) replacedEffectiveIds.add(`adjustment:${row.student_id}:${e.id}`);
+      }
       if(replaceIds.length){
-        const owned=await db.query(`SELECT count(*)::int n FROM attendance_events WHERE user_id=$1 AND id=ANY($2::uuid[])`,[row.student_id,replaceIds]);
+        const owned=await db.query(`SELECT count(*)::int n FROM attendance_events WHERE user_id=$1 AND id=ANY($2::uuid[]) AND office_id=$3`,[row.student_id,replaceIds,row.office_id]);
         if(owned.rows[0].n!==replaceIds.length) throw fail(400,'INVALID_CORRECTION','The correction references an attendance event that does not belong to this student.');
         const reused=await db.query('SELECT 1 FROM attendance_adjustment_sources WHERE event_id=ANY($1::uuid[]) LIMIT 1',[replaceIds]);
         if(reused.rowCount) throw fail(409,'EVENT_ALREADY_ADJUSTED','An original attendance event can only be adjusted once.');
@@ -237,17 +253,17 @@ async function reviewAction({user,id,action,remarks,ip,approve=false,reject=fals
       const month=localDateKey(start,env.timezone).slice(0,7);
       const nextMonth=month.endsWith('-12')?`${Number(month.slice(0,4))+1}-01`:`${month.slice(0,5)}${String(Number(month.slice(5))+1).padStart(2,'0')}`;
       const current=await effectiveEvents([row.student_id],{startDate:`${month}-01`,nextDate:`${nextMonth}-01`,timezone:env.timezone,db});
-      const replaceSet=new Set(replaceIds);
+      const replaceSet=replacedEffectiveIds;
       const remaining=(current.get(row.student_id)??[]).filter(e=>!replaceSet.has(e.id));
       const now=(await db.query('SELECT now() AS now')).rows[0].now;
       const byOffice=new Map();for(const e of remaining){const office=e.officeId??row.office_id;if(!byOffice.has(office))byOffice.set(office,[]);byOffice.get(office).push(e);}
-      const sessions=[...byOffice.values()].flatMap(list=>buildSessions(list,{now,timeZone:timezone,maxSessionSeconds:12*3600}));
+      const sessions=[...byOffice.values()].flatMap(list=>buildSessions(list,{now,timeZone:timezone,maxSessionSeconds:env.maxSessionHours*3600}));
       if(sessions.some(s=>s.status==='in_progress')) throw fail(409,'ACTIVE_ATTENDANCE','Wait until the active attendance session is closed before approving a correction.');
       if(sessions.some(s=>s.counted&&s.timeIn&&s.timeOut&&sessionsOverlap({start:s.timeIn,end:s.timeOut},{start,end})))
         throw fail(409,'ATTENDANCE_OVERLAP','The proposed times overlap another attendance session, including one at another office.');
       const existingByOffice=new Map();
       for(const [office,officeEvents] of byOffice){
-        const officeSessions=buildSessions(officeEvents,{now,timeZone:timezone,maxSessionSeconds:12*3600}).filter(s=>s.counted&&s.timeIn&&s.timeOut);
+        const officeSessions=buildSessions(officeEvents,{now,timeZone:timezone,maxSessionSeconds:env.maxSessionHours*3600}).filter(s=>s.counted&&s.timeIn&&s.timeOut);
         existingByOffice.set(office,officeSessions);
       }
       if([...existingByOffice.values()].flat().some(s=>sessionsOverlap({start:s.timeIn,end:s.timeOut},{start,end})))
@@ -264,28 +280,31 @@ async function reviewAction({user,id,action,remarks,ip,approve=false,reject=fals
         [row.original_details.recoveryShiftId,row.student_id,row.institution_id,row.office_id,row.shift_date]);
         if(!recovery.rowCount) throw fail(409,'SCHEDULE_CHANGED','The approved recovery shift changed after this discrepancy was created.');
       }
-      const existingDtr=await db.query(`SELECT id,verified_seconds FROM monthly_dtrs WHERE user_id=$1 AND month=$2 AND status='approved' FOR UPDATE`,[row.student_id,month]);
+      const existingDtr=await db.query(`SELECT d.id,d.verified_seconds,r.snapshot FROM monthly_dtrs d
+        JOIN dtr_revisions r ON r.dtr_id=d.id AND r.revision_no=d.verified_revision
+        WHERE d.user_id=$1 AND d.month=$2 AND d.status='approved' FOR UPDATE OF d`,[row.student_id,month]);
       let verifiedDelta=0;
       if(existingDtr.rowCount){
         const beforeMap=await effectiveEvents([row.student_id],{startDate:`${month}-01`,nextDate:`${nextMonth}-01`,timezone:env.timezone,db});
         const nowResult=await db.query('SELECT now() AS now');
-        const beforeSessions=buildSessions(beforeMap.get(row.student_id),{now:nowResult.rows[0].now,timeZone:env.timezone,maxSessionSeconds:12*3600});
+        const beforeSessions=buildSessions(beforeMap.get(row.student_id),{now:nowResult.rows[0].now,timeZone:env.timezone,maxSessionSeconds:env.maxSessionHours*3600});
         const beforeSecs=beforeSessions.reduce((n,s)=>n+(s.counted&&s.date.startsWith(`${month}-`)?s.seconds:0),0);
-        const replaced=new Set(replaceIds);
+        const replaced=replacedEffectiveIds;
         const afterEvents=(beforeMap.get(row.student_id)??[]).filter(e=>!replaced.has(e.id));
         afterEvents.push(...events.map((e,index)=>({id:`pending-correction-${id}-${index}`,eventType:e.eventType,recordedAt:new Date(e.recordedAt)})));
         afterEvents.sort((a,b)=>new Date(a.recordedAt)-new Date(b.recordedAt));
-        const afterSessions=buildSessions(afterEvents,{now:nowResult.rows[0].now,timeZone:env.timezone,maxSessionSeconds:12*3600});
+        const afterSessions=buildSessions(afterEvents,{now:nowResult.rows[0].now,timeZone:env.timezone,maxSessionSeconds:env.maxSessionHours*3600});
         const afterSecs=afterSessions.reduce((n,s)=>n+(s.counted&&s.date.startsWith(`${month}-`)?s.seconds:0),0);
         const previousAdjustments=await db.query('SELECT coalesce(sum(verified_delta_seconds),0)::int AS seconds FROM attendance_adjustments WHERE student_id=$1 AND dtr_month=$2',[row.student_id,month]);
         const currentVerified=Number(existingDtr.rows[0].verified_seconds)+Number(previousAdjustments.rows[0].seconds);
-        verifiedDelta=afterSecs-currentVerified;
+        verifiedDelta=existingDtr.rows[0].snapshot?.supervisorVerification ? afterSecs-beforeSecs : afterSecs-currentVerified;
       }
       // Approved corrections are represented separately; a finalized DTR is not edited in place.
       const adjustment=await db.query(`INSERT INTO attendance_adjustments(discrepancy_id,institution_id,student_id,office_id,effective_events,dtr_month,approved_by,verified_delta_seconds)
         VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8) RETURNING id`,[id,row.institution_id,row.student_id,row.office_id,
         JSON.stringify(events),existingDtr.rowCount?month:null,user.id,verifiedDelta]);
       for(const eventId of replaceIds) await db.query('INSERT INTO attendance_adjustment_sources(adjustment_id,event_id) VALUES($1,$2)',[adjustment.rows[0].id,eventId]);
+      for(const oldId of replaceAdjustmentIds) await db.query('INSERT INTO attendance_adjustment_replacements(adjustment_id,replaced_adjustment_id) VALUES($1,$2)',[adjustment.rows[0].id,oldId]);
       await db.query(`UPDATE attendance_discrepancies SET status='approved_correction',supervisor_decision='approved',supervisor_remarks=$2,
         reviewer_id=$3,reviewed_at=now(),resolved_at=now(),updated_at=now() WHERE id=$1`,[id,remarks,user.id]);
       await addHistory(db,id,user.id,'correction_approved',row.status,'approved_correction',remarks,{adjustmentApplied:true});
@@ -319,6 +338,90 @@ export const approve=(args)=>reviewAction({...args,action:'correction_approved',
 export const reject=(args)=>reviewAction({...args,action:'correction_rejected',reject:true});
 export const requestClarification=(args)=>reviewAction({...args,action:'clarification_requested',clarify:true});
 export const resolve=(args)=>reviewAction({...args,action:'resolved'});
+
+/** Supervisor-originated amendment; it does not require a student request or schedule. */
+export async function correctDutyTime({user,studentId,sessionId,originalTimeIn,originalTimeOut,events,remarks,dtrId,ip}) {
+  const studentRequest=user.role==='student';
+  if(!['student','supervisor'].includes(user.role)||!user.office?.id) throw fail(403,'FORBIDDEN','An assigned student or Office Supervisor is required.');
+  if(studentRequest) studentId=user.id;
+  return withTransaction(async db=>{
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance-correction:${studentId}`]);
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`attendance:${studentId}`]);
+    const student=await db.query(`SELECT u.id FROM users u JOIN duty_assignments d ON d.user_id=u.id AND d.ends_on IS NULL
+      WHERE u.id=$1 AND u.role='student' AND u.institution_id=$2 AND d.office_id=$3 FOR SHARE OF u,d`,
+      [studentId,user.institutionId,user.office.id]);
+    if(!student.rowCount) throw fail(404,'NOT_FOUND','Student Assistant not found in your office.');
+    const policy=await db.query('SELECT timezone,now() AS now FROM institutions WHERE id=$1',[user.institutionId]);
+    const timezone=policy.rows[0].timezone;
+    const start=new Date(events[0].recordedAt);
+    const end=new Date(events[1].recordedAt);
+    if(start>=end || end>new Date() || (end-start)/3600000>env.maxSessionHours)
+      throw fail(400,'INVALID_CORRECTION',`Enter past clock times in order, no longer than ${env.maxSessionHours} hours.`);
+    const date=localDateKey(start,timezone);
+    if(date.slice(0,7)!==localDateKey(end,timezone).slice(0,7)) throw fail(400,'INVALID_CORRECTION','A corrected session cannot cross a month boundary.');
+    const month=date.slice(0,7);
+    const nextMonth=month.endsWith('-12')?`${Number(month.slice(0,4))+1}-01`:`${month.slice(0,5)}${String(Number(month.slice(5))+1).padStart(2,'0')}`;
+    const map=await effectiveEvents([studentId],{startDate:`${month}-01`,nextDate:`${nextMonth}-01`,timezone,db});
+    const officeEvents=(map.get(studentId)??[]).filter(e=>e.officeId===user.office.id);
+    const replacesEventIds=[];
+    const replacesAdjustmentIds=[];
+    let original=null;
+    if(sessionId){
+      const sessions=buildSessions(officeEvents,{now:policy.rows[0].now,timeZone:timezone,maxSessionSeconds:env.maxSessionHours*3600});
+      original=sessions.find(s=>s.id===sessionId);
+      if(!original||original.timeIn!==(originalTimeIn??null)||original.timeOut!==(originalTimeOut??null))
+        throw fail(409,'STALE_ATTENDANCE','Attendance changed. Refresh the student attendance and try again.');
+      if(original.date!==date) throw fail(400,'INVALID_CORRECTION','Keep the corrected clock-in on the original duty date.');
+      const sourceEvents=officeEvents.filter(e=>e.id===original.id||
+        (original.timeOut&&e.eventType==='time_out'&&e.recordedAt.toISOString()===original.timeOut));
+      for(const e of sourceEvents){
+        if(e.adjusted){
+          const eventId=e.id.split(':').at(-1);
+          const source=await db.query(`SELECT id FROM attendance_adjustments WHERE student_id=$1 AND office_id=$2
+            AND EXISTS(SELECT 1 FROM jsonb_array_elements(effective_events) x WHERE x->>'id'=$3)`,[studentId,user.office.id,eventId]);
+          if(source.rows[0]&&!replacesAdjustmentIds.includes(source.rows[0].id)) replacesAdjustmentIds.push(source.rows[0].id);
+        }else replacesEventIds.push(e.id);
+      }
+    }
+    const proposal={events,replacesEventIds,replacesAdjustmentIds};
+    if(dtrId&&!studentRequest){
+      const ownedDtr=await db.query(`SELECT d.id FROM monthly_dtrs d JOIN users u ON u.id=d.user_id
+        WHERE d.id=$1 AND d.user_id=$2 AND u.institution_id=$3
+        AND d.office_id=$4 AND d.month=$5 AND d.status='under_review' FOR UPDATE OF d`,[dtrId,studentId,user.institutionId,user.office.id,localDateKey(start,env.timezone).slice(0,7)]);
+      if(!ownedDtr.rowCount) throw fail(404,'NOT_FOUND','DTR under review not found in your office.');
+    }
+    if(studentRequest){
+      if(!sessionId||!original||!dtrId) throw fail(400,'SESSION_REQUIRED','Select an existing DTR session to request a correction.');
+      const dtr=await db.query(`SELECT d.id FROM monthly_dtrs d JOIN users u ON u.id=d.user_id WHERE d.id=$1 AND d.user_id=$2
+        AND u.institution_id=$3 AND d.office_id=$4 AND d.month=$5 FOR UPDATE OF d`,[dtrId,user.id,user.institutionId,user.office.id,localDateKey(start,env.timezone).slice(0,7)]);
+      if(!dtr.rowCount) throw fail(404,'NOT_FOUND','Your monthly DTR was not found for this session.');
+      const editing=await db.query(`SELECT 1 FROM monthly_dtrs d JOIN dtr_events e ON e.dtr_id=d.id AND e.revision_no=d.current_revision
+        WHERE d.id=$1 AND d.status='under_review' AND e.action='review_started' AND e.reason LIKE '[Supervisor editing] %'`,[dtrId]);
+      if(editing.rowCount) throw fail(409,'SUPERVISOR_EDITING','Your supervisor is editing this DTR. Please wait for their decision.');
+      const pending=await db.query(`SELECT id FROM attendance_discrepancies WHERE student_id=$1
+        AND status IN ('open','explanation_submitted','under_review') AND original_details->'originalSession'->>'id'=$2`,[user.id,sessionId]);
+      if(pending.rowCount) throw fail(409,'CORRECTION_PENDING','A correction for this session is already awaiting review.');
+    }
+    const {rows:[created]}=await db.query(`INSERT INTO attendance_discrepancies
+      (institution_id,student_id,office_id,shift_date,discrepancy_type,dedupe_key,status,original_details,detection_reason,proposed_correction)
+      VALUES($1,$2,$3,$4,'outside_assigned_shift',$5,'under_review',$6::jsonb,$7,$8::jsonb) RETURNING id`,
+      [user.institutionId,studentId,user.office.id,date,`supervisor-correction:${crypto.randomUUID()}`,
+        JSON.stringify({timezone,supervisorInitiated:!studentRequest,studentInitiated:studentRequest,dtrId:dtrId??null,originalSession:original,eventIds:replacesEventIds}),
+        studentRequest?'Student requested a correction to QR-recorded duty time.':'Office Supervisor initiated a duty-time correction.',JSON.stringify(proposal)]);
+    if(studentRequest){
+      await db.query('UPDATE attendance_discrepancies SET student_explanation=$2,explanation_submitted_at=now() WHERE id=$1',[created.id,remarks]);
+      await addHistory(db,created.id,user.id,'correction_requested',null,'under_review',remarks,{originalSession:original,proposedCorrection:proposal,dtrId});
+      await notifyOfficeSupervisors(db,{officeId:user.office.id,institutionId:user.institutionId,type:'attendance_correction_requested',
+        title:'DTR time correction needs review',message:`${user.fullName} requested corrected duty times. ${remarks}`,
+        relatedType:'attendance_discrepancy',relatedId:created.id,important:true,dedupeKey:`student-correction:${created.id}`});
+      await recordAudit({actorId:user.id,institutionId:user.institutionId,action:'attendance_discrepancy.correction_requested',
+        targetType:'attendance_discrepancy',targetId:created.id,after:{dtrId,proposedCorrection:proposal},ip},db);
+      return detail({user,id:created.id},db);
+    }
+    await addHistory(db,created.id,user.id,'supervisor_correction_created',null,'under_review',remarks,{originalSession:original,proposedCorrection:proposal});
+    return reviewAction({user,id:created.id,action:'correction_approved',remarks,ip,approve:true},fn=>fn(db));
+  });
+}
 
 async function upsertDetection(db, data) {
   const attendanceEventId=typeof data.eventId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.eventId)?data.eventId:null;

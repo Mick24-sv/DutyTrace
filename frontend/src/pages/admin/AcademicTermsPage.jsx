@@ -1,6 +1,6 @@
+import {Save as UIActionSave,CalendarDays as UIActionCalendarDays,PlusCircle as UIActionPlusCircle,LockKeyhole as UIActionLockKeyhole} from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { CalendarRange, LockKeyhole } from 'lucide-react';
+import { CalendarRange } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -65,7 +65,7 @@ function RequirementRow({ student, offices, locked, reload, mobile = false }) {
           <label className="block text-xs font-medium text-muted">Required hours
             <input type="number" min="0.01" max="10000" step="0.01" aria-label={`Required semester hours for ${student.fullName}`} placeholder="No requirement" className={`${field} mt-1`} value={hours} onChange={(event) => setHours(event.target.value)} disabled={locked} />
           </label>
-          <Button type="button" className="w-full" onClick={save} disabled={locked || busy || !officeId}>
+          <Button icon={UIActionSave} type="button" className="w-full" onClick={save} disabled={locked || busy || !officeId}>
             {busy ? 'Saving…' : hours === '' && student.requiredHours != null ? 'Remove requirement' : 'Save requirement'}
           </Button>
           {error && <p role="alert" className="text-xs text-bad-fg">{error}</p>}
@@ -107,7 +107,7 @@ function RequirementRow({ student, offices, locked, reload, mobile = false }) {
         />
       </td>
       <td className="py-3">
-        <Button type="button" onClick={save} disabled={locked || busy || !officeId}>
+        <Button icon={UIActionSave} type="button" onClick={save} disabled={locked || busy || !officeId}>
           {busy ? 'Saving…' : hours === '' && student.requiredHours != null ? 'Remove' : 'Save'}
         </Button>
         {error && <p role="alert" className="mt-1 text-xs text-bad-fg">{error}</p>}
@@ -204,7 +204,7 @@ export default function AcademicTermsPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader icon={UIActionCalendarDays}
         title="Academic Terms"
         description={`${user?.institution?.name ?? 'Institution'} academic calendar and Student Assistant semester requirements.`}
       />
@@ -220,7 +220,7 @@ export default function AcademicTermsPage() {
             <p className="mt-1 text-xs text-muted">Used for QR scan times and attendance history. Select Philippine time (Asia/Manila) for offices in the Philippines, then save institution settings.</p>
           </div>
           {institutionMessage && <p role={institutionMessage.ok ? 'status' : 'alert'} className={`sm:col-span-2 text-sm ${institutionMessage.ok ? 'text-ok-fg' : 'text-bad-fg'}`}>{institutionMessage.text}</p>}
-          <div><Button type="submit" disabled={institutionBusy}>{institutionBusy ? 'Saving…' : 'Save institution settings'}</Button></div>
+          <div><Button icon={UIActionSave} type="submit" disabled={institutionBusy}>{institutionBusy ? 'Saving…' : 'Save institution settings'}</Button></div>
         </form>
         {institution.error && <p role="alert" className="mt-2 text-sm text-bad-fg">{institution.error}</p>}
       </Card>
@@ -228,12 +228,12 @@ export default function AcademicTermsPage() {
         {termsQuery.loading && <p role="status" className="text-sm text-muted">Loading academic terms…</p>}
         {termsQuery.error && <p role="alert" className="text-sm text-bad-fg">{termsQuery.error}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={() => setSelectedId('')}>Create term</Button>
+          <Button icon={UIActionPlusCircle} type="button" onClick={() => setSelectedId('')}>Create term</Button>
           <select
             aria-label="Choose academic term to edit"
             value={selectedId}
             onChange={(event) => setSelectedId(event.target.value)}
-            className="min-w-64 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-2 text-base sm:w-auto sm:min-w-64 sm:text-sm"
           >
             <option value="">New academic term</option>
             {terms.map((term) => (
@@ -272,15 +272,18 @@ export default function AcademicTermsPage() {
           <div>
             <label htmlFor="term-timezone" className="mb-1 block text-xs font-medium text-muted">Academic term timezone</label>
             <TimezoneSelect id="term-timezone" className={field} value={form.timezone} onChange={set('timezone')} required disabled={Boolean(selected?.finalizedAt)} />
-            <p className="mt-1 text-xs text-muted">Used for this term's schedule and deadlines. To change QR scan display times, update Institution settings above.</p>
+            <p className="mt-1 text-xs text-muted">Used for this term's dates and deadlines. To change QR scan display times, update Institution settings above.</p>
           </div>
           {error && <p role="alert" className="sm:col-span-2 text-sm text-bad-fg">{error}</p>}
           <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <Button type="submit" disabled={busy || Boolean(selected?.finalizedAt)}>{busy ? 'Saving…' : 'Save term'}</Button>
+            <Button icon={UIActionSave} type="submit" disabled={busy || Boolean(selected?.finalizedAt)}>{busy ? 'Saving…' : 'Save term'}</Button>
             {selected && !selected.finalizedAt && (
-              <Link to="/admin/semester-transitions" className="inline-flex items-center rounded-lg bg-navy px-3 py-2 text-sm font-medium text-white hover:bg-navy/90">
-                <LockKeyhole className="mr-2 inline h-4 w-4" /> Open semester transition planner
-              </Link>
+              <Button icon={UIActionLockKeyhole} type="button" disabled={busy} onClick={async () => {
+                if (!window.confirm('Finalize this term? Its dates and student requirements will become read-only.')) return;
+                setBusy(true); setError('');
+                try { await apiPost('/semesters/' + selected.id + '/finalize', {}); reload(); }
+                catch (err) { setError(err.message); } finally { setBusy(false); }
+              }}>Finalize term</Button>
             )}
           </div>
         </form>

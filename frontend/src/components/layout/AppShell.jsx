@@ -3,18 +3,17 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import AppFooter from './AppFooter.jsx';
-import { ROLE_CONFIG } from '../../routes/navConfig.js';
+import { ROLE_CONFIG, matchesSection } from '../../routes/navConfig.js';
 
 // The authenticated-app frame: sidebar + top bar + page content.
 export default function AppShell({ role }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { pathname } = useLocation();
   const config = ROLE_CONFIG[role];
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
 
   // Page title = the nav item whose path matches the current URL.
-  const current = config.nav.find((item) =>
-    item.to ? pathname.startsWith(`${config.base}/${item.to}`) : pathname === config.base,
-  );
+  const current = config.nav.find(item => matchesSection(config, item, pathname));
 
   useEffect(() => {
     document.title = `${current?.label ?? 'Page'} · DutyTrace`;

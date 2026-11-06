@@ -29,6 +29,10 @@ const createSchema = z.object({
 });
 
 historicalDutyHoursRouter.get('/options', requireRole('supervisor'), asyncHandler(async (req, res) => ok(res, await historical.options(req.user))));
+historicalDutyHoursRouter.get('/eligibility', requireRole('supervisor'), asyncHandler(async (req,res)=>{
+  const input=parse(z.object({studentId:z.string().uuid(),termId:z.string().uuid(),month:monthKey}),req.query);
+  ok(res,await historical.eligibility(req.user,input));
+}));
 historicalDutyHoursRouter.get('/mine', requireRole('supervisor'), asyncHandler(async (req, res) => ok(res, { items: await historical.listForSupervisor(req.user) })));
 historicalDutyHoursRouter.post('/', requireRole('supervisor'), asyncHandler(async (req, res) => {
   ok(res, { item: await historical.create({ actor: req.user, input: parse(createSchema, req.body ?? {}), ip: req.ip }) }, 201);

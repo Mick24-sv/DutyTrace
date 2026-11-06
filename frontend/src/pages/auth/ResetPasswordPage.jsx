@@ -1,3 +1,4 @@
+import {Send as UIActionSend} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
@@ -134,7 +135,7 @@ export default function ResetPasswordPage() {
                 Password must be at least 10 characters.
               </p>
 
-              <Button type="submit" className="w-full" disabled={submitting}>
+              <Button icon={UIActionSend} type="submit" className="w-full" disabled={submitting}>
                 {submitting ? 'Saving…' : 'Set new password'}
               </Button>
             </form>

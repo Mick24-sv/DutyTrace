@@ -1,3 +1,5 @@
+import {CalendarOff as UIActionCalendarOff} from 'lucide-react';
+import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search } from 'lucide-react';
@@ -30,7 +32,8 @@ export default function AbsenceQueuePage() {
 
   return (
     <>
-      <PageHeader
+      <SectionLinks links={[['/supervisor' + '/absences', 'Absence notices'], ['/supervisor' + '/cases', 'Compliance cases']]} />
+      <PageHeader icon={UIActionCalendarOff}
         title="Absence Notices"
         description={user.office ? `Notices from Student Assistants in ${user.office.name}. A notice is information for you; it does not excuse an absence.` : 'You are not assigned to an office yet.'}
       >

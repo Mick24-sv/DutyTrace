@@ -1,3 +1,4 @@
+import {QrCode as UIActionQrCode} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Printer, QrCode, RefreshCw, ShieldOff } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
@@ -52,7 +53,7 @@ export default function QrCodesPage() {
 
   return (
     <>
-      <PageHeader title="Office QR Codes" description="Each office has one valid QR code. Print it and post it at the office.">
+      <PageHeader icon={UIActionQrCode} title="Office QR Codes" description="Each office has one valid QR code. Print it and post it at the office.">
         <div className="no-print">
           <label htmlFor="office" className="mb-1 block text-xs font-medium text-muted">Office</label>
           <select

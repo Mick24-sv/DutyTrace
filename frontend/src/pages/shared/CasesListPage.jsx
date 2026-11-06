@@ -1,3 +1,5 @@
+import {FolderCheck as UIActionFolderCheck} from 'lucide-react';
+import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -56,7 +58,8 @@ export default function CasesListPage() {
 
   return (
     <>
-      <PageHeader title="Compliance Cases" description={DESCRIPTION[user.role]}>
+      <SectionLinks links={isAdmin ? [['/admin/settings', 'Back to settings'], ['/admin/cases', 'Compliance cases']] : [[`/${user.role}/absences`, 'Absence notices'], [`/${user.role}/cases`, 'Compliance cases']]} />
+      <PageHeader icon={UIActionFolderCheck} title="Compliance Cases" description={DESCRIPTION[user.role]}>
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="case-filter" className="mb-1 block text-xs font-medium text-muted">Status</label>

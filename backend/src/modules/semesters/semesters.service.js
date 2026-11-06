@@ -7,6 +7,7 @@ import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { calculateSemesterProgress, verifiedSecondsForTerm } from './semester.rules.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-duty-hours.service.js';
+import { semesterStatus } from './semester-status.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const roundHours = (seconds) => Math.round((seconds / 3600) * 100) / 100;
@@ -134,16 +135,14 @@ export async function saveTerm({ actor, termId, input, ip }) {
 
 export async function finalizeTerm({ actor, termId, ip }) {
   return withTransaction(async (db) => {
+    await db.query('SELECT id FROM academic_terms WHERE id=$1 FOR UPDATE', [termId]);
     const current = await requireTerm(termId, actor.institutionId, db);
     if (current.finalized_at) throw new AppError(409, 'TERM_FINALIZED', 'This academic term is already finalized.');
-    const { rows: [settings] } = await db.query(
-      `SELECT semester_transition_policy FROM institution_duty_requirement_settings WHERE institution_id=$1`,
-      [actor.institutionId],
-    );
-    if (!settings?.semester_transition_policy) {
-      throw new AppError(409, 'TRANSITION_POLICY_REQUIRED', 'Configure a semester transition policy and finalize this term through the Semester Transition Planner.');
-    }
-    throw new AppError(409, 'TRANSITION_PLANNER_REQUIRED', 'Academic terms can only be closed through a reviewed Semester Transition Planner preview.');
+    const {rows:[updated]} = await db.query(`UPDATE academic_terms SET finalized_at=now(),finalized_by=$2
+      WHERE id=$1 RETURNING *`, [termId, actor.id]);
+    await recordAudit({actorId:actor.id,institutionId:actor.institutionId,action:'academic_term.finalized',
+      targetType:'academic_term',targetId:termId,before:mapTerm(current),after:mapTerm(updated),ip},db);
+    return mapTerm(updated);
   });
 }
 
@@ -282,6 +281,9 @@ async function progressForStudents(term, students, now) {
     ) + (adjustedVerified.get(student.id) ?? 0) + (historicalVerified.get(student.id) ?? 0);
     const verifiedHours = roundHours(verifiedSeconds);
     const requirement = requirements.get(student.id);
+    const progress=calculateSemesterProgress({
+      requiredHours:requirement?.required_hours!=null?Number(requirement.required_hours):null,verifiedHours,
+    });
     return {
       id: student.id,
       fullName: student.full_name,
@@ -290,10 +292,9 @@ async function progressForStudents(term, students, now) {
       officeName: student.office_name,
       recordedHours: roundHours(recordedSeconds),
       historicalHours: roundHours(historicalVerified.get(student.id) ?? 0),
-      ...calculateSemesterProgress({
-        requiredHours: requirement?.required_hours != null ? Number(requirement.required_hours) : null,
-        verifiedHours,
-      }),
+      semesterStatus:semesterStatus({...progress,deadline:term.completion_deadline,termEnd:term.ends_on,today:localDateKey(now,term.timezone),
+        sessions:sessions.filter(s=>s.date>=term.starts_on&&s.date<=term.ends_on)}),
+      ...progress,
       requirementAssignedAt: requirement?.assigned_at ?? null,
     };
   });

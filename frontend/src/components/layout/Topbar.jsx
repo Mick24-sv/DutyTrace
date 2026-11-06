@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Building2, ChevronDown, LogOut, Mail, Menu } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Building2, ChevronDown, LogOut, Mail, Menu, UserRound } from 'lucide-react';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
-
-const initials = (name) =>
-  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+import UserAvatar from '../ui/UserAvatar.jsx';
 
 export default function Topbar({ role, title, onMenu }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -57,12 +55,7 @@ export default function Topbar({ role, title, onMenu }) {
           aria-label="Account menu"
           className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-canvas sm:rounded-xl sm:bg-canvas sm:px-3"
         >
-          <span
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-xs font-semibold text-white sm:h-10 sm:w-10"
-            aria-hidden="true"
-          >
-            {initials(user.fullName)}
-          </span>
+          <UserAvatar user={user} className="h-9 w-9 text-xs sm:h-10 sm:w-10"/>
           <span className="hidden text-left leading-tight sm:block">
             <span className="block text-sm font-medium">{user.fullName}</span>
             <span className="block text-xs text-muted">{ROLE_CONFIG[role].label}</span>
@@ -76,7 +69,7 @@ export default function Topbar({ role, title, onMenu }) {
             className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-xl sm:w-96"
           >
             <div className="flex items-center gap-4 border-b border-line px-5 py-5 sm:px-6 sm:py-6">
-              <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-navy text-lg font-semibold text-white" aria-hidden="true">{initials(user.fullName)}</span>
+              <UserAvatar user={user} className="h-14 w-14 text-lg"/>
               <div className="min-w-0">
                 <p className="break-words text-lg font-semibold leading-tight text-navy">{user.fullName}</p>
                 <p className="mt-1 text-sm text-muted">{ROLE_CONFIG[role].label}</p>
@@ -98,6 +91,7 @@ export default function Topbar({ role, title, onMenu }) {
                 </div>
               </div>}
               <div className="border-t border-line pt-4">
+                {role==='student'&&<Link to="/student/profile" role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>Edit my profile</Link>}
                 <button
                   type="button"
                   role="menuitem"

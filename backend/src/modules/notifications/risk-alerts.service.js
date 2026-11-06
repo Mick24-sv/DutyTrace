@@ -279,7 +279,7 @@ async function notifyUpcomingApprovedShifts(institutionId,policy){
   return created;
 }
 
-async function deliverPendingEmailAlerts(limit=50){
+export async function deliverPendingEmailAlerts(limit=50){
   if(!emailConfigured()) return {sent:0,failed:0};
   await query(`UPDATE notification_deliveries SET status='failed',next_attempt_at=now(),updated_at=now(),
       last_error=COALESCE(last_error,'Previous worker exited before confirming delivery')
@@ -290,6 +290,8 @@ async function deliverPendingEmailAlerts(limit=50){
       const {rows:[delivery]}=await db.query(`SELECT d.id,d.notification_id,n.title,n.message,n.action_url,u.email
         FROM notification_deliveries d JOIN notifications n ON n.id=d.notification_id JOIN users u ON u.id=n.recipient_id
         WHERE d.channel='email' AND d.status IN('pending','failed') AND d.attempt_count<8 AND d.next_attempt_at<=now()
+          AND COALESCE(n.related_type,'') NOT IN ('duty_schedule','duty_recovery_plan','semester_transition')
+          AND n.type !~ '^(completion|upcoming|recovery|schedule|semester_transition)'
         ORDER BY d.next_attempt_at,d.id FOR UPDATE OF d SKIP LOCKED LIMIT 1`);
       if(!delivery)return null;
       await db.query(`UPDATE notification_deliveries SET status='processing',attempt_count=attempt_count+1,last_attempt_at=now(),updated_at=now() WHERE id=$1`,[delivery.id]);

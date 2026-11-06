@@ -8,6 +8,7 @@ import { formatDateKey, formatDuration, formatHours, formatTime } from '../../ut
 import { apiGet } from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { findEligibleDiscrepancy } from '../../utils/discrepancyNavigation.js';
+import DutyTimeEditor from './DutyTimeEditor.jsx';
 
 const FLAG_TEXT = { crosses_midnight: 'crosses midnight' };
 const DAYS_PER_PAGE = 7;
@@ -26,7 +27,10 @@ export default function AttendanceHistory({ endpoint }) {
   const [correctionState, setCorrectionState] = useState({ busyDate: '', message: '' });
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data, loading, error } = useApiData(`${endpoint}${month ? `?month=${month}` : ''}`);
+  const [editor, setEditor] = useState(null);
+  const [refresh, setRefresh] = useState(0);
+  const { data, loading, error } = useApiData(`${endpoint}?refresh=${refresh}${month ? `&month=${month}` : ''}`);
+  const canEdit = user?.role === 'supervisor' && data?.user?.role === 'student' && data.user.office?.id === user.office?.id;
   const tz = data?.timezone;
   useEffect(() => { setPage(1); }, [endpoint]);
 
@@ -43,7 +47,7 @@ export default function AttendanceHistory({ endpoint }) {
         navigate(`/student/discrepancies?date=${encodeURIComponent(date)}`);
         return;
       }
-      setCorrectionState({ busyDate: '', message: 'No open correction request is available for this date. Requests can be made when an approved duty shift has a detected attendance discrepancy.' });
+      setCorrectionState({ busyDate: '', message: 'No open correction request exists for this session. Ask your office supervisor to correct it from your attendance history.' });
     } catch (err) {
       setCorrectionState({ busyDate: '', message: err.message });
     }
@@ -56,7 +60,9 @@ export default function AttendanceHistory({ endpoint }) {
   const visibleDays = days.slice(pageStart, pageStart + DAYS_PER_PAGE);
   const sessionDuration = (session) => session.seconds == null ? '—'
     : session.seconds < 60 && session.counted ? '< 1 m' : formatDuration(session.seconds);
-  const correctionButton = (day, session) => user?.role === 'student' && (
+  const correctionButton = (day, session) => canEdit ? (
+    <button type="button" onClick={() => setEditor({ session })} className="inline-flex min-h-10 items-center rounded-lg px-2 text-xs font-medium text-teal hover:bg-canvas">Edit duty time</button>
+  ) : user?.role === 'student' && (
     <button type="button" disabled={correctionState.busyDate === day.date}
       onClick={() => checkCorrection(day.date, session.id)}
       aria-label={`Request correction for ${formatDateKey(day.date)}, clock-in ${formatTime(session.timeIn, tz)}`}
@@ -65,12 +71,16 @@ export default function AttendanceHistory({ endpoint }) {
     </button>
   );
   const sessionNote = (session) => [
+    session.adjusted ? 'Corrected by supervisor; original record preserved.' : null,
     ...(session.flags ?? []).map((flag) => FLAG_TEXT[flag] ?? flag),
     session.status === 'needs_review' ? `Longer than ${data.maxSessionHours} h; not counted until reviewed.` : EXPLAIN[session.status],
   ].filter(Boolean).join(' · ');
 
   return (
     <div className="space-y-4">
+      {editor && <DutyTimeEditor studentId={data.user.id} session={editor.session} timezone={tz}
+        onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setCorrectionState({ busyDate: '', message: 'Duty time saved. The student has been notified.' }); setRefresh(value => value + 1); }} />}
+      {canEdit && <div className="flex justify-end"><button type="button" onClick={() => setEditor({ session: null })} className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white">Add missed duty</button></div>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-navy">Attendance log</h2>
@@ -90,7 +100,7 @@ export default function AttendanceHistory({ endpoint }) {
         <dl className="grid grid-cols-2 overflow-hidden rounded-card border border-line bg-surface sm:grid-cols-4">
           {[
             ['Recorded', formatHours(data.totals.recordedHours)],
-            ['Verified', data.totals.verificationAvailable ? formatHours(data.totals.verifiedHours) : 'Pending DTR'],
+            ['Approved', data.totals.verificationAvailable ? formatHours(data.totals.verifiedHours) : 'Pending DTR'],
             ['Completed', data.totals.countedSessions],
             ['Need attention', data.totals.incompleteCount],
           ].map(([label, value]) => <div key={label} className="min-w-0 px-4 py-3"><dt className="text-xs text-muted">{label}</dt><dd className="mt-1 text-base font-semibold text-navy">{value}</dd></div>)}
@@ -128,13 +138,13 @@ export default function AttendanceHistory({ endpoint }) {
                   </div>
                   <table className="hidden w-full text-left text-sm md:table">
                     <caption className="sr-only">Attendance sessions on {day.date}, times in {tz}</caption>
-                    <thead><tr className="text-[11px] text-muted">{['Time in', 'Time out', 'Duration', 'Status', ...(user?.role === 'student' ? [''] : [])].map((label, i) => <th scope="col" key={i} className="py-2 pr-3 font-medium">{label || <span className="sr-only">Actions</span>}</th>)}</tr></thead>
+                    <thead><tr className="text-[11px] text-muted">{['Time in', 'Time out', 'Duration', 'Status', ...(user?.role === 'student' || canEdit ? [''] : [])].map((label, i) => <th scope="col" key={i} className="py-2 pr-3 font-medium">{label || <span className="sr-only">Actions</span>}</th>)}</tr></thead>
                     <tbody>{day.sessions.map((session) => <tr key={session.id} className="border-t border-line align-top">
                       <td className="py-3 pr-3 tabular-nums">{formatTime(session.timeIn, tz)}</td>
                       <td className="py-3 pr-3 tabular-nums">{formatTime(session.timeOut, tz)}</td>
                       <td className="py-3 pr-3">{sessionDuration(session)}{!session.counted && session.seconds != null && <span className="block text-xs text-muted">Not counted</span>}</td>
                       <td className="py-3 pr-3"><SessionBadge status={session.status} />{sessionNote(session) && <p className="mt-1 max-w-48 text-xs text-muted">{sessionNote(session)}</p>}</td>
-                      {user?.role === 'student' && <td className="py-1.5 text-right">{correctionButton(day, session)}</td>}
+                      {(user?.role === 'student' || canEdit) && <td className="py-1.5 text-right">{correctionButton(day, session)}</td>}
                     </tr>)}</tbody>
                   </table>
                 </div>
