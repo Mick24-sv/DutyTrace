@@ -56,27 +56,44 @@ const fetchUser = async (id, db = { query }, institutionId = null) => {
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
-usersRouter.post('/me/photo',requireRole('student'),rawUpload,asyncHandler(async(req,res)=>{
+usersRouter.post('/me/photo',requireRole('student','supervisor'),rawUpload,asyncHandler(async(req,res)=>{
   const {buffer,rawName}=uploadedFile(req);
   const file=validateUpload(buffer,rawName,2*1024*1024);
   if(!['image/png','image/jpeg'].includes(file.mime)) throw new AppError(400,'BAD_FILE_TYPE','Choose a PNG or JPEG photo.');
   await withTransaction(async db=>{
     await db.query(`UPDATE users SET profile_photo=$2,profile_photo_mime=$3,profile_photo_updated_at=clock_timestamp()
-      WHERE id=$1 AND institution_id=$4 AND role='student'`,[req.user.id,buffer,file.mime,req.user.institutionId]);
+      WHERE id=$1 AND institution_id=$4 AND role IN ('student','supervisor')`,[req.user.id,buffer,file.mime,req.user.institutionId]);
     await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_updated',targetType:'user',targetId:req.user.id,after:{mime:file.mime,size:file.size},ip:req.ip},db);
   });
   ok(res,{user:await fetchUser(req.user.id,{query},req.user.institutionId)});
 }));
-usersRouter.delete('/me/photo',requireRole('student'),asyncHandler(async(req,res)=>{
+usersRouter.delete('/me/photo',requireRole('student','supervisor'),asyncHandler(async(req,res)=>{
   await withTransaction(async db=>{
     await db.query('UPDATE users SET profile_photo=NULL,profile_photo_mime=NULL,profile_photo_updated_at=NULL WHERE id=$1 AND institution_id=$2',[req.user.id,req.user.institutionId]);
     await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_removed',targetType:'user',targetId:req.user.id,ip:req.ip},db);
   });
   ok(res,{user:await fetchUser(req.user.id,{query},req.user.institutionId)});
 }));
+usersRouter.get('/me/teammates',requireRole('student'),asyncHandler(async(req,res)=>{
+  const page=parse(z.coerce.number().int().min(1).max(100000).default(1),req.query.page);
+  const limit=parse(z.coerce.number().int().min(1).max(20).default(12),req.query.limit);
+  const search=parse(z.string().trim().max(100).default(''),req.query.search);
+  const {rows}=await query(`SELECT DISTINCT u.id,u.full_name,u.year_level,u.course,u.profile_photo_updated_at,o.id AS office_id,o.name AS office_name,
+      count(*) OVER()::int AS total
+    FROM users u JOIN duty_assignments d ON d.user_id=u.id AND d.ends_on IS NULL
+    JOIN offices o ON o.id=d.office_id AND o.institution_id=$2
+    WHERE u.institution_id=$2 AND u.role='student' AND u.status='active' AND u.id<>$1
+      AND EXISTS(SELECT 1 FROM duty_assignments mine WHERE mine.user_id=$1 AND mine.ends_on IS NULL AND mine.office_id=d.office_id)
+      AND (u.full_name ILIKE $3 OR u.course ILIKE $3)
+    ORDER BY u.full_name,u.id LIMIT $4 OFFSET $5`,[req.user.id,req.user.institutionId,`%${search}%`,limit,(page-1)*limit]);
+  ok(res,{items:rows.map(row=>({id:row.id,fullName:row.full_name,yearLevel:row.year_level,course:row.course,
+    photoUrl:row.profile_photo_updated_at?`/users/${row.id}/photo?v=${new Date(row.profile_photo_updated_at).getTime()}`:null,
+    office:{id:row.office_id,name:row.office_name}})),total:rows[0]?.total??0,page,limit});
+}));
 usersRouter.get('/:id/photo',asyncHandler(async(req,res)=>{
   const target=await fetchUser(parseId(req.params.id),{query},req.user.institutionId);
-  const allowed=target&&(target.id===req.user.id||req.user.role==='admin'||(req.user.role==='supervisor'&&target.role==='student'&&target.office?.id&&target.office.id===req.user.office?.id));
+  const sameOfficeStudent=target?.role==='student'&&target.status==='active'&&target.office?.id&&target.office.id===req.user.office?.id;
+  const allowed=target&&(target.id===req.user.id||req.user.role==='admin'||(req.user.role==='supervisor'&&sameOfficeStudent)||(req.user.role==='student'&&sameOfficeStudent));
   if(!allowed) throw new AppError(404,'NOT_FOUND','Profile photo not found.');
   if(!target.photoUrl) throw new AppError(404,'NOT_FOUND','Profile photo not found.');
   const etag=`"profile-photo-${target.id}-${target.photoUrl.split('v=')[1]}"`;

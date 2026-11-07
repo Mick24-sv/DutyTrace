@@ -1,0 +1,27 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {loadFixtures,makeClient,setupTestServer,query,SAMPLE} from './helpers/testEnv.js';
+let fx;
+const ctx=setupTestServer({},async()=>{fx=await loadFixtures(api);});
+const api=makeClient(ctx);
+const as=who=>({cookie:fx.cookies[who]});
+test('teammates share only safe fields with active students in the same office',async()=>{
+ const result=await api.get('/users/me/teammates',as('studentA'));
+ assert.equal(result.status,200);
+ const teammates=result.body.data.items;
+ assert.ok(teammates.some(p=>p.id===fx.ids.studentA2));
+ assert.ok(!teammates.some(p=>[fx.ids.studentA,fx.ids.studentB,fx.ids.supervisorA,fx.ids.admin].includes(p.id)));
+ for(const mate of teammates)assert.deepEqual(Object.keys(mate).sort(),['id','fullName','yearLevel','course','photoUrl','office'].sort());
+ assert.equal((await api.get('/users/me/teammates',as('admin'))).status,403);
+ const search=await api.get('/users/me/teammates?search=unmatchable-teammate-name',as('studentA'));
+ assert.equal(search.body.data.items.length,0);
+ const upload=await api.upload('/users/me/photo',SAMPLE.jpeg,{...as('studentA2'),filename:'portrait.jpg'});
+ assert.equal(upload.status,200);
+ const photo=await api.raw('GET',`/users/${fx.ids.studentA2}/photo`,as('studentA'));
+ assert.equal(photo.status,200);
+ assert.equal((await api.raw('GET',`/users/${fx.ids.studentA2}/photo`,as('studentB'))).status,404);
+ assert.equal((await api.get(`/users/${fx.ids.studentA2}/student-overview`,as('studentA'))).status,403);
+ await query("UPDATE users SET status='disabled' WHERE id=$1",[fx.ids.studentA2]);
+ assert.ok(!(await api.get('/users/me/teammates',as('studentA'))).body.data.items.some(p=>p.id===fx.ids.studentA2));
+ assert.equal((await api.raw('GET',`/users/${fx.ids.studentA2}/photo`,as('studentA'))).status,404);
+});

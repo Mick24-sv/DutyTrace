@@ -1,34 +1,27 @@
 import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Users, Timer, FileText } from 'lucide-react';
+import { Users, FileText } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { formatHours } from '../../utils/format.js';
-import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
+import SemesterCompletionDonut from '../../components/dashboard/SemesterCompletionDonut.jsx';
 
 export default function AdminDashboard() {
   const {data, loading, error} = useApiData('/reports/dashboard-stats');
   const term = data?.semesterSummary;
   return <>
-    <PageHeader icon={UIActionLayoutDashboard} title="Home" description="Attendance, DTR reviews, and semester completion for your institution." />
+    <PageHeader icon={UIActionLayoutDashboard} title="Home" description="Manage student accounts, office assignments, and DTR records." />
     {loading && <p role="status" className="mb-4 text-sm text-muted">Loading institution overview…</p>}
     {error && <p role="alert" className="mb-4 text-sm text-bad-fg">{error}</p>}
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <StatCard label="Student assistants" value={data?.users?.students ?? '—'} icon={Users} />
-      <StatCard label="Currently timed in" value={data?.attendance?.timedInNow ?? '—'} icon={Timer} />
       <StatCard label="DTRs awaiting review" value={data?.dtrs?.pendingReview ?? '—'} icon={FileText} />
     </div>
-    <Card className="mt-5" title="Current semester" action={<Link to="/admin/reports" className="text-sm text-teal underline">View progress report</Link>}>
+    <Card className="mt-5" title="Current semester" action={<Link to="/admin/reports?tab=semester-hours" className="text-sm text-teal underline">View progress report</Link>}>
       {term?.term ? <>
         <p className="mb-4 text-sm font-medium">{term.term.academicYear} · {({first:'First semester',second:'Second semester',summer:'Summer term'})[term.term.semester]}</p>
-        <dl className="grid gap-4 sm:grid-cols-3">
-          <div><dt className="text-xs text-muted">Approved hours</dt><dd className="mt-1 font-semibold text-navy">{formatHours(term.totalVerifiedHours)}</dd></div>
-          <div><dt className="text-xs text-muted">Students who completed their requirement</dt><dd className="mt-1 font-semibold text-navy">{term.studentsMetRequirement}</dd></div>
-          <div><dt className="text-xs text-muted">Students with hours remaining</dt><dd className="mt-1 font-semibold text-navy">{term.studentsBelowRequirement}</dd></div>
-        </dl>
-        <div className="mt-5 flex flex-wrap gap-3 border-t border-line pt-4">{Object.entries(term.statusCounts??{}).map(([status,count])=><div key={status} className="flex items-center gap-2"><SemesterStatusBadge status={status}/><span className="text-sm font-semibold text-navy">{count}</span></div>)}</div>
+        <SemesterCompletionDonut summary={term} reportPath="/admin/reports" />
       </> : <p className="text-sm text-muted">{loading ? 'Loading current term…' : 'No current academic term. Set up dates and student hour requirements under Academic Terms.'}</p>}
     </Card>
     <Card className="mt-5" title="Manage your institution">

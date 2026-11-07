@@ -82,8 +82,8 @@ export default function DtrDetailPage() {
 
   return (
     <>
-      <Link to={back.to} className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-teal">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {back.label}
+      <Link to={back.to} className="mb-4 inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal shadow-sm transition-colors hover:border-teal/40 hover:bg-teal/5 active:bg-teal/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2 sm:px-4">
+        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" /> {back.label}
       </Link>
       <PageHeader icon={UIActionFileText}
         title={`${formatMonth(dtr.month)} DTR`}

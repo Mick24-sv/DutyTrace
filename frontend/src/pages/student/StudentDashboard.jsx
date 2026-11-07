@@ -1,3 +1,4 @@
+import OfficeTeammates from '../../components/dashboard/OfficeTeammates.jsx';
 import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
 import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -210,6 +211,7 @@ export default function StudentDashboard() {
         )}
       </Card>
 
+      <OfficeTeammates preview />
       <div className="mt-6 grid gap-4 lg:grid-cols-3 lg:gap-6">
         {/* Recent Sessions & Incomplete Alerts */}
         <Card

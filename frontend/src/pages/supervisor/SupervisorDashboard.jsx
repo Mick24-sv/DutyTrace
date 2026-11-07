@@ -1,3 +1,4 @@
+import SemesterCompletionDonut from '../../components/dashboard/SemesterCompletionDonut.jsx';
 import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
 import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
 import ProgressBar from '../../components/ui/ProgressBar.jsx';
@@ -86,6 +87,12 @@ export default function SupervisorDashboard() {
       <StatCard label="Currently timed in" value={stats?.timedInToday ?? '—'} icon={Timer} />
       <StatCard label="DTRs awaiting review" value={stats?.pendingDtrs ?? '—'} icon={ClipboardCheck} />
     </div>
+    <Card className="mt-5" title="My office?s semester progress" action={<Link to="/supervisor/reports?tab=semester-hours" className="text-sm font-medium text-teal hover:underline">View progress report</Link>}>
+      {data?.semesterSummary?.term ? <>
+        <p className="mb-4 text-sm font-medium">{data.semesterSummary.term.academicYear} ? {({first:'First semester',second:'Second semester',summer:'Summer term'})[data.semesterSummary.term.semester]}</p>
+        <SemesterCompletionDonut summary={data.semesterSummary} reportPath="/supervisor/reports" includeUnassigned />
+      </> : <p className="text-sm text-muted">{loading?'Loading semester progress?':'No current academic term. Ask your administrator to set up the semester.'}</p>}
+    </Card>
     <Card className="mt-5" title="Next actions">
       <div className="grid gap-3 sm:grid-cols-2">
         <Link to="/supervisor/dtr-review" className="rounded-lg border border-line p-4 hover:bg-canvas"><b className="block text-sm text-teal">Review monthly DTRs</b><span className="mt-1 block text-sm text-muted">Approve hours or return a DTR with feedback.</span></Link>

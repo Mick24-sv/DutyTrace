@@ -1,3 +1,5 @@
+import StudentPortraitCarousel from '../../components/dashboard/StudentPortraitCarousel.jsx';
+import OfficeSupervisorSpotlight from '../../components/dashboard/OfficeSupervisorSpotlight.jsx';
 import {Users as UIActionUsers,PlusCircle as UIActionPlusCircle} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -282,6 +284,8 @@ export default function UsersPage() {
                 className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted"
               />
             </div>
+            {selectedRole==='student' && visibleUsers.length>0 && <StudentPortraitCarousel students={visibleUsers} />}
+            {selectedRole==='supervisor' && <OfficeSupervisorSpotlight supervisors={visibleUsers} />}
             <div className="hidden sm:block">
               <DataTable columns={columns} rows={visibleUsers} caption={groupLabel} empty={userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`} />
             </div>

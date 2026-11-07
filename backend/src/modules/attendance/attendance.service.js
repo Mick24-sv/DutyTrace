@@ -180,7 +180,7 @@ export async function officeSummary(officeId, requestedMonth) {
   const { rows } = await query('SELECT i.timezone FROM institutions i JOIN offices o ON o.institution_id=i.id WHERE o.id=$1', [officeId]);
   const range = await resolveMonth(requestedMonth, rows[0]?.timezone ?? env.timezone);
   const { rows: students } = await query(
-    `SELECT u.id, u.full_name, u.email FROM duty_assignments d
+    `SELECT u.id, u.full_name, u.email, u.year_level, u.course, u.profile_photo_updated_at FROM duty_assignments d
      JOIN users u ON u.id = d.user_id
      WHERE d.office_id = $1 AND d.ends_on IS NULL AND u.role = 'student' AND u.status = 'active'
      ORDER BY u.full_name`,
@@ -209,6 +209,9 @@ export async function officeSummary(officeId, requestedMonth) {
         id: s.id,
         fullName: s.full_name,
         email: s.email,
+        yearLevel: s.year_level,
+        course: s.course,
+        photoUrl: s.profile_photo_updated_at ? `/users/${s.id}/photo?v=${new Date(s.profile_photo_updated_at).getTime()}` : null,
         state: l?.event_type === 'time_in' ? 'timed_in' : 'timed_out',
         lastEventAt: l?.recorded_at ?? null,
         totals: withVerified(summarize(events.get(s.id), range), verified.get(s.id)).totals,

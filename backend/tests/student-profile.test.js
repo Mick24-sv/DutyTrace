@@ -29,13 +29,13 @@ test('students update their own name, year and course without changing privilege
 
 test('profile photos accept small raster images and remain private to authorized viewers',async()=>{
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j59kAAAAASUVORK5CYII=','base64');
-  assert.equal((await api.upload('/users/me/photo',png,{...as('supervisorA'),filename:'profile.png'})).status,403);
+  assert.equal((await api.upload('/users/me/photo',png,{...as('supervisorA'),filename:'profile.png'})).status,200);
   assert.equal((await api.upload('/users/me/photo',Buffer.from('%PDF-1.4'),{...as('studentA'),filename:'profile.pdf'})).status,400);
   const uploaded=await api.upload('/users/me/photo',png,{...as('studentA'),filename:'profile.png'});
   assert.equal(uploaded.status,200);
   const path=`/users/${fx.ids.studentA}/photo`;
   assert.equal((await api.raw('GET',path)).status,401);
-  assert.equal((await api.raw('GET',path,as('studentA2'))).status,404);
+  assert.equal((await api.raw('GET',path,as('studentA2'))).status,200);
   assert.equal((await api.raw('GET',path,as('supervisorB'))).status,404);
   const photo=await api.raw('GET',path,as('admin'));
   assert.equal(photo.status,200);
@@ -44,7 +44,7 @@ test('profile photos accept small raster images and remain private to authorized
   const cached=await api.raw('GET',path,{...as('admin'),headers:{'if-none-match':photo.headers.get('etag')}});
   assert.equal(cached.status,304);
   assert.equal(cached.buffer.length,0);
-  assert.equal((await api.raw('GET',path,{...as('studentA2'),headers:{'if-none-match':photo.headers.get('etag')}})).status,404);
+  assert.equal((await api.raw('GET',path,{...as('studentA2'),headers:{'if-none-match':photo.headers.get('etag')}})).status,304);
   const user=(await api.get('/auth/me',as('studentA'))).body.data.user;
   assert.ok(user.photoUrl.includes(`/users/${fx.ids.studentA}/photo`));
   assert.ok(!('profile_photo' in user));

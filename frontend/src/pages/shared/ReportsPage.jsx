@@ -42,7 +42,10 @@ export default function ReportsPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [status, setStatus] = useState('');
-  const [termId, setTermId] = useState('');
+  const [termId, setTermId] = useState(searchParams.get('termId') || '');
+  const requestedCompletion=searchParams.get('completion')||'';
+  const [completion,setCompletion]=useState(['completed','remaining','unassigned'].includes(requestedCompletion)?requestedCompletion:'');
+  useEffect(()=>{setCompletion(['completed','remaining','unassigned'].includes(requestedCompletion)?requestedCompletion:'');},[requestedCompletion]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const limit = 7;
@@ -84,6 +87,7 @@ export default function ReportsPage() {
       if (to) params.set('to', to);
       if (status) params.set('status', status);
       if (activeTab === 'semester-hours' && termId) params.set('termId', termId);
+      if (activeTab === 'semester-hours' && completion) params.set('completion', completion);
 
       let endpoint = `/reports/${activeTab}`;
         if (activeTab === 'semester-hours') endpoint = '/reports/semester-hours';
@@ -107,11 +111,11 @@ export default function ReportsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, officeId, month, from, to, status, termId]);
+  }, [activeTab, officeId, month, from, to, status, termId, completion]);
 
   useEffect(() => {
     fetchReport();
-  }, [activeTab, officeId, month, from, to, status, termId, page]);
+  }, [activeTab, officeId, month, from, to, status, termId, completion, page]);
 
   // Generate CSV download URL
   const getCsvExportUrl = () => {
@@ -123,6 +127,7 @@ export default function ReportsPage() {
     if (to) params.set('to', to);
     if (status) params.set('status', status);
     if (activeTab === 'semester-hours' && termId) params.set('termId', termId);
+      if (activeTab === 'semester-hours' && completion) params.set('completion', completion);
 
     let endpoint = `/reports/${activeTab}`;
     if (activeTab === 'semester-hours') endpoint = '/reports/semester-hours';
@@ -132,6 +137,7 @@ export default function ReportsPage() {
   const clearFilters = () => {
     if (!isSupervisor) setOfficeId('');
     setSearch('');
+    setCompletion('');
     setMonth('');
     setFrom('');
     setTo('');
@@ -388,28 +394,28 @@ export default function ReportsPage() {
       </div>
 
       {/* Practical Filters Bar */}
-      <Card className="mb-6">
+      <Card className="report-filters mb-6">
         <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-navy uppercase tracking-wider">
           <Filter className="h-3.5 w-3.5" />
           Report Filters
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
           {/* Office selector */}
-          <div>
+          <div className="min-w-0">
             <label className="block text-xs font-medium text-muted mb-1">Office</label>
             {isSupervisor ? (
               <input
                 type="text"
                 disabled
                 value={user?.office?.name || 'Your Office'}
-                className="w-full rounded-md border border-line bg-canvas px-3 py-1.5 text-sm text-muted cursor-not-allowed"
+                className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-canvas px-3 py-1.5 text-sm text-muted cursor-not-allowed"
               />
             ) : (
               <select
                 value={officeId}
                 onChange={(e) => setOfficeId(e.target.value)}
-                className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
               >
                 <option value="">All Offices</option>
                 {officesList.map((o) => (
@@ -421,12 +427,12 @@ export default function ReportsPage() {
             )}
 
             {activeTab === 'semester-hours' && (
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-medium text-muted mb-1">Academic term</label>
                 <select
                   value={termId}
                   onChange={(event) => setTermId(event.target.value)}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                  className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
                 >
                   <option value="">Current term</option>
                   {availableTerms.map((term) => (
@@ -439,15 +445,22 @@ export default function ReportsPage() {
             )}
           </div>
 
+          {activeTab === 'semester-hours' && <div className="min-w-0">
+            <label htmlFor="completion-filter" className="mb-1 block text-xs font-medium text-muted">Completion</label>
+            <select id="completion-filter" value={completion} onChange={e=>setCompletion(e.target.value)} className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink focus:border-teal focus:outline-none">
+              <option value="">All students</option><option value="completed">Completed</option><option value="remaining">Still completing</option><option value="unassigned">No requirement assigned</option>
+            </select>
+          </div>}
           {/* Month selector for month-based reports */}
           {(activeTab === 'dtr' || activeTab === 'attendance') && (
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">Month (YYYY-MM)</label>
+            <div className="min-w-0">
+              <label className="block text-xs font-medium text-muted mb-1" htmlFor="report-month">Month</label>
               <input
+                id="report-month"
                 type="month"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
-                className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
               />
             </div>
           )}
@@ -455,22 +468,24 @@ export default function ReportsPage() {
           {/* Date range from/to for attendance, absences, cases */}
           {activeTab === 'attendance' && (
             <>
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1">From Date</label>
+              <div className="min-w-0">
+                <label className="block text-xs font-medium text-muted mb-1" htmlFor="report-from">From Date</label>
                 <input
-                  type="date"
+                  id="report-from"
+                type="date"
                   value={from}
                   onChange={(e) => setFrom(e.target.value)}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                  className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-muted mb-1">To Date</label>
+              <div className="min-w-0">
+                <label className="block text-xs font-medium text-muted mb-1" htmlFor="report-to">To Date</label>
                 <input
+                  id="report-to"
                   type="date"
                   value={to}
                   onChange={(e) => setTo(e.target.value)}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                  className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
                 />
               </div>
             </>
@@ -478,12 +493,12 @@ export default function ReportsPage() {
 
           {/* Status selector customized by tab */}
           {activeTab === 'dtr' && (
-            <div>
+            <div className="min-w-0">
               <label className="block text-xs font-medium text-muted mb-1">DTR Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
+                className="box-border h-11 w-full min-w-0 max-w-full rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink focus:border-teal focus:outline-none"
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -500,18 +515,18 @@ export default function ReportsPage() {
 
         </div>
 
-        <div className="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+        <div className="mt-4 flex flex-wrap items-center justify-start gap-2 border-t border-line pt-3 sm:justify-end">
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-muted hover:bg-canvas transition"
+            className="inline-flex min-h-11 max-w-full items-center justify-center rounded-lg border border-line px-3 py-2 text-sm font-medium text-muted hover:bg-canvas transition"
           >
             Clear Filters
           </button>
           <button
             type="button"
             onClick={fetchReport}
-            className="inline-flex items-center gap-1 rounded-md bg-navy px-3 py-1.5 text-xs font-medium text-white hover:bg-navy/90 transition"
+            className="inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-lg bg-navy px-3 py-2 text-sm font-medium text-white hover:bg-navy/90 transition"
           >
             <RefreshCw className="h-3 w-3" />
             Apply / Refresh

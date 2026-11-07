@@ -62,3 +62,18 @@ This interface cleanup requires updated frontend and backend deployments, with n
 
 
 Supervisors can verify completed, unflagged attendance sessions from a student's attendance history before month-end. Each verification records the exact times, reviewer, explanation, and a student notification. Corrected times need verification again. These hours count immediately toward semester progress; an approved monthly DTR replaces session verification totals for its month, preventing double-counting. QR recording stays open.
+
+
+Concerns is available in every role's navigation. Students can contact their office supervisor or an administrator; supervisors can contact their assigned students or an administrator; administrators can contact students and supervisors in their institution. Conversations are private to participants. A supervisor can forward a student-initiated concern to a selected administrator, granting conversation access and leaving a visible message for the student. Staff participants can mark Open, Under review, or Resolved; resolved concerns must be reopened before replies. Every message, forwarding action, and status update creates in-app notifications and audit metadata. Lists and messages are paginated, recipient search is bounded, and the conversation pane scrolls on mobile.
+
+
+Admin and supervisor home screens include animated semester completion donuts. Admin shows students with requirements split into Completed and Still completing, with unassigned requirements counted separately; supervisor includes No requirement assigned as a third segment for their office. Segments sweep clockwise from 12 o'clock in sequence, and legend rows appear as each sweep finishes. Reduced motion displays the final chart immediately. Segments and legends open the semester progress report with the matching completion filter, which also applies to CSV exports. Counts come from configured requirements and verified remaining hours, not predictive risk statuses.
+
+
+Admin Students & Staff includes a portrait spotlight above the Student Assistants list. It shows up to three real students from the filtered, paginated page; the selected portrait springs to 1.38 scale while neighboring portraits step back. The photo-only slideshow advances every seven seconds, with previous/next and play/pause controls. It pauses on hover, focus, and hidden tabs, and disables automatic motion for reduced-motion preferences. The selected student's real academic details, office, verified current-semester progress, and profile link appear below. Missing photos use a neutral silhouette; no sample students or video testimonials are invented.
+
+
+Supervisor Student Assistants uses compact, responsive cards for assigned active students, with profile photos (initials fallback), year/course, verified and remaining current-semester hours, attendance state, recorded monthly hours, review count, and a View attendance action. Search includes academic details and the existing pagination remains. Profile fields are returned by the office-scoped attendance summary; no extra per-student profile requests or database migration are needed.
+
+
+Student Home shows My office teammates below semester progress only when other active students share the current office. A compact preview links to a searchable, paginated teammates directory. The student-only endpoint derives office scope from current duty assignments and exposes only name, photo reference, course, year, and office; it excludes the requesting student, disabled accounts, staff, and other offices. Students can read photos of active student teammates but cannot access their profiles, progress, attendance, email, or concerns. No database migration is required.

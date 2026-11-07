@@ -52,6 +52,56 @@
   }
 }
 
+@keyframes semester-donut-sweep {
+  from { stroke-dasharray: 0 100; }
+  to { stroke-dasharray: var(--arc) var(--rest); }
+}
+@keyframes semester-donut-land {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.semester-donut-arc {
+  animation: semester-donut-sweep 600ms cubic-bezier(.22,1,.36,1) both;
+}
+.semester-donut-legend {
+  animation: semester-donut-land 180ms ease-out both;
+}
+.student-portrait-stage {
+  touch-action: pan-y pinch-zoom;
+  display: flex;
+  min-width: 0;
+  height: clamp(14rem, 45vw, 20rem);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(.75rem, 3vw, 2rem);
+}
+.student-portrait-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: clamp(4.5rem, 21vw, 9rem);
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: .85rem;
+  box-shadow: 0 6px 16px rgb(21 59 80 / .12);
+  transform: translateY(12px) scale(.9);
+  opacity: .65;
+  transition: transform 650ms cubic-bezier(.34,1.56,.64,1), opacity 400ms ease, box-shadow 400ms ease;
+}
+.student-portrait-selected {
+  z-index: 1;
+  opacity: 1;
+  transform: translateY(-10px) scale(1.38);
+  box-shadow: 0 16px 28px rgb(21 59 80 / .22);
+}
+@keyframes student-portrait-play { from { width: 0; } to { width: 100%; } }
+.student-portrait-timer { animation: student-portrait-play 7s linear both; }
+@media (prefers-reduced-motion: reduce) {
+  .semester-donut-arc { animation: none; stroke-dasharray: var(--arc) var(--rest); }
+  .semester-donut-legend { animation: none; }
+  .student-portrait-card { transition: none; }
+  .student-portrait-timer { animation: none; }
+}
+
 @media (max-width: 639px) {
   /* Keep native date/time controls inside narrow grids and avoid iOS input zoom. */
   :where(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {
@@ -62,6 +112,41 @@
   }
   :where(form label, fieldset) { min-width: 0; }
   :where(button) { min-height: 44px; }
+}
+
+/* Safari's month value otherwise sits at the top of its native input box. */
+.attendance-month-input::-webkit-date-and-time-value {
+  min-height: 100%;
+  text-align: left;
+}
+.attendance-month-input::-webkit-datetime-edit {
+  display: inline-flex;
+  align-items: center;
+  min-height: 100%;
+  padding: 0;
+}
+
+/* Constrain Safari's native date controls to their report filter grid cells. */
+.report-filters input[type="month"],
+.report-filters input[type="date"] {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  padding-block: 0;
+  text-align: left;
+}
+.report-filters input::-webkit-date-and-time-value {
+  min-height: 100%;
+  text-align: left;
+}
+.report-filters input::-webkit-datetime-edit {
+  display: inline-flex;
+  align-items: center;
+  min-height: 100%;
+  padding: 0;
 }
 
 /* Printer-friendly: hide app chrome, keep content white (used for DTRs later) */

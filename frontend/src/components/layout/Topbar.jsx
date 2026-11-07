@@ -91,7 +91,7 @@ export default function Topbar({ role, title, onMenu }) {
                 </div>
               </div>}
               <div className="border-t border-line pt-4">
-                {role==='student'&&<Link to="/student/profile" role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>Edit my profile</Link>}
+                {['student','supervisor'].includes(role)&&<Link to={`/${role}/profile`} role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>Edit my profile</Link>}
                 <button
                   type="button"
                   role="menuitem"

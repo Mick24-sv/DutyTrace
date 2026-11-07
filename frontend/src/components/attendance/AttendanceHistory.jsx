@@ -1,5 +1,5 @@
 import ConfirmDialog from '../ui/ConfirmDialog.jsx';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, CalendarDays, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
@@ -23,7 +23,7 @@ const EXPLAIN = {
 
 // Daily and monthly attendance for one person. `endpoint` is e.g. '/attendance/me'
 // or `/attendance/users/<id>`; the API decides whether the viewer may see it.
-export default function AttendanceHistory({ endpoint }) {
+export default function AttendanceHistory({ endpoint, actions }) {
   const [page, setPage] = useState(1);
   const [month, setMonth] = useState(''); // '' = let the server pick the current month
   const [correctionState, setCorrectionState] = useState({ busyDate: '', message: '' });
@@ -92,17 +92,23 @@ export default function AttendanceHistory({ endpoint }) {
     <div className="space-y-4">
       {editor && <DutyTimeEditor studentId={data.user.id} session={editor.session} timezone={tz}
         onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setCorrectionState({ busyDate: '', message: 'Duty time saved. The student has been notified.' }); setRefresh(value => value + 1); }} />}
-      {canEdit && <div className="flex justify-end"><button type="button" onClick={() => setEditor({ session: null })} className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white">Add missed duty</button></div>}
+      {(actions || canEdit) && <div className="flex flex-wrap items-center justify-end gap-2">
+        {actions}
+        {canEdit && <button type="button" onClick={() => setEditor({ session: null })} className="inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-lg bg-teal px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2"><Plus aria-hidden="true" className="h-4 w-4 shrink-0" />Add missed duty</button>}
+      </div>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-navy">Attendance log</h2>
           {data?.user && <p className="mt-1 text-xs text-muted">{data.user.fullName}{data.user.office ? ` · ${data.user.office.name}` : ''}</p>}
           <p className="mt-1 text-xs text-muted">{tz ? `Times in ${tz}. ` : ''}Expand a day to see scans and corrections.</p>
         </div>
-        <label className="text-xs text-muted" htmlFor="attendance-month">Month
+        <label className="block w-56 max-w-full shrink-0 text-xs text-muted" htmlFor="attendance-month">Month
+          <span className="relative mt-1 block">
+          <CalendarDays aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-teal" />
           <input id="attendance-month" type="month" value={month || data?.month || ''}
             onChange={(event) => { if(event.target.value) { setMonth(event.target.value); setPage(1); } }}
-            className="mt-1 block h-10 max-w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal" />
+            className="attendance-month-input block h-11 w-full min-w-0 appearance-none rounded-lg border border-line bg-surface py-0 pl-10 pr-3 text-left text-base font-medium text-ink shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal" />
+          </span>
         </label>
       </div>
       <ConfirmDialog open={Boolean(verification)} title="Verify duty hours" confirmLabel="Verify hours" busy={verifyBusy} confirmDisabled={explanation.trim().length<5} onConfirm={verify} onCancel={()=>setVerification(null)}>

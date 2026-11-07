@@ -5,11 +5,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import HistoricalDutyHoursPanel from '../../components/attendance/HistoricalDutyHoursPanel.jsx';
 import AttendanceLinks from '../../components/attendance/AttendanceLinks.jsx';
 import SectionLinks from '../../components/layout/SectionLinks.jsx';
-import { Search } from 'lucide-react';
+import { Search, GraduationCap, Clock, ArrowUpRight, ShieldCheck, Hourglass } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
-import DataTable from '../../components/ui/DataTable.jsx';
+import UserAvatar from '../../components/ui/UserAvatar.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
@@ -38,43 +38,13 @@ export default function AssistantsPage() {
   const semesterStudents = new Map((semesterData.data?.students ?? []).map((student) => [student.id, student]));
   const filteredAssistants = (data?.assistants ?? []).filter((assistant) => {
     const semester = semesterStudents.get(assistant.id);
-    return [assistant.fullName, assistant.email, assistant.state, semester?.requirementAssigned ? 'requirement assigned' : 'no requirement', assistant.totals.recordedHours]
+    return [assistant.fullName, assistant.email, assistant.course, assistant.yearLevel ? 'Year '+assistant.yearLevel : '', assistant.state, semester?.requirementAssigned ? 'requirement assigned' : 'no requirement', assistant.totals.recordedHours]
       .some((value) => String(value ?? '').toLowerCase().includes(search.trim().toLowerCase()));
   });
 
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filteredAssistants.length / PAGE_SIZE)));
   const visibleAssistants = filteredAssistants.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const columns = [
-    {
-      key: 'fullName', header: 'Student Assistant',
-      render: (a) => (<><span className="font-medium">{a.fullName}</span><span className="block text-xs text-muted">{a.email}</span></>),
-    },
-    {
-      key: 'state', header: 'Now',
-      render: (a) => <Badge tone={a.state === 'timed_in' ? 'pending' : 'neutral'}>{a.state === 'timed_in' ? 'Timed in' : 'Not timed in'}</Badge>,
-    },
-    { key: 'hours', header: 'Recorded hours (month)', render: (a) => formatHours(a.totals.recordedHours) },
-    {
-      key: 'semesterHours', header: 'Semester approved / remaining',
-      render: (a) => {
-        const semester = semesterStudents.get(a.id);
-        if (!semester) return '—';
-        if (!semester.requirementAssigned) return <span className="text-xs text-muted">No requirement assigned</span>;
-        return `${formatHours(semester.verifiedHours)} / ${formatHours(semester.remainingHours)} h remaining`;
-      },
-    },
-    {
-      key: 'semesterStatus', header: 'Semester status', render: a => <SemesterStatusBadge status={semesterStudents.get(a.id)?.semesterStatus}/> },
-    {
-      key: 'attention', header: 'Need attention',
-      render: (a) => (a.totals.incompleteCount > 0 ? <Badge tone="rejected">{a.totals.incompleteCount} to review</Badge> : <span className="text-muted">None</span>),
-    },
-    {
-      key: 'view', header: '',
-      render: (a) => (<Link to={a.id} className="font-medium text-teal underline">View attendance</Link>),
-    },
-  ];
 
   return (
     <>
@@ -114,30 +84,30 @@ export default function AssistantsPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
               <input id="assistant-search" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search assistants" className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted" />
             </div>
-            <div className="hidden sm:block">
-              <DataTable columns={columns} rows={visibleAssistants} caption="Student assistants in your office" empty={search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'} />
-            </div>
-            <div className="divide-y divide-line sm:hidden">
-              {filteredAssistants.length === 0 ? <p className="py-5 text-center text-sm text-muted">{search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'}</p> : visibleAssistants.map((assistant) => {
-                const semester = semesterStudents.get(assistant.id);
-                return (
-                  <article key={assistant.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="break-words text-sm font-medium text-ink">{assistant.fullName}</p>
-                        <p className="break-all text-xs text-muted">{assistant.email}</p>
-                      </div>
-                      <Badge tone={assistant.state === 'timed_in' ? 'pending' : 'neutral'}>{assistant.state === 'timed_in' ? 'Timed in' : 'Not timed in'}</Badge>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              {filteredAssistants.length === 0 ? <p className="py-5 text-center text-sm text-muted lg:col-span-2 xl:col-span-3">{search ? 'No matching assistants.' : 'No Student Assistants are assigned to your office.'}</p> : visibleAssistants.map((assistant) => {
+                const semester=semesterStudents.get(assistant.id);
+                const pending=semesterData.loading;
+                const unavailable=Boolean(semesterData.error);
+                return <article key={assistant.id} className="flex min-w-0 flex-col rounded-xl border border-line bg-surface p-4 shadow-sm">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <UserAvatar user={assistant} className="h-14 w-14 text-lg"/>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words text-sm font-semibold text-navy">{assistant.fullName}</h3>
+                      <p className="mt-1 break-all text-xs text-muted">{assistant.email}</p>
+                      <div className="mt-2"><Badge tone={assistant.state === 'timed_in' ? 'pending' : 'neutral'}>{assistant.state === 'timed_in' ? 'Timed in' : 'Not timed in'}</Badge></div>
                     </div>
-                    <div><SemesterStatusBadge status={semester?.semesterStatus}/></div>
-                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                      <div><dt className="text-muted">Recorded this month</dt><dd className="mt-0.5 font-mono text-ink">{formatHours(assistant.totals.recordedHours)}</dd></div>
-                      <div><dt className="text-muted">Need attention</dt><dd className="mt-0.5">{assistant.totals.incompleteCount > 0 ? <Badge tone="rejected">{assistant.totals.incompleteCount} to review</Badge> : <span className="text-muted">None</span>}</dd></div>
-                      <div className="col-span-2"><dt className="text-muted">Semester approved / remaining</dt><dd className="mt-0.5 font-mono text-ink">{!semester ? '—' : !semester.requirementAssigned ? 'No requirement assigned' : `${formatHours(semester.verifiedHours)} / ${formatHours(semester.remainingHours)} remaining`}</dd></div>
-                    </dl>
-                    <Link to={assistant.id} className="inline-flex min-h-10 items-center font-medium text-teal underline">View attendance</Link>
-                  </article>
-                );
+                  </div>
+                  <p className="mt-3 flex items-start gap-2 text-xs text-muted"><GraduationCap aria-hidden="true" className="h-4 w-4 shrink-0 text-teal"/><span className="min-w-0 break-words">{[assistant.yearLevel?'Year '+assistant.yearLevel:null,assistant.course].filter(Boolean).join(' / ')||'Academic details not provided'}</span></p>
+                  <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-3">
+                    <div className="min-w-0"><dt className="flex items-center gap-1 text-xs text-muted"><ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-teal"/>Verified semester</dt><dd className="mt-1 break-words text-lg font-semibold tabular-nums text-navy">{pending?'Loading':unavailable?'Unavailable':semester?formatHours(semester.verifiedHours):'No term'}</dd></div>
+                    <div className="min-w-0"><dt className="flex items-center gap-1 text-xs text-muted"><Hourglass aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-teal"/>Remaining</dt><dd className="mt-1 break-words text-lg font-semibold tabular-nums text-navy">{pending?'Loading':unavailable?'Unavailable':semester?.requirementAssigned?formatHours(semester.remainingHours):'Not assigned'}</dd></div>
+                  </dl>
+                  {semester&&!unavailable&&<div className="mt-3 flex flex-wrap items-center justify-between gap-2"><SemesterStatusBadge status={semester.semesterStatus}/>{semester.requirementAssigned&&<span className="text-xs text-muted">{formatHours(semester.requiredHours)} required</span>}</div>}
+                  {!semester&&!pending&&!unavailable&&<p className="mt-2 text-xs text-muted">No current semester requirement.</p>}
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-xs text-muted"><span>Recorded this month: <span className="font-medium text-ink">{formatHours(assistant.totals.recordedHours)}</span></span>{assistant.totals.incompleteCount>0&&<Badge tone="rejected">{assistant.totals.incompleteCount} to review</Badge>}</div>
+                  <div className="mt-auto pt-4"><Link to={assistant.id} className="inline-flex min-h-11 max-w-full items-center justify-center gap-2 rounded-lg bg-teal px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-teal/90 focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2"><Clock aria-hidden="true" className="h-4 w-4 shrink-0"/>View attendance<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></Link></div>
+                </article>;
               })}
             </div>
             <Pagination page={currentPage} total={filteredAssistants.length} pageSize={PAGE_SIZE} onPageChange={setPage} disabled={loading} label="Student Assistants pagination" recordLabel="Assistants" />
@@ -145,7 +115,7 @@ export default function AssistantsPage() {
         )}
       </Card>
       <p className="mt-3 text-xs text-muted">
-        Monthly recorded hours are separate from semester completion. Only hours verified by approved DTRs count toward semester requirements.
+        Monthly recorded hours are separate from semester completion. Semester progress includes verified sessions, approved DTRs, and approved historical credits.
         {semesterData.data?.term && ` Current term: ${semesterData.data.term.academicYear} · ${semesterData.data.term.semester}.`}
       </p>
       </>}

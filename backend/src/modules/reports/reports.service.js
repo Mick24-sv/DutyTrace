@@ -1,3 +1,4 @@
+import { matchesCompletionGroup } from './completion-groups.js';
 import { sessionVerifiedSeconds } from '../attendance/session-verification.service.js';
 import { query } from '../../db/pool.js';
 import { env } from '../../config/env.js';
@@ -332,7 +333,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   };
 }
 
-export async function semesterHoursReport({ user, termId, officeId }) {
+export async function semesterHoursReport({ user, termId, officeId, completion }) {
   let term;
   let students;
   if (!termId) {
@@ -351,7 +352,7 @@ export async function semesterHoursReport({ user, termId, officeId }) {
     students = officeId ? result.students.filter((student) => student.officeId === officeId) : result.students;
   }
 
-  const items = students.map((student) => ({
+  const items = students.filter(student=>matchesCompletionGroup(student,completion)).map((student) => ({
     ...student,
     termId: term.id,
     academicYear: term.academicYear,
@@ -765,6 +766,9 @@ export async function getDashboardStats(user) {
         : { term, students: [] };
   const assignedTermStudents = semesterProgress.students.filter((student) => student.requirementAssigned);
   const termSummary = {
+    totalStudents: semesterProgress.students.length,
+    assignedRequirements: assignedTermStudents.length,
+    unassignedRequirements: semesterProgress.students.length-assignedTermStudents.length,
     statusCounts:Object.fromEntries(['on_track','at_risk','overdue','completed','insufficient_data','not_configured'].map(status=>[status,semesterProgress.students.filter(student=>student.semesterStatus===status).length])),
     term: semesterProgress.term,
     totalRecordedHours: hoursSum(semesterProgress.students, 'recordedHours'),

@@ -12,6 +12,7 @@ import UserAvatar from '../../components/ui/UserAvatar.jsx';
 const field='mt-2 block min-h-11 w-full rounded-lg border border-line bg-surface px-3 py-2 text-base text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:text-sm';
 export default function ProfilePage(){
   const {user,refreshUser}=useAuth();
+  const student=user.role==='student';
   const [form,setForm]=useState({fullName:user.fullName,yearLevel:user.yearLevel??'',course:user.course??''});
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
@@ -43,12 +44,12 @@ export default function ProfilePage(){
     }catch(err){setError(err.details?Object.values(err.details).join(' '):err.message);}finally{setBusy(false);}
   }
   return <>
-    <Link to="/student" className="mb-4 inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal shadow-sm transition-colors hover:border-teal/40 hover:bg-teal/5 active:bg-teal/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2 sm:px-4"><ArrowLeft aria-hidden="true" className="h-4 w-4 shrink-0"/><span>Back to home</span></Link>
-    <PageHeader icon={UIActionUserRound} title="My Profile" description="Keep your name, year level, and course up to date."/>
+    <Link to={student?'/student':'/supervisor'} className="mb-4 inline-flex min-h-11 w-fit max-w-full items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal shadow-sm transition-colors hover:border-teal/40 hover:bg-teal/5 active:bg-teal/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal focus-visible:ring-offset-2 sm:px-4"><ArrowLeft aria-hidden="true" className="h-4 w-4 shrink-0"/><span>Back to home</span></Link>
+    <PageHeader icon={UIActionUserRound} title="My Profile" description={student?"Keep your name, year level, and course up to date.":"Manage your profile picture and view your office assignment."}/>
     <Card title="Profile picture" className="mb-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <UserAvatar user={user} className="h-24 w-24 text-2xl"/>
-        <div className="min-w-0"><p className="mb-3 text-sm text-muted">Choose a PNG or JPEG photo up to 2 MB. It appears in your account menu and your administrator's student overview.</p>
+        <div className="min-w-0"><p className="mb-3 text-sm text-muted">Choose a PNG or JPEG photo up to 2 MB. It appears in your account menu and your administrator's spotlight.</p>
           <input ref={photoInput} hidden type="file" accept="image/png,image/jpeg" aria-label="Choose profile picture" onChange={e=>{changePhoto(e.target.files?.[0]);e.target.value='';}}/>
           <div className="flex flex-col gap-2 sm:flex-row"><Button type="button" disabled={photoBusy||busy} onClick={()=>photoInput.current.click()} className="min-h-11"><Camera aria-hidden="true" className="h-4 w-4"/>{photoBusy?'Updating photo…':user.photoUrl?'Change photo':'Add profile picture'}</Button>
             {user.photoUrl&&<Button type="button" variant="secondary" disabled={photoBusy||busy} onClick={removePhoto} className="min-h-11"><Trash2 aria-hidden="true" className="h-4 w-4"/>Remove photo</Button>}
@@ -58,8 +59,8 @@ export default function ProfilePage(){
         </div>
       </div>
     </Card>
-    <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <Card title={<span className="flex items-center gap-2"><UserRound aria-hidden="true" className="h-4 w-4 text-teal"/>Personal and academic details</span>}>
+    <div className={student?"grid items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]":"max-w-2xl"}>
+      {student&&<Card title={<span className="flex items-center gap-2"><UserRound aria-hidden="true" className="h-4 w-4 text-teal"/>Personal and academic details</span>}>
         <form onSubmit={save} className="space-y-5">
           <fieldset disabled={busy} className="min-w-0 space-y-5 disabled:opacity-60">
             <label className="block text-sm font-medium">Full name<input required maxLength={120} autoComplete="name" value={form.fullName} onChange={set('fullName')} className={field}/></label>
@@ -72,9 +73,9 @@ export default function ProfilePage(){
           {message&&<p role="status" className="rounded-lg bg-ok-bg p-3 text-sm text-ok-fg">{message}</p>}
           <Button type="submit" disabled={busy||!form.fullName.trim()} className="min-h-11 w-full sm:w-auto"><Save aria-hidden="true" className="h-4 w-4"/>{busy?'Saving…':'Save profile'}</Button>
         </form>
-      </Card>
+      </Card>}
       <Card title="Account and assignment">
-        <dl className="space-y-4 text-sm"><div><dt className="text-xs text-muted">Email</dt><dd className="mt-1 break-all">{user.email}</dd></div><div><dt className="text-xs text-muted">Assigned office</dt><dd className="mt-1 break-words">{user.office?.name??'Not assigned'}</dd></div><div><dt className="text-xs text-muted">Role</dt><dd className="mt-1">Student Assistant</dd></div></dl>
+        <dl className="space-y-4 text-sm"><div><dt className="text-xs text-muted">Email</dt><dd className="mt-1 break-all">{user.email}</dd></div><div><dt className="text-xs text-muted">Assigned office</dt><dd className="mt-1 break-words">{user.office?.name??'Not assigned'}</dd></div><div><dt className="text-xs text-muted">Role</dt><dd className="mt-1">{student?'Student Assistant':'Office Supervisor'}</dd></div></dl>
         <p className="mt-5 border-t border-line pt-4 text-xs text-muted">Contact your administrator for email, office assignment, or duty-hour requirement changes. Updating your profile keeps previously saved DTR documents unchanged.</p>
       </Card>
     </div>

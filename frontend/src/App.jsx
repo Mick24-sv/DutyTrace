@@ -1,3 +1,5 @@
+import TeammatesPage from './pages/student/TeammatesPage.jsx';
+import ConcernsPage from './pages/shared/ConcernsPage.jsx';
 import DtrPreviewPage from './pages/student/DtrPreviewPage.jsx';
 import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
 import { Navigate, Route, Routes } from 'react-router-dom';
@@ -47,21 +49,23 @@ const DASHBOARDS = {
 
 // Active pages, including secondary tools reached from their parent section.
 const BUILT_PAGES = {
-  student: { scan: ScanPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
-  supervisor: { 'schedule-review': DutyScheduleReviewPage, 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, assistants: AssistantsPage, scan: ScanPage, 'historical-hours': HistoricalHoursPage, 'dtr-review': DtrReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
-  admin: { users: UsersPage, 'historical-hours': HistoricalHoursPage, semesters: AcademicTermsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, discrepancies: AttendanceDiscrepanciesPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage },
+  student: { concerns: ConcernsPage, scan: ScanPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, dtr: MyDtrPage, absences: MyAbsencesPage, cases: CasesListPage },
+  supervisor: { concerns: ConcernsPage, 'schedule-review': DutyScheduleReviewPage, 'office-qr': SupervisorQrPage, attendance: MyAttendancePage, discrepancies: AttendanceDiscrepanciesPage, assistants: AssistantsPage, scan: ScanPage, 'historical-hours': HistoricalHoursPage, 'dtr-review': DtrReviewPage, absences: AbsenceQueuePage, cases: CasesListPage, reports: ReportsPage },
+  admin: { concerns: ConcernsPage, users: UsersPage, 'historical-hours': HistoricalHoursPage, semesters: AcademicTermsPage, offices: OfficesPage, 'qr-codes': QrCodesPage, dtrs: DtrOverviewPage, discrepancies: AttendanceDiscrepanciesPage, cases: CasesListPage, reports: ReportsPage, audit: AuditTrailPage, settings: PolicySettingsPage },
 };
 
 // Built pages that are not in the sidebar (reached by links).
 const EXTRA_ROUTES = {
   student: [
     { path: 'profile', Page: ProfilePage },
+    { path: 'teammates', Page: TeammatesPage },
     { path: 'dtr/preview/:month', Page: DtrPreviewPage },
     { path: 'dtr/:id', Page: DtrDetailPage },
     { path: 'absences/:id', Page: AbsenceDetailPage },
     { path: 'cases/:id', Page: CaseDetailPage },
   ],
   supervisor: [
+    { path: 'profile', Page: ProfilePage },
     { path: 'assistants/:userId', Page: AssistantDetailPage },
     { path: 'dtr-review/:id', Page: DtrDetailPage },
     { path: 'absences/:id', Page: AbsenceDetailPage },

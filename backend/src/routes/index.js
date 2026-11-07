@@ -1,3 +1,4 @@
+import { concernsRouter } from '../modules/concerns/concerns.routes.js';
 import { Router } from 'express';
 import health from './health.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
@@ -38,6 +39,7 @@ export function buildRoutes(options = {}) {
   router.use('/dtrs', dtrRouter);
   router.use('/absences', absencesRouter);
   router.use('/cases', casesRouter);
+  router.use('/concerns', concernsRouter);
   router.use('/documents', documentsRouter);
   router.use('/reports', reportsRouter);
   router.use('/semesters', semestersRouter);
