@@ -1,0 +1,37 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {loadFixtures,makeClient,setupTestServer,query} from './helpers/testEnv.js';
+import {archiveAccount,deletionEligibility,deleteUnusedAccount} from '../src/modules/users/account-lifecycle.service.js';
+let fx;
+const ctx=setupTestServer({},async()=>{fx=await loadFixtures(api);});
+const api=makeClient(ctx);
+const as=who=>({cookie:fx.cookies[who]});
+test('archive revokes sessions, hides the account, protects records and restores its previous status',async()=>{
+ assert.equal((await api.post(`/users/${fx.ids.studentA}/archive`,as('studentA'))).status,403);
+ assert.equal((await api.post(`/users/${fx.ids.admin}/archive`,as('admin'))).status,400);
+ assert.equal((await api.post(`/users/${fx.ids.studentA}/archive`,as('admin'))).status,200);
+ assert.equal((await api.get('/auth/me',as('studentA'))).status,401);
+ assert.ok(!(await api.get('/users',as('admin'))).body.data.users.some(u=>u.id===fx.ids.studentA));
+ assert.ok((await api.get('/users?archived=true',as('admin'))).body.data.users.some(u=>u.id===fx.ids.studentA&&u.archivedAt));
+ assert.equal((await api.request('PATCH',`/users/${fx.ids.studentA}`,{...as('admin'),body:{status:'active'}})).status,409);
+ assert.equal((await api.get(`/users/${fx.ids.studentA}/deletion-eligibility`,as('admin'))).body.data.canDelete,false);
+ assert.equal((await api.post(`/users/${fx.ids.studentA}/restore`,as('admin'))).status,200);
+ const restored=(await api.get(`/users/${fx.ids.studentA}`,as('admin'))).body.data.user;
+ assert.equal(restored.status,'active');assert.equal(restored.archivedAt,null);
+ assert.equal((await api.get('/auth/me',as('studentA'))).status,401);
+});
+test('unused accounts with setup assignments can be deleted only with exact confirmation',async()=>{
+ const actor=(await api.get('/auth/me',as('admin'))).body.data.user;
+ const email='unused-lifecycle@demo.dutytrace.test';
+ const created=await api.post('/users',{...as('admin'),body:{fullName:'Unused account',email,role:'student',password:'Unused-test-password-123',officeId:fx.officeIds.A}});
+ assert.equal(created.status,201);const id=created.body.data.user.id;
+ assert.equal((await deletionEligibility(actor,id)).canDelete,true);
+ await assert.rejects(deleteUnusedAccount(actor,id,'wrong'),e=>e.code==='CONFIRMATION_REQUIRED');
+ await query("UPDATE users SET status='disabled' WHERE id=$1",[id]);
+ await archiveAccount(actor,id);await archiveAccount(actor,id,true);
+ assert.equal((await query('SELECT status FROM users WHERE id=$1',[id])).rows[0].status,'disabled');
+ await deleteUnusedAccount(actor,id,email);
+ assert.equal((await query('SELECT 1 FROM users WHERE id=$1',[id])).rowCount,0);
+ assert.equal((await query('SELECT 1 FROM duty_assignments WHERE user_id=$1',[id])).rowCount,0);
+ assert.ok((await query("SELECT 1 FROM audit_logs WHERE action='user.deleted' AND target_id=$1",[id])).rowCount);
+});

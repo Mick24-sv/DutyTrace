@@ -1,3 +1,5 @@
+import ConfirmDialog from '../../components/ui/ConfirmDialog.jsx';
+import {useAuth} from '../../hooks/useAuth.jsx';
 import StudentPortraitCarousel from '../../components/dashboard/StudentPortraitCarousel.jsx';
 import OfficeSupervisorSpotlight from '../../components/dashboard/OfficeSupervisorSpotlight.jsx';
 import {Users as UIActionUsers,PlusCircle as UIActionPlusCircle} from 'lucide-react';
@@ -7,11 +9,11 @@ import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { ChevronDown, Eye, EyeOff, Search, UserRound, ArrowUpRight, GraduationCap, Briefcase, ShieldCheck } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Search, UserRound, ArrowUpRight, GraduationCap, Briefcase, ShieldCheck, Archive, RotateCcw, Trash2 } from 'lucide-react';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import { apiPatch, apiPost, apiPut } from '../../services/api.js';
+import { apiPatch, apiPost, apiPut, apiGet, apiDelete } from '../../services/api.js';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 
 const field = 'w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink';
@@ -38,6 +40,7 @@ function StudentHoursInput({ user, onUpdate }) {
     }
   };
 
+  if(user.archivedAt)return <span className="text-sm text-muted">{user.requiredHours!=null?user.requiredHours+' hrs':'Default (Policy)'}</span>;
   if (!editing) {
     return (
       <button
@@ -89,8 +92,15 @@ function StudentHoursInput({ user, onUpdate }) {
 
 // Administrators create accounts, assign people to offices and enable/disable accounts.
 export default function UsersPage() {
+  const {user:currentUser}=useAuth();
+  const [showArchived,setShowArchived]=useState(false);
+  const [accountAction,setAccountAction]=useState(null);
+  const [accountBusy,setAccountBusy]=useState(false);
+  const [accountError,setAccountError]=useState('');
+  const [eligibility,setEligibility]=useState(null);
+  const [confirmation,setConfirmation]=useState('');
   const [tick, setTick] = useState(0);
-  const { data, loading, error } = useApiData(`/users?_=${tick}`);
+  const { data, loading, error } = useApiData(`/users?_=${tick}&archived=${showArchived}`);
   const offices = useApiData('/offices');
   const [form, setForm] = useState({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -126,6 +136,7 @@ export default function UsersPage() {
         officeId: form.role === 'admin' || !form.officeId ? undefined : form.officeId,
         requiredHours: form.role === 'student' && form.requiredHours ? Number(form.requiredHours) : undefined,
       });
+      setShowArchived(false);
       selectGroup(form.role);
       setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
       reload();
@@ -137,6 +148,30 @@ export default function UsersPage() {
     try { await fn(); reload(); } catch (err) { setRowError(err.message); }
   }
 
+  async function openAccountAction(type,user){
+    setAccountAction({type,user});setAccountError('');setConfirmation('');setEligibility(null);
+    if(type==='delete'){
+      setAccountBusy(true);
+      try{setEligibility(await apiGet('/users/'+user.id+'/deletion-eligibility'));}catch(err){setAccountError(err.message);}finally{setAccountBusy(false);}
+    }
+  }
+  async function confirmAccountAction(){
+    setAccountBusy(true);setAccountError('');
+    try{
+      const {type,user}=accountAction;
+      if(type==='delete')await apiDelete('/users/'+user.id,{body:{confirmation}});
+      else await apiPost('/users/'+user.id+'/'+type,{});
+      setAccountAction(null);setExpandedUserId(null);reload();
+    }catch(err){setAccountError(err.message);}finally{setAccountBusy(false);}
+  }
+  const accountActions=u=>u.id===currentUser.id?<span className="text-xs text-muted">Your account</span>:<div className="flex flex-wrap items-center gap-2">
+    {u.archivedAt?<Button variant="secondary" icon={RotateCcw} onClick={()=>openAccountAction('restore',u)}>Restore</Button>:<>
+      <button type="button" className="min-h-11 px-2 text-sm font-medium text-teal underline" onClick={()=>act(()=>apiPatch('/users/'+u.id,{status:u.status==='active'?'disabled':'active'}))}>{u.status==='active'?'Disable':'Enable'}</button>
+      <Button variant="secondary" icon={Archive} onClick={()=>openAccountAction('archive',u)}>Archive</Button>
+    </>}
+    <button type="button" onClick={()=>openAccountAction('delete',u)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-bad-fg hover:bg-bad-bg"><Trash2 aria-hidden="true" className="h-4 w-4"/>Delete unused</button>
+  </div>;
+
   const columns = [
     { key: 'fullName', header: 'Name', render:u=>u.role==='student'?<Link to={`/admin/users/${u.id}`} className="inline-flex items-center gap-2 font-medium text-teal underline"><UserRound aria-hidden="true" className="h-4 w-4 shrink-0"/>{u.fullName}<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></Link>:u.fullName },
     { key: 'email', header: 'Email' },
@@ -145,7 +180,7 @@ export default function UsersPage() {
       key: 'office', header: 'Office',
       render: (u) => (u.role === 'admin' ? '—' : (
         <select
-          aria-label={`Office for ${u.fullName}`} value={u.office?.id ?? ''} className="rounded-lg border border-line bg-surface px-2 py-1 text-sm"
+          disabled={Boolean(u.archivedAt)} aria-label={`Office for ${u.fullName}`} value={u.office?.id ?? ''} className="rounded-lg border border-line bg-surface px-2 py-1 text-sm"
           onChange={(e) => act(() => apiPut(`/users/${u.id}/assignment`, { officeId: e.target.value || null }))}
         >
           <option value="">Not assigned</option>
@@ -166,22 +201,21 @@ export default function UsersPage() {
         );
       },
     },
-    { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'approved' : 'rejected'}>{u.status}</Badge> },
-    {
-      key: 'action', header: '',
-      render: (u) => (
-        <button
-          type="button" className="text-sm font-medium text-teal underline"
-          onClick={() => act(() => apiPatch(`/users/${u.id}`, { status: u.status === 'active' ? 'disabled' : 'active' }))}
-        >
-          {u.status === 'active' ? 'Disable' : 'Enable'}
-        </button>
-      ),
-    },
+    { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'approved' : 'rejected'}>{u.archivedAt?'Archived':u.status}</Badge> },
+    {key:'action',header:'Actions',render:u=>accountActions(u)},
   ].filter(column=>column.key!=='role' && (column.key!=='office'||selectedRole!=='admin') && (column.key!=='requiredHours'||selectedRole==='student'));
 
   return (
     <>
+      <ConfirmDialog open={Boolean(accountAction)} title={accountAction?.type==='delete'?'Delete unused account permanently?':accountAction?.type==='restore'?'Restore account?':'Archive account?'} confirmLabel={accountAction?.type==='delete'?'Delete permanently':accountAction?.type==='restore'?'Restore account':'Archive account'} busy={accountBusy} confirmDisabled={Boolean(accountError)||(accountAction?.type==='delete'&&(!eligibility?.canDelete||confirmation!==accountAction.user.email))} onCancel={()=>setAccountAction(null)} onConfirm={confirmAccountAction}>
+        <p className="font-medium text-ink">{accountAction?.user.fullName}</p>
+        {accountAction?.type==='delete'?<>
+          <p className="mt-2">Permanent deletion removes this unused account and its office assignment. This cannot be undone.</p>
+          {eligibility&&!eligibility.canDelete&&<p className="mt-3 text-bad-fg">This account has sign-in activity or linked records. Archive it to preserve its history.</p>}
+          {eligibility?.canDelete&&<label className="mt-3 block">Type <strong className="break-all">{accountAction.user.email}</strong> to confirm<input value={confirmation} onChange={e=>setConfirmation(e.target.value)} autoComplete="off" className="mt-2 min-h-11 w-full rounded-lg border border-line bg-surface px-3 text-base text-ink"/></label>}
+        </>:<p className="mt-2">{accountAction?.type==='restore'?'Restore this account to the current list and its previous active or disabled state.':"Archive this account to block sign-in and hide it from current lists. Attendance, DTRs, concerns, and history will be preserved."}</p>}
+        {accountError&&<p role="alert" className="mt-3 text-bad-fg">{accountError}</p>}
+      </ConfirmDialog>
       <PageHeader icon={UIActionUsers} title="Students & Staff" description="Open a student's name to view their profile and progress. Manage accounts and office assignments here; semester requirements are under Academic Terms." />
       <div role="note" className="mb-4 rounded-lg bg-info-bg p-3 text-sm text-info-fg">
         The Monthly DTR target below is used for monthly DTR requirements. It does not set a student's semester-hour requirement; assign semester hours under <Link to="/admin/semesters" className="font-medium underline">Academic Terms</Link>.
@@ -271,7 +305,7 @@ export default function UsersPage() {
                 <Icon aria-hidden="true" className="h-5 w-5 shrink-0"/><span className="min-w-0 flex-1">{label}</span><span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${selectedRole===role?'bg-white/20':'bg-canvas text-muted'}`}>{data.users.filter(user=>user.role===role).length}</span>
               </button>)}
             </nav>
-            <h3 className="mb-3 text-sm font-semibold text-navy">{groupLabel}</h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold text-navy">{groupLabel}</h3><label className="text-xs text-muted">Accounts<select value={showArchived?'archived':'current'} onChange={e=>{setShowArchived(e.target.value==='archived');setPage(1);setExpandedUserId(null);}} className="ml-2 min-h-11 rounded-lg border border-line bg-surface px-3 text-sm text-ink"><option value="current">Current accounts</option><option value="archived">Archived accounts</option></select></label></div>
             <label htmlFor="user-search" className="sr-only">Search {groupLabel.toLowerCase()}</label>
             <div className="relative mb-3 w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -284,8 +318,8 @@ export default function UsersPage() {
                 className="w-full rounded-lg border border-line bg-surface py-1.5 pl-9 pr-3 text-sm text-ink placeholder:text-muted"
               />
             </div>
-            {selectedRole==='student' && visibleUsers.length>0 && <StudentPortraitCarousel students={visibleUsers} />}
-            {selectedRole==='supervisor' && <OfficeSupervisorSpotlight supervisors={visibleUsers} />}
+            {!showArchived && selectedRole==='student' && visibleUsers.length>0 && <StudentPortraitCarousel students={visibleUsers} />}
+            {!showArchived && selectedRole==='supervisor' && <OfficeSupervisorSpotlight supervisors={visibleUsers} />}
             <div className="hidden sm:block">
               <DataTable columns={columns} rows={visibleUsers} caption={groupLabel} empty={userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`} />
             </div>
@@ -306,7 +340,7 @@ export default function UsersPage() {
                       <span className="block break-all text-xs text-muted">{user.email}</span>
                       <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                         <span className="text-ink">{ROLE_CONFIG[user.role].label}</span>
-                        <Badge tone={user.status === 'active' ? 'approved' : 'rejected'}>{user.status}</Badge>
+                        <Badge tone={user.status === 'active' ? 'approved' : 'rejected'}>{user.archivedAt?'Archived':user.status}</Badge>
                       </span>
                     </span>
                     <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform ${expandedUserId === user.id ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -317,7 +351,7 @@ export default function UsersPage() {
                       <p className="mb-1 text-xs text-muted">Office</p>
                       {user.role === 'admin' ? <span className="text-muted">—</span> : (
                         <select
-                          aria-label={`Office for ${user.fullName}`} value={user.office?.id ?? ''} className={`${field} min-w-0`}
+                          disabled={Boolean(user.archivedAt)} aria-label={`Office for ${user.fullName}`} value={user.office?.id ?? ''} className={`${field} min-w-0`}
                           onChange={(event) => act(() => apiPut(`/users/${user.id}/assignment`, { officeId: event.target.value || null }))}
                         >
                           <option value="">Not assigned</option>
@@ -332,12 +366,7 @@ export default function UsersPage() {
                       </div>
                     )}
 
-                  <button
-                    type="button" className="min-h-10 text-sm font-medium text-teal underline"
-                    onClick={() => act(() => apiPatch(`/users/${user.id}`, { status: user.status === 'active' ? 'disabled' : 'active' }))}
-                  >
-                    {user.status === 'active' ? 'Disable account' : 'Enable account'}
-                  </button>
+                  {accountActions(user)}
                   </div>}
                 </article>
               ))}

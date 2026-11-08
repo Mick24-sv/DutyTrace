@@ -1,3 +1,4 @@
+import {archiveAccount,deletionEligibility,deleteUnusedAccount} from './account-lifecycle.service.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTransaction } from '../../db/pool.js';
@@ -122,7 +123,8 @@ usersRouter.patch('/me/profile',requireRole('student'),asyncHandler(async(req,re
 
 // List users: admin only.
 usersRouter.get('/', requireRole('admin'), asyncHandler(async (_req, res) => {
-  const { rows } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.institution_id = $1 ORDER BY u.role, u.full_name`, [_req.user.institutionId]);
+  const archived=parse(z.enum(['true','false']).default('false'),_req.query.archived);
+  const { rows } = await query(`${USER_WITH_OFFICE_SQL} WHERE u.institution_id = $1 AND (u.archived_at IS NOT NULL)=$2 ORDER BY u.role, u.full_name`, [_req.user.institutionId,archived==='true']);
   ok(res, { users: rows.map(toPublicUser) });
 }));
 
@@ -193,6 +195,7 @@ usersRouter.patch('/:id', requireRole('admin'), asyncHandler(async (req, res) =>
     const before = await fetchUser(id, db, req.user.institutionId);
     if (!before) throw new AppError(404, 'NOT_FOUND', 'User not found.');
 
+    if(before.archivedAt)throw new AppError(409,'USER_ARCHIVED','Restore this account before editing it.');
     if (changes.role === 'admin' && before.office) {
       throw new AppError(400, 'VALIDATION_ERROR', 'End the office assignment before making this user an administrator.');
     }
@@ -229,6 +232,7 @@ usersRouter.put('/:id/assignment', requireRole('admin'), asyncHandler(async (req
   const updated = await withTransaction(async (db) => {
     const before = await fetchUser(id, db, req.user.institutionId);
     if (!before) throw new AppError(404, 'NOT_FOUND', 'User not found.');
+    if(before.archivedAt)throw new AppError(409,'USER_ARCHIVED','Restore this account before changing its assignment.');
     if (before.role === 'admin') throw new AppError(400, 'VALIDATION_ERROR', 'Administrators are not assigned to an office.');
     if (officeId) {
       const office = await db.query(
@@ -247,3 +251,8 @@ usersRouter.put('/:id/assignment', requireRole('admin'), asyncHandler(async (req
   });
   ok(res, { user: updated });
 }));
+
+usersRouter.post('/:id/archive',requireRole('admin'),asyncHandler(async(req,res)=>{await archiveAccount(req.user,parseId(req.params.id));ok(res,{archived:true});}));
+usersRouter.post('/:id/restore',requireRole('admin'),asyncHandler(async(req,res)=>{await archiveAccount(req.user,parseId(req.params.id),true);ok(res,{restored:true});}));
+usersRouter.get('/:id/deletion-eligibility',requireRole('admin'),asyncHandler(async(req,res)=>ok(res,await deletionEligibility(req.user,parseId(req.params.id)))));
+usersRouter.delete('/:id',requireRole('admin'),asyncHandler(async(req,res)=>{const b=parse(z.object({confirmation:z.string().min(1).max(254)}).strict(),req.body);await deleteUnusedAccount(req.user,parseId(req.params.id),b.confirmation);ok(res,{deleted:true});}));

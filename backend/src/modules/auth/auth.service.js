@@ -29,6 +29,7 @@ export const toPublicUser = (row) => ({
   photoUrl: row.profile_photo_updated_at ? `/users/${row.id}/photo?v=${new Date(row.profile_photo_updated_at).getTime()}` : null,
   role: row.role,
   status: row.status,
+  archivedAt: row.archived_at ?? null,
   requiredHours: row.required_hours != null ? Number(row.required_hours) : null,
   institutionId: row.institution_id,
   institution: row.institution_id ? { id: row.institution_id, name: row.institution_name, timezone: row.institution_timezone } : null,
@@ -37,7 +38,7 @@ export const toPublicUser = (row) => ({
 
 // Shared SELECT: a user plus their current office (if any).
 export const USER_WITH_OFFICE_SQL = `
-  SELECT u.id, u.email, u.full_name, u.role, u.status, u.required_hours, u.year_level, u.course, u.profile_photo_updated_at,
+  SELECT u.id, u.email, u.full_name, u.role, u.status, u.archived_at, u.required_hours, u.year_level, u.course, u.profile_photo_updated_at,
          i.id AS institution_id, i.name AS institution_name, i.timezone AS institution_timezone,
          o.id AS office_id, o.code AS office_code, o.name AS office_name
   FROM users u
