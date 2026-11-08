@@ -44,8 +44,10 @@ async function request(method, path, { body, rawBody, signal } = {}) {
 
   if (!res.ok || !json?.success) {
     throw new ApiError(
-      json?.error?.message ?? 'Unexpected server response.',
-      json?.error?.code ?? 'UNKNOWN',
+      json?.error?.message ?? (res.status === 429
+        ? 'Too many requests. Please wait a few minutes before trying again. If this continues, contact your administrator.'
+        : 'Unexpected server response.'),
+      json?.error?.code ?? (res.status === 429 ? 'RATE_LIMITED' : 'UNKNOWN'),
       res.status,
       json?.error?.details,
     );
