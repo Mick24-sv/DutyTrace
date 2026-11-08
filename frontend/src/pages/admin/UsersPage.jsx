@@ -3,7 +3,7 @@ import {useAuth} from '../../hooks/useAuth.jsx';
 import StudentPortraitCarousel from '../../components/dashboard/StudentPortraitCarousel.jsx';
 import OfficeSupervisorSpotlight from '../../components/dashboard/OfficeSupervisorSpotlight.jsx';
 import {Users as UIActionUsers,PlusCircle as UIActionPlusCircle} from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
@@ -40,19 +40,19 @@ function StudentHoursInput({ user, onUpdate }) {
     }
   };
 
-  if(user.archivedAt)return <span className="text-sm text-muted">{user.requiredHours!=null?user.requiredHours+' hrs':'Default (Policy)'}</span>;
+  if(user.archivedAt)return <span className="text-sm text-muted">{user.requiredHours!=null?user.requiredHours+' hrs':'Not assigned'}</span>;
   if (!editing) {
     return (
       <button
         type="button"
         onClick={() => { setVal(user.requiredHours != null ? String(user.requiredHours) : ''); setEditing(true); }}
         className="group flex items-center gap-1.5 text-left text-sm text-ink hover:text-teal focus:outline-none"
-        title="Monthly DTR requirement override; semester requirements are assigned under Academic Terms"
+        title="Edit this student's requirement for the selected semester"
       >
         {user.requiredHours != null ? (
           <span className="font-semibold text-ink">{user.requiredHours} hrs</span>
         ) : (
-          <span className="text-xs text-muted italic">Default (Policy)</span>
+          <span className="text-xs text-muted italic">Not assigned</span>
         )}
         <span className="text-xs text-teal opacity-0 group-hover:opacity-100 underline">Edit</span>
       </button>
@@ -62,11 +62,12 @@ function StudentHoursInput({ user, onUpdate }) {
   return (
     <form onSubmit={submit} className="flex items-center gap-1">
       <input
+        aria-label={'Semester duty-hour target for '+user.fullName}
         type="number"
-        step="0.5"
-        min="1"
-        max="744"
-        placeholder="Default"
+        step="0.01"
+        min="0.01"
+        max="10000"
+        placeholder="Not assigned"
         value={val}
         autoFocus
         onChange={(e) => setVal(e.target.value)}
@@ -102,7 +103,14 @@ export default function UsersPage() {
   const [tick, setTick] = useState(0);
   const { data, loading, error } = useApiData(`/users?_=${tick}&archived=${showArchived}`);
   const offices = useApiData('/offices');
-  const [form, setForm] = useState({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
+  const termsQuery=useApiData('/semesters');
+  const currentTermQuery=useApiData('/semesters/current');
+  const [selectedTermId,setSelectedTermId]=useState('');
+  const semesterId=selectedTermId||currentTermQuery.data?.term?.id||'';
+  const semesterRequirements=useApiData(semesterId?'/semesters/'+semesterId+'/requirements?refresh='+tick:null);
+  const requirementsByStudent=new Map((semesterRequirements.data?.requirements??[]).map(r=>[r.id,r]));
+  useEffect(()=>{const refresh=()=>setTick(value=>value+1);window.addEventListener('focus',refresh);return()=>window.removeEventListener('focus',refresh);},[]);
+  const [form, setForm] = useState({ email: '', fullName: '', role: 'student', password: '', officeId: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
@@ -134,11 +142,10 @@ export default function UsersPage() {
       await apiPost('/users', {
         ...form,
         officeId: form.role === 'admin' || !form.officeId ? undefined : form.officeId,
-        requiredHours: form.role === 'student' && form.requiredHours ? Number(form.requiredHours) : undefined,
       });
       setShowArchived(false);
       selectGroup(form.role);
-      setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '', requiredHours: '' });
+      setForm({ email: '', fullName: '', role: 'student', password: '', officeId: '' });
       reload();
     } catch (err) { setFormError(err.details ? Object.values(err.details).join(' ') : err.message); } finally { setBusy(false); }
   }
@@ -172,6 +179,19 @@ export default function UsersPage() {
     <button type="button" onClick={()=>openAccountAction('delete',u)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-bad-fg hover:bg-bad-bg"><Trash2 aria-hidden="true" className="h-4 w-4"/>Delete unused</button>
   </div>;
 
+  const semesterHours=u=>{
+    if(currentTermQuery.loading||semesterRequirements.loading)return <span className="text-xs text-muted">Loading requirement?</span>;
+    if(currentTermQuery.error||semesterRequirements.error)return <span className="text-xs text-bad-fg">Unable to load requirement</span>;
+    if(!semesterId)return <span className="text-xs text-muted">Select an academic term</span>;
+    const requirement=requirementsByStudent.get(u.id);
+    const term=(termsQuery.data?.terms??[]).find(t=>t.id===semesterId);
+    const hours=requirement?.requiredHours??null;
+    if(u.archivedAt||term?.finalizedAt)return <span className="text-sm font-semibold">{hours==null?'Not assigned':hours+' hrs'}</span>;
+    const officeId=requirement?.officeId||u.office?.id;
+    if(!officeId)return <span className="text-xs text-muted">Assign an office first</span>;
+    return <StudentHoursInput key={u.id+':'+semesterId} user={{...u,requiredHours:hours}} onUpdate={value=>act(()=>apiPut('/semesters/'+semesterId+'/requirements/'+u.id,{officeId,requiredHours:value}))}/>;
+  };
+
   const columns = [
     { key: 'fullName', header: 'Name', render:u=>u.role==='student'?<Link to={`/admin/users/${u.id}`} className="inline-flex items-center gap-2 font-medium text-teal underline"><UserRound aria-hidden="true" className="h-4 w-4 shrink-0"/>{u.fullName}<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></Link>:u.fullName },
     { key: 'email', header: 'Email' },
@@ -188,22 +208,10 @@ export default function UsersPage() {
         </select>
       )),
     },
-    {
-      key: 'requiredHours',
-      header: 'Monthly DTR target',
-      render: (u) => {
-        if (u.role !== 'student') return <span className="text-muted">—</span>;
-        return (
-          <StudentHoursInput
-            user={u}
-            onUpdate={(val) => act(() => apiPatch(`/users/${u.id}`, { requiredHours: val }))}
-          />
-        );
-      },
-    },
+    {key:'semesterRequiredHours',header:'Semester duty-hour target',render:u=>semesterHours(u)},
     { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'approved' : 'rejected'}>{u.archivedAt?'Archived':u.status}</Badge> },
     {key:'action',header:'Actions',render:u=>accountActions(u)},
-  ].filter(column=>column.key!=='role' && (column.key!=='office'||selectedRole!=='admin') && (column.key!=='requiredHours'||selectedRole==='student'));
+  ].filter(column=>column.key!=='role' && (column.key!=='office'||selectedRole!=='admin') && (column.key!=='semesterRequiredHours'||selectedRole==='student'));
 
   return (
     <>
@@ -216,10 +224,8 @@ export default function UsersPage() {
         </>:<p className="mt-2">{accountAction?.type==='restore'?'Restore this account to the current list and its previous active or disabled state.':"Archive this account to block sign-in and hide it from current lists. Attendance, DTRs, concerns, and history will be preserved."}</p>}
         {accountError&&<p role="alert" className="mt-3 text-bad-fg">{accountError}</p>}
       </ConfirmDialog>
-      <PageHeader icon={UIActionUsers} title="Students & Staff" description="Open a student's name to view their profile and progress. Manage accounts and office assignments here; semester requirements are under Academic Terms." />
-      <div role="note" className="mb-4 rounded-lg bg-info-bg p-3 text-sm text-info-fg">
-        The Monthly DTR target below is used for monthly DTR requirements. It does not set a student's semester-hour requirement; assign semester hours under <Link to="/admin/semesters" className="font-medium underline">Academic Terms</Link>.
-      </div>
+      <PageHeader icon={UIActionUsers} title="Students & Staff" description="Open a student's name to view their profile and progress. Manage accounts, office assignments, and each student's semester duty-hour target here." />
+      <div role="note" className="mb-4 rounded-lg bg-info-bg p-3 text-sm text-info-fg">Semester targets use the same saved requirements as <Link to="/admin/semesters" className="font-medium underline">Academic Terms</Link>, student progress, and supervisor reports.</div>
       <Card title="Create an account" className="mb-6">
         <form onSubmit={create} className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -243,27 +249,6 @@ export default function UsersPage() {
               {officeList.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
-          {form.role === 'student' && (
-            <div className="sm:col-span-2">
-              <label htmlFor="u-req-hours" className="mb-1 block text-xs font-medium text-muted">
-                Monthly DTR target override (optional)
-              </label>
-              <input
-                id="u-req-hours"
-                type="number"
-                step="0.5"
-                min="0.5"
-                max="744"
-                placeholder="Use institutional monthly DTR policy"
-                value={form.requiredHours}
-                onChange={set('requiredHours')}
-                className={field}
-              />
-              <p className="mt-1 text-[11px] text-muted">
-                This value is only saved in monthly DTR snapshots. Assign semester completion targets under Academic Terms.
-              </p>
-            </div>
-          )}
           <div className="sm:col-span-2">
             <label htmlFor="u-pass" className="mb-1 block text-xs font-medium text-muted">Temporary password (at least 10 characters)</label>
             <div className="relative">
@@ -306,6 +291,7 @@ export default function UsersPage() {
               </button>)}
             </nav>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold text-navy">{groupLabel}</h3><label className="text-xs text-muted">Accounts<select value={showArchived?'archived':'current'} onChange={e=>{setShowArchived(e.target.value==='archived');setPage(1);setExpandedUserId(null);}} className="ml-2 min-h-11 rounded-lg border border-line bg-surface px-3 text-sm text-ink"><option value="current">Current accounts</option><option value="archived">Archived accounts</option></select></label></div>
+            {selectedRole==='student'&&<label className="mb-4 block max-w-sm text-xs text-muted">Academic term<select value={semesterId} onChange={e=>setSelectedTermId(e.target.value)} className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink"><option value="" disabled>Select an academic term</option>{(termsQuery.data?.terms??[]).map(term=><option key={term.id} value={term.id}>{term.academicYear} ? {term.semester}{term.id===currentTermQuery.data?.term?.id?' (Current)':''}</option>)}</select></label>}
             <label htmlFor="user-search" className="sr-only">Search {groupLabel.toLowerCase()}</label>
             <div className="relative mb-3 w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -361,8 +347,8 @@ export default function UsersPage() {
                     </div>}
                     {user.role === 'student' && (
                       <div>
-                        <p className="mb-1 text-xs text-muted">Monthly DTR target</p>
-                        <StudentHoursInput user={user} onUpdate={(value) => act(() => apiPatch(`/users/${user.id}`, { requiredHours: value }))} />
+                        <p className="mb-1 text-xs text-muted">Semester duty-hour target</p>
+                        {semesterHours(user)}
                       </div>
                     )}
 
