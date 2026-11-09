@@ -75,7 +75,7 @@ export async function insertManualReceipt(db, { ownerId, absenceId = null, caseI
 // ---------------------------------------------------------------- download
 // Everything about who may read a file is decided HERE, on every request:
 //   student: only their own   supervisor: only their office's records   admin: any
-export async function openForDownload({ user, id, ip }) {
+export async function openForDownload({ user, id, ip, preview = false }) {
   const { rows } = await query(
     `SELECT d.id, d.owner_id AS user_id, owner.institution_id, d.stored_name, d.original_name, d.mime_type, d.size_bytes,
             COALESCE(a.office_id, c.office_id) AS office_id
@@ -101,7 +101,7 @@ export async function openForDownload({ user, id, ip }) {
     throw error;
   }
   await recordAudit({
-    actorId: user.id, action: 'document.downloaded', targetType: 'document', targetId: doc.id,
+    actorId: user.id, action: preview ? 'document.viewed' : 'document.downloaded', targetType: 'document', targetId: doc.id,
     after: { ownerId: doc.user_id }, ip,
   });
   return { stream, name: doc.original_name, mime: doc.mime_type, size: doc.size_bytes };

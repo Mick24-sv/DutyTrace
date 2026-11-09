@@ -111,6 +111,23 @@ describe('Phase 5 - secure documents', () => {
   });
 
   describe('downloads: who may read a file', () => {
+    it('previews use inline headers, enforce record access and audit the view', async () => {
+      for (const who of ['studentA', 'supervisorA', 'admin']) {
+        const res = await api.raw('GET', `/documents/${docId}/view`, as(who));
+        assert.equal(res.status, 200);
+        assert.deepEqual(res.buffer, SAMPLE.pdf);
+        assert.match(res.headers.get('content-disposition'), /^inline;/);
+        assert.equal(res.headers.get('cache-control'), 'private, no-store');
+        assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+      }
+      for (const [who, status] of [['studentA2', 403], ['supervisorB', 403], [null, 401]]) {
+        const res = await api.raw('GET', `/documents/${docId}/view`, who ? as(who) : {});
+        assert.equal(res.status, status);
+        assert.equal(res.buffer.includes(SAMPLE.pdf), false);
+      }
+      const { rows } = await query("SELECT actor_id FROM audit_logs WHERE action = 'document.viewed' AND target_id = $1", [docId]);
+      assert.deepEqual(rows.map((r) => r.actor_id).sort(), [fx.ids.studentA, fx.ids.supervisorA, fx.ids.admin].sort());
+    });
     it('the owner gets the exact bytes with safe headers', async () => {
       const res = await download('studentA', docId);
       assert.equal(res.status, 200);
