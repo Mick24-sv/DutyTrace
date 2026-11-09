@@ -43,7 +43,7 @@ export const countDocuments = async (db, column, id) =>
 // and MUST call discardUpload(stored) if that insert (or anything after it) fails.
 export async function acceptUpload(buffer, rawName) {
   const meta = validateUpload(buffer, rawName, env.maxUploadBytes);
-  const stored = await putFile(buffer);
+  const stored = await putFile(buffer, meta.mime);
   return { ...meta, ...stored };
 }
 export const discardUpload = (accepted) => (accepted ? removeFile(accepted.storedName) : undefined);

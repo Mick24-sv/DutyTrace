@@ -44,7 +44,7 @@ async function storageRequest(url, options = {}) {
   return response;
 }
 
-export async function putFile(buffer) {
+export async function putFile(buffer, mime) {
   const storedName = randomUUID();
   if (isLocal()) {
     await mkdir(env.uploadDir, { recursive: true, mode: 0o700 });
@@ -53,7 +53,7 @@ export async function putFile(buffer) {
   } else {
     const response = await storageRequest(objectPath(storedName), {
       method: 'POST',
-      headers: { 'content-type': 'application/octet-stream', 'x-upsert': 'false' },
+      headers: { 'content-type': mime, 'x-upsert': 'false' },
       body: buffer,
     });
     if (!response.ok) {
