@@ -5,7 +5,7 @@ import { todayKey } from '../../utils/format.js';
 
 // Staff record that something arrived by email or in person. DutyTrace does not read any mailbox:
 // this is a manual note of what was received, and no file is attached to it.
-export default function ReceiptForm({ path, timezone, requirements, onSaved }) {
+export default function ReceiptForm({ path, timezone, requirements, onSaved, helpText }) {
   const today = todayKey(timezone);
   const [method, setMethod] = useState('email');
   const [date, setDate] = useState(today);
@@ -54,7 +54,7 @@ export default function ReceiptForm({ path, timezone, requirements, onSaved }) {
       {error && <p role="alert" className="rounded-lg bg-bad-bg px-3 py-2 text-sm text-bad-fg sm:col-span-2">{error}</p>}
       <div className="sm:col-span-2">
         <Button type="submit" variant="accent" disabled={busy}>{busy ? 'Saving…' : 'Record receipt'}</Button>
-        <p className="mt-1 text-xs text-muted">This only records that something was received. Nothing is attached or read from any mailbox.</p>
+        <p className="mt-1 text-xs text-muted">{helpText ?? 'This only records that something was received. Nothing is attached or read from any mailbox.'}</p>
       </div>
     </form>
   );

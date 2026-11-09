@@ -2,7 +2,7 @@
 // "Reviewed" is deliberately neutral blue: it means a supervisor looked at the notice, NOT that the absence was excused.
 export const ABSENCE_STATUS = {
   pending: { label: 'Awaiting review', tone: 'pending' },
-  acknowledged: { label: 'Acknowledged', tone: 'info' },
+  acknowledged: { label: 'Acknowledged', tone: 'approved' },
   needs_follow_up: { label: 'Follow-up requested', tone: 'pending' },
   reviewed: { label: 'Reviewed', tone: 'info' },
 };

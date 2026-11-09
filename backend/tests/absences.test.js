@@ -232,8 +232,15 @@ describe('Phase 5 - absence notifications', () => {
     it('a supervisor records an email submission and an in-person one', async () => {
       const email = await act('supervisorA', id, 'receipts', { method: 'email', receivedDate: isoDay(-1), notes: 'Letter sent to the office inbox' });
       assert.equal(email.status, 201);
+      assert.equal(email.body.data.status, 'acknowledged');
+      assert.equal(email.body.data.respondedBy, 'Demo Supervisor');
+      assert.ok(email.body.data.actions.includes('follow_up'));
+      assert.equal(email.body.data.actions.includes('review'), false);
+      assert.equal(email.body.data.actions.includes('acknowledge'), false);
       const person = await act('supervisorA', id, 'receipts', { method: 'in_person', receivedDate: isoDay(-2), receivedById: fx.ids.supervisorA });
       const docs = person.body.data.documents;
+      assert.equal(person.body.data.status, 'acknowledged');
+      assert.equal(person.body.data.history.filter((e) => e.action === 'acknowledged').length, 1);
       const manual = docs.filter((d) => d.method !== 'online');
       assert.deepEqual(manual.map((d) => d.method).sort(), ['email', 'in_person']);
       const e = docs.find((d) => d.method === 'email');
@@ -260,6 +267,33 @@ describe('Phase 5 - absence notifications', () => {
       const res = await api.upload(`/absences/${id}/documents`, SAMPLE.pdf, { ...as('studentA') });
       assert.equal(res.status, 409);
       assert.equal(res.body.error.code, 'NOT_ACCEPTING_DOCUMENTS');
+    });
+  });
+
+  describe('receipt acknowledgment and optional follow-up', () => {
+    it('acknowledges follow-up receipts atomically and clears the old request message', async () => {
+      const id = (await submit('studentA', planned())).body.data.id;
+      await act('supervisorA', id, 'follow-up', { response: 'Please send your letter.' });
+      const invalid = await act('supervisorA', id, 'receipts', { method: 'email', receivedDate: isoDay(3) });
+      assert.equal(invalid.status, 400);
+      const before = (await api.get(`/absences/${id}`, as('supervisorA'))).body.data;
+      assert.equal(before.status, 'needs_follow_up');
+      assert.equal(before.documents.length, 0);
+      const receipt = await act('supervisorA', id, 'receipts', { method: 'email', receivedDate: isoDay(-1) });
+      assert.equal(receipt.status, 201);
+      assert.equal(receipt.body.data.status, 'acknowledged');
+      assert.equal(receipt.body.data.response, null);
+      assert.ok(receipt.body.data.respondedAt);
+      assert.deepEqual(receipt.body.data.history.slice(-2).map((e) => e.action), ['document_added', 'acknowledged']);
+      const follow = await act('supervisorA', id, 'follow-up', { response: 'Please send a clearer copy.' });
+      assert.equal(follow.body.data.status, 'needs_follow_up');
+      const upload = await api.upload(`/absences/${id}/documents`, SAMPLE.png, { ...as('studentA'), filename: 'letter.png' });
+      assert.equal(upload.status, 201);
+      assert.equal(upload.body.data.status, 'pending');
+      assert.equal(upload.body.data.history.at(-1).toStatus, 'pending');
+      assert.equal((await act('supervisorA', id, 'acknowledge')).body.data.status, 'acknowledged');
+      const extra = await api.upload(`/absences/${id}/documents`, SAMPLE.pdf, { ...as('studentA'), filename: 'extra.pdf' });
+      assert.equal(extra.body.data.status, 'pending');
     });
   });
 

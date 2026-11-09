@@ -11,8 +11,8 @@ export const ABSENCE_STATUS = Object.freeze({
 // Allowed moves (mirrored by a database trigger). `needs_follow_up -> pending` is the student answering.
 export const ABSENCE_TRANSITIONS = Object.freeze({
   pending: ['acknowledged', 'reviewed', 'needs_follow_up'],
-  acknowledged: ['reviewed', 'needs_follow_up'],
-  needs_follow_up: ['pending', 'reviewed'],
+  acknowledged: ['pending', 'reviewed', 'needs_follow_up'],
+  needs_follow_up: ['pending', 'acknowledged', 'reviewed'],
   reviewed: [],
 });
 export const canMoveAbsence = (from, to) => (ABSENCE_TRANSITIONS[from] ?? []).includes(to);

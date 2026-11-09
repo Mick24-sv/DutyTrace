@@ -124,17 +124,16 @@ export async function getDetail({ user, id }, db = { query }) {
       ...(isOwner(user, raw) && ABSENCE_ACCEPTS_DOCUMENTS.has(raw.status) ? ['upload'] : []),
       ...(isOwner(user, raw) && raw.status === 'needs_follow_up' ? ['respond'] : []),
       ...(isOfficeSupervisor(user, raw) && canMoveAbsence(raw.status, 'acknowledged') ? ['acknowledge'] : []),
-      ...(isOfficeSupervisor(user, raw) && canMoveAbsence(raw.status, 'reviewed') ? ['review'] : []),
       ...(isOfficeSupervisor(user, raw) && canMoveAbsence(raw.status, 'needs_follow_up') ? ['follow_up'] : []),
-      ...(isOfficeSupervisor(user, raw) ? ['record_receipt'] : []),
+      ...(isOfficeSupervisor(user, raw) && raw.status !== 'reviewed' ? ['record_receipt'] : []),
     ],
   };
 }
 
 // -------------------------------------------------------------- review actions
 // Only supervisors of the notice's office. `response` is required when reviewing or asking for follow-up.
-async function review({ user, id, to, action, response, ip }) {
-  return withTransaction(async (db) => {
+async function review({ user, id, to, action, response, ip }, transaction) {
+  const execute = async (db) => {
     const row = await loadRow(id, db, true);
     assertCanView(user, row);
     if (!isOfficeSupervisor(user, row)) throw forbidden();
@@ -146,7 +145,7 @@ async function review({ user, id, to, action, response, ip }) {
       if(!Number(docs.count))throw new AppError(409,'POLICY_DOCUMENT_REQUIRED','This institution policy requires a supporting document before an absence notice can be acknowledged or reviewed.');
     }
     await db.query(
-      `UPDATE absence_notices SET status = $2, response = COALESCE($3, response),
+      `UPDATE absence_notices SET status = $2, response = $3,
          responded_by = $4, responded_at = now() WHERE id = $1`,
       [id, to, response ?? null, user.id],
     );
@@ -165,7 +164,8 @@ async function review({ user, id, to, action, response, ip }) {
       before: { status: row.status }, after: { status: to }, ip,
     }, db);
     return getDetail({ user, id }, db);
-  });
+  };
+  return transaction ? execute(transaction) : withTransaction(execute);
 }
 
 export const acknowledge = ({ user, id, response, ip }) => review({ user, id, to: 'acknowledged', action: 'acknowledged', response, ip });
@@ -209,7 +209,10 @@ export async function addDocument({ user, id, buffer, rawName, ip }) {
       }
       assertRoomForDocument(await countDocuments(db, 'absence_id', id));
       const docId = await insertOnlineDocument(db, { owner: user, absenceId: id, accepted });
-      await addEvent(db, { id, action: 'document_added', from: row.status, to: row.status, actor: user, note: `Uploaded ${accepted.originalName}` });
+      if (row.status !== 'pending') {
+        await db.query("UPDATE absence_notices SET status = 'pending' WHERE id = $1", [id]);
+      }
+      await addEvent(db, { id, action: 'document_added', from: row.status, to: 'pending', actor: user, note: `Uploaded ${accepted.originalName}` });
       await recordAudit({
         actorId: user.id, institutionId: user.institutionId, action: 'document.uploaded', targetType: 'document', targetId: docId,
         after: { absenceId: id, mime: accepted.mime, sizeBytes: accepted.size, method: 'online' }, ip,
@@ -238,6 +241,7 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
     const row = await loadRow(id, db, true);
     assertCanView(user, row);
     if (!isOfficeSupervisor(user, row)) throw forbidden();
+    if (row.status === 'reviewed') throw new AppError(409, 'INVALID_TRANSITION', 'This notice has already been reviewed.');
     const nowDay = await today(db);
     if (receivedDate > nowDay) throw new AppError(400, 'VALIDATION_ERROR', 'Please check the highlighted fields.', { receivedDate: 'The received date cannot be in the future.' });
     const receiver = await validateReceiver(db, receivedById ?? user.id, user.institutionId);
@@ -253,6 +257,9 @@ export async function recordReceipt({ user, id, method, receivedDate, receivedBy
       actorId: user.id, institutionId: user.institutionId, action: 'document.receipt_recorded', targetType: 'document', targetId: docId,
       after: { absenceId: id, method, receivedDate, receivedBy: receiver.id }, ip,
     }, db);
+    if (row.status !== 'acknowledged') {
+      return review({ user, id, to: 'acknowledged', action: 'acknowledged', ip }, db);
+    }
     return getDetail({ user, id }, db);
   });
 }

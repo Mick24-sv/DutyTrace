@@ -38,11 +38,12 @@ describe('absence status transitions', () => {
     for (const to of ['acknowledged', 'reviewed', 'needs_follow_up']) assert.ok(canMoveAbsence('pending', to));
     assert.ok(canMoveAbsence('acknowledged', 'reviewed'));
     assert.ok(canMoveAbsence('acknowledged', 'needs_follow_up'));
+    assert.ok(canMoveAbsence('acknowledged', 'pending'));
+    assert.ok(canMoveAbsence('needs_follow_up', 'acknowledged'));
     assert.ok(canMoveAbsence('needs_follow_up', 'pending'));
     assert.ok(canMoveAbsence('needs_follow_up', 'reviewed'));
   });
-  it('rejects going backwards and anything out of reviewed', () => {
-    assert.equal(canMoveAbsence('acknowledged', 'pending'), false);
+  it('rejects repeated transitions and anything out of legacy reviewed', () => {
     assert.equal(canMoveAbsence('pending', 'pending'), false);
     for (const to of ['pending', 'acknowledged', 'needs_follow_up', 'reviewed']) assert.equal(canMoveAbsence('reviewed', to), false);
     assert.deepEqual(ABSENCE_TRANSITIONS.reviewed, []);

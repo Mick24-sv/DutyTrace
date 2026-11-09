@@ -1,4 +1,4 @@
-import {CalendarOff as UIActionCalendarOff,ClipboardCheck as UIActionClipboardCheck} from 'lucide-react';
+import {CalendarOff as UIActionCalendarOff} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
@@ -25,7 +25,8 @@ export default function AbsenceDetailPage() {
   const { user } = useAuth();
   const [tick, setTick] = useState(0);
   const { data: a, loading, error } = useApiData(`/absences/${id}?_=${tick}`);
-  const [dialog, setDialog] = useState(null); // 'acknowledge' | 'review' | 'follow_up' | 'respond'
+  const [dialog, setDialog] = useState(null);
+  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState('');
   const reload = () => setTick((t) => t + 1);
@@ -33,8 +34,6 @@ export default function AbsenceDetailPage() {
   const DIALOGS = {
     acknowledge: { path: 'acknowledge', title: 'Acknowledge this notice?', label: 'Message to the student', required: false, confirm: 'Acknowledge',
       intro: 'Acknowledging tells the student you have seen the notice. It does not excuse the absence.' },
-    review: { path: 'review', title: 'Mark this notice as reviewed?', label: 'Response to the student', required: true, confirm: 'Mark reviewed',
-      intro: 'A reviewed notice is finished on the supervisor side. It does not excuse the absence or change required hours.' },
     follow_up: { path: 'follow-up', title: 'Ask the student for more information?', label: 'What do you need from the student?', required: true, confirm: 'Request follow-up' },
     respond: { path: 'respond', title: 'Answer the follow-up request', label: 'Your answer', required: true, confirm: 'Send answer', field: 'message' },
   };
@@ -44,6 +43,7 @@ export default function AbsenceDetailPage() {
     setBusy(true); setDialogError('');
     try {
       await apiPost(`/absences/${id}/${d.path}`, d.field === 'message' ? { message: text } : { response: text || undefined });
+      setSuccess(dialog === 'acknowledge' ? 'Notice acknowledged.' : dialog === 'follow_up' ? 'Follow-up requested.' : 'Answer sent. Notice awaiting review.');
       setDialog(null); reload();
     } catch (err) { setDialogError(err.details ? Object.values(err.details).join(' ') : err.message); } finally { setBusy(false); }
   }
@@ -76,11 +76,11 @@ export default function AbsenceDetailPage() {
       {a.status === 'needs_follow_up' && a.response && (
         <p role="status" className="mb-4 rounded-card bg-warn-bg px-4 py-3 text-sm text-warn-fg"><strong>Follow-up requested:</strong> {a.response}</p>
       )}
+      {success && <p role="status" className="mb-4 rounded-card bg-ok-bg px-4 py-3 text-sm text-ok-fg">{success}</p>}
 
-      {(can('acknowledge') || can('review') || can('follow_up') || can('respond')) && (
+      {(can('acknowledge') || can('follow_up') || can('respond')) && (
         <div className="mb-6 flex flex-wrap gap-2">
-          {can('acknowledge') && <Button variant="secondary" onClick={() => setDialog('acknowledge')}>Acknowledge</Button>}
-          {can('review') && <Button icon={UIActionClipboardCheck} onClick={() => setDialog('review')}>Mark reviewed</Button>}
+          {can('acknowledge') && <Button onClick={() => setDialog('acknowledge')}>Acknowledge notice</Button>}
           {can('follow_up') && <Button variant="secondary" onClick={() => setDialog('follow_up')}>Request follow-up</Button>}
           {can('respond') && <Button onClick={() => setDialog('respond')}>Answer follow-up request</Button>}
         </div>
@@ -93,8 +93,10 @@ export default function AbsenceDetailPage() {
             <div><dt className="text-xs text-muted">Reason</dt><dd className="whitespace-pre-line">{a.reason}</dd></div>
             <div>
               <dt className="text-xs text-muted">Supervisor response</dt>
-              <dd className="whitespace-pre-line">{a.response ?? <span className="text-muted">No response yet.</span>}</dd>
-              {a.respondedBy && <dd className="text-xs text-muted">{a.respondedBy} · {formatDateTime(a.respondedAt, a.timezone)} · status: {ABSENCE_STATUS[a.status].label}</dd>}
+              <dd className="whitespace-pre-line">{a.response || (a.status === 'acknowledged'
+                ? `Acknowledged by ${a.respondedBy} on ${formatDateTime(a.respondedAt, a.timezone)}`
+                : <span className="text-muted">{a.respondedBy ? 'No written message.' : 'No response yet.'}</span>)}</dd>
+              {a.respondedBy && (a.response || a.status !== 'acknowledged') && <dd className="text-xs text-muted">{a.respondedBy} · {formatDateTime(a.respondedAt, a.timezone)}</dd>}
             </div>
           </dl>
         </Card>
@@ -103,7 +105,7 @@ export default function AbsenceDetailPage() {
           <DocumentList documents={a.documents} timezone={a.timezone} />
           {can('upload') && (
             <div className="mt-4 border-t border-line pt-4">
-              <UploadControl id="absence-upload" path={`/absences/${a.id}/documents`} onUploaded={reload} />
+              <UploadControl id="absence-upload" path={`/absences/${a.id}/documents`} onUploaded={() => { setSuccess('Document uploaded. Notice awaiting review.'); reload(); }} />
             </div>
           )}
         </Card>
@@ -111,7 +113,9 @@ export default function AbsenceDetailPage() {
 
       {can('record_receipt') && (
         <Card title="Record something received by email or in person" className="mt-6">
-          <ReceiptForm path={`/absences/${a.id}/receipts`} timezone={a.timezone} onSaved={reload} />
+          <ReceiptForm path={`/absences/${a.id}/receipts`} timezone={a.timezone}
+            helpText="Recording a receipt acknowledges this notice. No file is attached and no mailbox is read."
+            onSaved={() => { setSuccess('Receipt recorded. Notice acknowledged.'); reload(); }} />
         </Card>
       )}
 
