@@ -57,18 +57,30 @@ const fetchUser = async (id, db = { query }, institutionId = null) => {
 export const usersRouter = Router();
 usersRouter.use(requireAuth);
 
-usersRouter.post('/me/photo',requireRole('student','supervisor'),rawUpload,asyncHandler(async(req,res)=>{
+usersRouter.patch('/me/admin-profile',requireRole('admin'),asyncHandler(async(req,res)=>{
+  const input=parse(z.object({fullName:z.string().trim().min(1,'Name is required.').max(120)}).strict(),req.body);
+  const updated=await withTransaction(async db=>{
+    const before=await fetchUser(req.user.id,db,req.user.institutionId);
+    await db.query("UPDATE users SET full_name=$2 WHERE id=$1 AND institution_id=$3 AND role='admin'",[req.user.id,input.fullName,req.user.institutionId]);
+    const after=await fetchUser(req.user.id,db,req.user.institutionId);
+    await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.profile_updated',targetType:'user',targetId:req.user.id,before:auditView(before),after:auditView(after),ip:req.ip},db);
+    return after;
+  });
+  ok(res,{user:updated});
+}));
+
+usersRouter.post('/me/photo',requireRole('student','supervisor','admin'),rawUpload,asyncHandler(async(req,res)=>{
   const {buffer,rawName}=uploadedFile(req);
   const file=validateUpload(buffer,rawName,2*1024*1024);
   if(!['image/png','image/jpeg'].includes(file.mime)) throw new AppError(400,'BAD_FILE_TYPE','Choose a PNG or JPEG photo.');
   await withTransaction(async db=>{
     await db.query(`UPDATE users SET profile_photo=$2,profile_photo_mime=$3,profile_photo_updated_at=clock_timestamp()
-      WHERE id=$1 AND institution_id=$4 AND role IN ('student','supervisor')`,[req.user.id,buffer,file.mime,req.user.institutionId]);
+      WHERE id=$1 AND institution_id=$4 AND role IN ('student','supervisor','admin')`,[req.user.id,buffer,file.mime,req.user.institutionId]);
     await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_updated',targetType:'user',targetId:req.user.id,after:{mime:file.mime,size:file.size},ip:req.ip},db);
   });
   ok(res,{user:await fetchUser(req.user.id,{query},req.user.institutionId)});
 }));
-usersRouter.delete('/me/photo',requireRole('student','supervisor'),asyncHandler(async(req,res)=>{
+usersRouter.delete('/me/photo',requireRole('student','supervisor','admin'),asyncHandler(async(req,res)=>{
   await withTransaction(async db=>{
     await db.query('UPDATE users SET profile_photo=NULL,profile_photo_mime=NULL,profile_photo_updated_at=NULL WHERE id=$1 AND institution_id=$2',[req.user.id,req.user.institutionId]);
     await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:'user.photo_removed',targetType:'user',targetId:req.user.id,ip:req.ip},db);

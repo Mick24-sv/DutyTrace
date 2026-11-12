@@ -43,10 +43,12 @@ concernsRouter.get('/recipients',asyncHandler(async(req,res)=>{
 concernsRouter.get('/',asyncHandler(async(req,res)=>{
  const page=parse(z.coerce.number().int().min(1).max(100000).default(1),req.query.page);
  const status=parse(z.enum(['open','under_review','resolved']).optional(),req.query.status);
- const {rows}=await query(`SELECT c.*,s.full_name AS sender_name,r.full_name AS recipient_name,count(*) OVER()::int AS total
+ const archived=parse(z.enum(['true','false']).default('false'),req.query.archived)==='true';
+ const {rows}=await query(`SELECT c.*,p.pinned,s.full_name AS sender_name,r.full_name AS recipient_name,count(*) OVER()::int AS total
  FROM concerns c JOIN users s ON s.id=c.sender_id JOIN users r ON r.id=c.recipient_id
- WHERE c.institution_id=$1 AND EXISTS(SELECT 1 FROM concern_participants p WHERE p.concern_id=c.id AND p.user_id=$2)
- AND ($3::text IS NULL OR c.status=$3) ORDER BY c.updated_at DESC,c.id LIMIT 20 OFFSET $4`,[req.user.institutionId,req.user.id,status??null,(page-1)*20]);
+ JOIN concern_participants p ON p.concern_id=c.id AND p.user_id=$2
+ WHERE c.institution_id=$1 AND NOT p.deleted AND p.archived=$5
+ AND ($3::text IS NULL OR c.status=$3) ORDER BY p.pinned DESC,c.updated_at DESC,c.id LIMIT 20 OFFSET $4`,[req.user.institutionId,req.user.id,status??null,(page-1)*20,archived]);
  ok(res,{items:rows,total:rows[0]?.total??0,page});
 }));
 concernsRouter.post('/',asyncHandler(async(req,res)=>{
@@ -59,6 +61,20 @@ concernsRouter.post('/',asyncHandler(async(req,res)=>{
   await message(db,req.user,item.id,b.message);
   return item;
  });ok(res,item,201);
+}));
+concernsRouter.patch('/:id/inbox',asyncHandler(async(req,res)=>{
+ const id=parseId(req.params.id);
+ const b=parse(z.object({action:z.enum(['pin','unpin','archive','unarchive','delete'])}).strict(),req.body);
+ await withTransaction(async db=>{
+  await access(db,req.user,id,true);
+  const {rows:[item]}=await db.query(`UPDATE concern_participants SET
+   pinned=CASE WHEN $3='pin' THEN true WHEN $3='unpin' THEN false ELSE pinned END,
+   archived=CASE WHEN $3='archive' THEN true WHEN $3='unarchive' THEN false ELSE archived END,
+   deleted=CASE WHEN $3='delete' THEN true ELSE deleted END
+   WHERE concern_id=$1 AND user_id=$2 RETURNING pinned,archived,deleted`,[id,req.user.id,b.action]);
+  await recordAudit({actorId:req.user.id,institutionId:req.user.institutionId,action:`concern.inbox.${b.action}`,targetType:'concern',targetId:id,after:item},db);
+ });
+ ok(res,{updated:true});
 }));
 concernsRouter.get('/:id',asyncHandler(async(req,res)=>{
  const id=parseId(req.params.id);const item=await access({query},req.user,id);

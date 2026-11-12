@@ -47,6 +47,9 @@ test('profile photos accept small raster images and remain private to authorized
   assert.equal((await api.raw('GET',path,{...as('studentA2'),headers:{'if-none-match':photo.headers.get('etag')}})).status,304);
   const user=(await api.get('/auth/me',as('studentA'))).body.data.user;
   assert.ok(user.photoUrl.includes(`/users/${fx.ids.studentA}/photo`));
+  const dashboard=await api.get('/reports/dashboard-stats',as('supervisorA'));
+  assert.equal(dashboard.status,200,JSON.stringify(dashboard.body));
+  assert.equal(dashboard.body.data.assistants.find(student=>student.id===fx.ids.studentA)?.photoUrl,user.photoUrl);
   assert.ok(!('profile_photo' in user));
   assert.equal((await api.request('DELETE','/users/me/photo',as('studentA'))).status,200);
   assert.equal((await api.raw('GET',path,as('admin'))).status,404);

@@ -3,7 +3,7 @@ import { MessageSquare, LayoutDashboard, Clock, FileText, CalendarOff, Users, Cl
 // Everyday tasks only. Secondary tools belong inside their section.
 export const ROLE_CONFIG = {
   student: { label: 'Student Assistant', base: '/student', nav: [
-    { to: '', label: 'Home', icon: LayoutDashboard, related: ['profile','teammates'] },
+    { to: '', label: 'Home', icon: LayoutDashboard, related: ['profile','teammates','co-workers'] },
     { to: 'attendance', label: 'Attendance', icon: Clock, related: ['scan', 'discrepancies'] },
     { to: 'dtr', label: 'Monthly DTR', icon: FileText },
     { to: 'absences', label: 'Absence Notices', icon: CalendarOff, related: ['cases'] },
@@ -17,7 +17,7 @@ export const ROLE_CONFIG = {
     { to: 'concerns', label: 'Concerns', icon: MessageSquare },
   ] },
   admin: { label: 'Administrator', base: '/admin', nav: [
-    { to: '', label: 'Home', icon: LayoutDashboard },
+    { to: '', label: 'Home', icon: LayoutDashboard, related: ['profile'] },
     { to: 'users', label: 'Students & Staff', icon: Users },
     { to: 'offices', label: 'Offices', icon: Building2 },
     { to: 'semesters', label: 'Academic Terms', icon: CalendarRange },

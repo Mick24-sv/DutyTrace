@@ -1,0 +1,16 @@
+.login-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  background: #f3f6fb;
+}
+.login-transition-mark { display: block; width: clamp(128px, 22vw, 184px); height: auto; overflow: visible; }
+.login-transition.is-reduced-motion [data-logo-flood] { y: 0; }
+.login-transition.is-reduced-motion [data-logo-outline] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .login-transition [data-logo-flood] { y: 0; }
+  .login-transition [data-logo-outline] { opacity: 0; }
+}

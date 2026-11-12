@@ -7,6 +7,7 @@ import { AppError, asyncHandler, ok } from '../../utils/response.js';
 import { parse } from '../../utils/validate.js';
 import { MIN_PASSWORD_LENGTH } from '../../utils/password.js';
 import * as auth from './auth.service.js';
+import { getTutorialProgress, saveTutorialProgress, tutorialProgressSchema } from './tutorial.service.js';
 import {
   requestReset,
   verifyResetToken,
@@ -88,6 +89,11 @@ export function authRoutes({ loginRateLimitMax = env.loginRateLimitMax } = {}) {
   }));
 
   router.get('/me', requireAuth, (req, res) => ok(res, { user: req.user }));
+  router.get('/tutorial', requireAuth, asyncHandler(async (req, res) => ok(res, await getTutorialProgress(req.user))));
+  router.put('/tutorial', requireAuth, asyncHandler(async (req, res) => {
+    const input = parse(tutorialProgressSchema, req.body);
+    ok(res, await saveTutorialProgress(req.user, input));
+  }));
 
   // ─── Forgot Password ────────────────────────────────────────────────────────
   // POST /api/auth/forgot-password

@@ -16,7 +16,7 @@ export default function MyDtrPage() {
     const status = row.dtr?.status;
     const label = !row.dtr ? 'Prepare DTR' : status === 'draft' ? 'Continue draft' : status === 'needs_correction' ? 'Review corrections' : 'View DTR';
     const to = row.dtr ? '/student/dtr/' + row.dtr.id : '/student/dtr/preview/' + row.month;
-    return <Link to={to} aria-label={label + ' for ' + formatMonth(row.month)} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal hover:bg-canvas">{label}</Link>;
+    return <Link data-tutorial="dtr-action" to={to} aria-label={label + ' for ' + formatMonth(row.month)} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-teal hover:bg-canvas">{label}</Link>;
   };
 
   const columns = [

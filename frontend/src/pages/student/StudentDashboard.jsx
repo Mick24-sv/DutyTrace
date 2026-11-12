@@ -1,5 +1,5 @@
 import OfficeTeammates from '../../components/dashboard/OfficeTeammates.jsx';
-import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
+import StudentSemesterProgress from '../../components/dashboard/StudentSemesterProgress.jsx';
 import {LayoutDashboard as UIActionLayoutDashboard} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -9,13 +9,11 @@ import {
   QrCode,
   Timer,
   AlertCircle,
-  TrendingUp,
 } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Badge from '../../components/ui/Badge.jsx';
-import ProgressBar from '../../components/ui/ProgressBar.jsx';
 import SessionBadge from '../../components/attendance/SessionBadge.jsx';
 import DtrStatusBadge from '../../components/dtr/DtrStatusBadge.jsx';
 import { useAuth } from '../../hooks/useAuth.jsx';
@@ -39,11 +37,9 @@ export default function StudentDashboard() {
   const selectedTerm = terms.find((term) => term.id === selectedTermId) ?? null;
   const tz = status.data?.timezone;
   const timedIn = status.data?.state === 'timed_in';
-  const recordedSemesterHours = selectedTerm?.recordedHours ?? 0;
   const verifiedSemesterHours = selectedTerm?.verifiedHours ?? 0;
   const requiredSemesterHours = selectedTerm?.requiredHours;
   const remainingSemesterHours = selectedTerm?.remainingHours;
-  const progressPercent = selectedTerm?.completionPercentage;
 
   const recent = month.data
     ? [...month.data.days]
@@ -73,6 +69,7 @@ export default function StudentDashboard() {
       >
         <Link
           to="/student/scan"
+          data-tutorial="scan-qr"
           className="inline-flex min-h-11 w-fit max-w-full self-start items-center justify-center gap-2 rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-teal/90"
         >
           <QrCode className="h-4 w-4" aria-hidden="true" />
@@ -146,70 +143,7 @@ export default function StudentDashboard() {
         <span className="inline-flex shrink-0 whitespace-nowrap rounded-full bg-warn-bg px-2.5 py-1 text-xs font-medium text-warn-fg sm:px-3 sm:text-sm">{discrepancySummary.loading?'…':`${discrepancySummary.data?.open??0} unresolved`}</span>
       </Link>}
 
-      <Card
-        className="mt-6"
-        title={<span className="flex flex-wrap items-center gap-2">Semester progress <SemesterStatusBadge status={selectedTerm?.semesterStatus}/></span>}
-        action={terms.length > 0 && (
-          <select
-            aria-label="Academic term"
-            value={selectedTermId}
-            onChange={(event) => setSelectedTermId(event.target.value)}
-            className="h-10 w-full min-w-0 rounded-lg border border-line bg-surface px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal sm:w-auto"
-          >
-            <option value="">Select academic term</option>
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.academicYear} · {term.semester === 'first' ? '1st Semester' : term.semester === 'second' ? '2nd Semester' : 'Summer Term'}{term.isCurrent ? ' (Current)' : ''}
-              </option>
-            ))}
-          </select>
-        )}
-      >
-        {!selectedTerm && (
-          <p className="text-sm text-muted">
-            {semesterTerms.loading ? 'Loading academic term…' : 'No current term or assigned semester requirement is available. Monthly DTR targets do not set semester hours. Contact your administrator to configure the term and assign your requirement.'}
-          </p>
-        )}
-        {selectedTerm && !selectedTerm.requirementAssigned && (
-          <div className="space-y-2">
-            <p className="font-medium text-ink">
-              {selectedTerm.academicYear} · {selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}
-            </p>
-            <p className="text-sm text-muted">No duty-hour requirement assigned</p>
-            <p className="text-xs text-muted">Recorded hours are not treated as verified hours. Only approved DTR sessions count toward semester completion.</p>
-          </div>
-        )}
-        {selectedTerm?.requirementAssigned && (
-          <div className="min-w-0 space-y-3">
-          <div className="flex min-w-0 flex-col items-start gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-teal" />
-              <span className="min-w-0 break-words font-medium text-ink">
-                {selectedTerm.academicYear} · {selectedTerm.semester === 'first' ? '1st Semester' : selectedTerm.semester === 'second' ? '2nd Semester' : 'Summer Term'}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={progressPercent >= 100 ? 'approved' : progressPercent >= 50 ? 'info' : 'pending'}>
-                {progressPercent}% Complete
-              </Badge>
-              {remainingSemesterHours > 0 ? (
-                <span className="text-muted text-xs font-medium">({formatHours(remainingSemesterHours)} remaining)</span>
-              ) : (
-                <span className="text-ok-fg text-xs font-semibold">Requirement met!</span>
-              )}
-            </div>
-          </div>
-          <p className="text-sm text-ink">
-            {formatHours(verifiedSemesterHours)} approved of {formatHours(requiredSemesterHours)} required
-          </p>
-          <ProgressBar value={verifiedSemesterHours} max={requiredSemesterHours} label="Semester duty-hour progress" />
-          <p className="text-xs text-muted">
-            {formatHours(recordedSemesterHours)} hours recorded during {selectedTerm.startsOn} to {selectedTerm.endsOn}. Only approved DTR sessions count toward completion.
-          </p>
-          {selectedTerm.completionDeadline && <p className="text-xs text-muted">Completion deadline: {selectedTerm.completionDeadline}</p>}
-          </div>
-        )}
-      </Card>
+      <StudentSemesterProgress terms={terms} selectedTerm={selectedTerm} selectedTermId={selectedTermId} onSelect={setSelectedTermId} loading={semesterTerms.loading} error={semesterTerms.error} />
 
       <OfficeTeammates preview />
       <div className="mt-6 grid gap-4 lg:grid-cols-3 lg:gap-6">

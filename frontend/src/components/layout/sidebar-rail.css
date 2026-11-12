@@ -1,0 +1,61 @@
+@media (min-width: 1024px) {
+  /* Reveal the fixed-width sidebar with clipping. Match page clearance to
+     its visible state rather than leaving a permanent expanded-width gutter. */
+  /* The header background meets the rail; header/main padding supplies the
+     inner breathing room without exposing a canvas-colored vertical strip. */
+  .app-shell-content { padding-left: 64px; }
+  .app-shell:has(.desktop-sidebar-rail[data-hover-open="true"]) .app-shell-content,
+  .app-shell:has(.desktop-sidebar-rail :focus-visible) .app-shell-content { padding-left: 248px; }
+  .desktop-sidebar-rail {
+    width: 248px;
+    z-index: 40;
+    clip-path: inset(0 184px 0 0);
+    transition: clip-path 300ms cubic-bezier(.22, 1, .36, 1);
+  }
+  .desktop-sidebar-rail[data-hover-open="true"],
+  .desktop-sidebar-rail:has(:focus-visible) { clip-path: inset(0 0 0 0); }
+  .desktop-sidebar-rail .sidebar-brand { padding-inline: 14px; }
+  .desktop-sidebar-rail .sidebar-brand > img { width: 36px; height: 36px; }
+  .desktop-sidebar-rail .sidebar-navigation { padding-inline: 8px; scrollbar-width: none; }
+  .desktop-sidebar-rail .sidebar-navigation::-webkit-scrollbar { display: none; }
+  .desktop-sidebar-rail .sidebar-navigation a {
+    position: relative;
+    min-height: 44px;
+    padding-inline: 14px;
+    gap: 14px;
+    white-space: nowrap;
+    background: transparent;
+    isolation: isolate;
+  }
+  .desktop-sidebar-rail .sidebar-navigation a > svg { width: 20px; height: 20px; }
+  .desktop-sidebar-rail .sidebar-navigation a::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 auto 0 0;
+    width: 48px;
+    border-radius: 8px;
+  }
+  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]::before { background: var(--color-teal); }
+  .desktop-sidebar-rail .sidebar-navigation a:hover::before { background: rgb(255 255 255 / .1); }
+  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]:hover::before { background: var(--color-teal); }
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-navigation a::before { width: 100%; }
+  .desktop-sidebar-rail .sidebar-link-label,
+  .desktop-sidebar-rail .sidebar-brand-label,
+  .desktop-sidebar-rail .sidebar-navigation h2,
+  .desktop-sidebar-rail .sidebar-calendar { opacity: 0; transition: opacity 150ms ease; }
+  .desktop-sidebar-rail .sidebar-calendar { visibility: hidden; }
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-link-label,
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-brand-label,
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-navigation h2,
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-calendar { opacity: 1; }
+  .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-calendar { visibility: visible; }
+  .sidebar-agenda { left: 264px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .desktop-sidebar-rail,
+  .desktop-sidebar-rail .sidebar-link-label,
+  .desktop-sidebar-rail .sidebar-brand-label,
+  .desktop-sidebar-rail .sidebar-navigation h2,
+  .desktop-sidebar-rail .sidebar-calendar { transition: none; }
+}

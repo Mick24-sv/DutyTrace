@@ -5,9 +5,36 @@ import { asyncHandler, ok } from '../../utils/response.js';
 import { parse, parseId } from '../../utils/validate.js';
 import { isDateKey } from '../semesters/semester.rules.js';
 import * as duty from './duty-requirements.service.js';
+import { agendaForMonth } from './agenda.service.js';
+import { agendaEventSchema } from './agenda-events.rules.js';
+import { personalEventsForMonth, savePersonalEvent, deletePersonalEvent } from './agenda-events.service.js';
 
 const route = Router();
 route.use(requireAuth);
+
+const agendaRoles = requireRole('admin', 'supervisor', 'student');
+route.get('/agenda/events', agendaRoles, asyncHandler(async (req, res) => {
+  const month = parse(z.string().regex(/^[1-9]\d{3}-(0[1-9]|1[0-2])$/), req.query.month);
+  ok(res, await personalEventsForMonth({ actor: req.user, month }));
+}));
+route.post('/agenda/events', agendaRoles, asyncHandler(async (req, res) => {
+  const event = parse(agendaEventSchema, req.body);
+  ok(res, { event: await savePersonalEvent({ actor: req.user, event }) }, 201);
+}));
+route.put('/agenda/events/:eventId', agendaRoles, asyncHandler(async (req, res) => {
+  const id = parseId(req.params.eventId);
+  const event = parse(agendaEventSchema, req.body);
+  ok(res, { event: await savePersonalEvent({ actor: req.user, id, event }) });
+}));
+route.delete('/agenda/events/:eventId', agendaRoles, asyncHandler(async (req, res) => {
+  await deletePersonalEvent({ actor: req.user, id: parseId(req.params.eventId) });
+  ok(res, { deleted: true });
+}));
+
+route.get('/agenda', requireRole('admin', 'supervisor', 'student'), asyncHandler(async (req, res) => {
+  const month = parse(z.string().regex(/^[1-9]\d{3}-(0[1-9]|1[0-2])$/, 'Choose a valid month.'), req.query.month);
+  ok(res, await agendaForMonth({ actor: req.user, month }));
+}));
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/);
 const dutyDay = z.object({

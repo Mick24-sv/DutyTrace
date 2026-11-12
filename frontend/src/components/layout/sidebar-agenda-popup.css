@@ -1,0 +1,14 @@
+.sidebar-agenda-launcher { margin-top: 16px; border-top: 1px solid rgb(255 255 255 / .12); padding-top: 12px; }
+.sidebar-agenda-toggle { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 8px; color: rgb(255 255 255 / .8); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.sidebar-agenda-toggle > svg { flex-shrink: 0; }
+.sidebar-agenda-toggle:hover, .sidebar-agenda-toggle[aria-expanded="true"] { background: rgb(255 255 255 / .1); color: white; }
+.sidebar-calendar-popup { position: fixed; z-index: 45; left: 264px; top: 80px; width: 304px; max-height: calc(100dvh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid rgb(255 255 255 / .16); border-radius: 14px; background: var(--color-navy); color: var(--color-surface); box-shadow: 0 12px 45px rgb(21 59 80 / .25); }
+.sidebar-calendar-popup-header { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
+.sidebar-calendar-popup-header button { display: grid; place-items: center; width: 44px; min-height: 44px; border-radius: 6px; cursor: pointer; color: rgb(255 255 255 / .7); }
+.sidebar-calendar-popup-header button:hover { background: rgb(255 255 255 / .08); }
+.sidebar-calendar-popup .sidebar-calendar { margin-top: 8px; padding-top: 12px; }
+.sidebar-calendar-popup .sidebar-calendar.has-agenda > :is(.sidebar-calendar-label, .sidebar-calendar-scope, .sidebar-calendar-month, .sidebar-calendar-weekdays, .sidebar-calendar-grid, .sidebar-calendar-legend, .sidebar-calendar-add, .sidebar-calendar-message) { display: none; }
+.sidebar-calendar-popup .sidebar-agenda { position: relative; inset: auto; width: 100%; max-width: 100%; max-height: none; overflow: visible; margin: 0; padding: 14px; box-shadow: none; }
+.sidebar-calendar-popup .sidebar-agenda-back { display: flex; gap: 4px; align-items: center; color: var(--color-teal); min-height: 44px; font-size: 11px; cursor: pointer; }
+@media (min-width: 1024px) { .desktop-sidebar-rail .sidebar-agenda-toggle { padding-inline: 14px; gap: 14px; } }
+@media (max-width: 1023px) { .sidebar-calendar-popup { left: 12px; right: 12px; width: auto; max-width: 360px; margin-inline: auto; top: max(76px, calc(env(safe-area-inset-top) + 64px)); max-height: calc(100dvh - 104px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); padding: 12px; } }

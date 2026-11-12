@@ -6,6 +6,8 @@ import { useAuth } from '../../hooks/useAuth.jsx';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import Button from '../../components/ui/Button.jsx';
 import FullPageMessage from '../../components/layout/FullPageMessage.jsx';
+import LoginTransition, { loadLoginAnimation } from '../../components/brand/LoginTransition.jsx';
+import { loginDestination } from '../../utils/loginDestination.js';
 import './login.css';
 
 export default function LoginPage() {
@@ -18,21 +20,24 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [destination, setDestination] = useState(null);
 
   if (status === 'loading') return <FullPageMessage>Loading…</FullPageMessage>;
-  if (user) return <Navigate to={ROLE_CONFIG[user.role].base} replace />;
+  if (destination) return <LoginTransition onComplete={() => navigate(destination, { replace: true })} />;
+  // login() updates auth context before its promise resumes. Keep this page
+  // mounted during submission so that update cannot skip the logo transition.
+  if (user && !submitting) return <Navigate to={ROLE_CONFIG[user.role].base} replace />;
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     setError('');
     setFieldErrors({});
     setSubmitting(true);
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) void loadLoginAnimation().catch(() => {});
     try {
       const signedIn = await login(email, password);
-      const base = ROLE_CONFIG[signedIn.role].base;
-      // Return to the page they tried to open, but only if it belongs to their role.
-      const from = location.state?.from;
-      navigate(from?.startsWith(base) ? from : base, { replace: true });
+      setDestination(loginDestination(signedIn.role, location.state?.from));
     } catch (err) {
       setFieldErrors(err.details ?? {});
       setError(err.details ? '' : err.message);

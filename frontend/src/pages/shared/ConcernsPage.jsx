@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MessageSquare, Plus, Send, ArrowLeft, Forward, RefreshCw } from 'lucide-react';
+import { MessageSquare, Plus, Send, ArrowLeft, Forward, Pin } from 'lucide-react';
 import { apiGet, apiPost, apiPatch } from '../../services/api.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
+import { useListRefreshRegistry } from '../../components/layout/PullToRefresh.jsx';
+import SwipeableInboxRow from '../../components/ui/SwipeableInboxRow.jsx';
 
 const field='mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-line bg-surface px-3 py-2 text-base text-ink focus-visible:ring-2 focus-visible:ring-teal';
 const labels={open:'Open',under_review:'Under review',resolved:'Resolved'};
@@ -18,16 +20,29 @@ export default function ConcernsPage(){
  const [params,setParams]=useSearchParams();const id=params.get('id');
  const [compose,setCompose]=useState(Boolean(params.get('recipient')));
  const [list,setList]=useState({items:[],total:0});const [page,setPage]=useState(1);const [status,setStatus]=useState('');
+ const [archived,setArchived]=useState(false);
+ const inboxPath=`/concerns?page=${page}&archived=${archived}${status?`&status=${status}`:''}`;
  const [detail,setDetail]=useState(null);const [recipients,setRecipients]=useState([]);const [search,setSearch]=useState('');
  const [recipient,setRecipient]=useState(params.get('recipient')||'');const [subject,setSubject]=useState('');const [body,setBody]=useState('');const [reply,setReply]=useState('');
  const [forward,setForward]=useState(false);const [adminId,setAdminId]=useState('');const [forwardNote,setForwardNote]=useState('');
  const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [loading,setLoading]=useState(true);const [refresh,setRefresh]=useState(0);
+ const registerRefresh = useListRefreshRegistry();
+ useEffect(() => {
+  if (!registerRefresh || id || compose) return undefined;
+  let live = true;
+  const controller = new AbortController();
+  const unregister = registerRefresh(async () => {
+   const data = await apiGet(inboxPath, { signal: controller.signal });
+   return () => { if (live) { setList(data); setError(''); } };
+  });
+  return () => { live = false; controller.abort(); unregister(); };
+ }, [registerRefresh, id, compose, inboxPath]);
  useEffect(()=>{
   let live=true;setLoading(true);setError('');setDetail(null);
-  const path=id?`/concerns/${id}`:`/concerns?page=${page}${status?`&status=${status}`:''}`;
+  const path=id?`/concerns/${id}`:inboxPath;
   apiGet(path).then(data=>{if(live){if(id)setDetail(data);else setList(data);}}).catch(e=>{if(live)setError(e.message);}).finally(()=>{if(live)setLoading(false);});
   return()=>{live=false;};
- },[id,page,status,refresh]);
+ },[id,inboxPath,refresh]);
  useEffect(()=>{
   if(!compose&&!forward)return;let live=true;
   const selected=params.get('recipient');
@@ -40,11 +55,17 @@ export default function ConcernsPage(){
  const create=e=>{e.preventDefault();act(async()=>{const data=await apiPost('/concerns',{recipientId:recipient,subject,message:body});setSubject('');setBody('');setRecipient('');open(data.id);});};
  const send=e=>{e.preventDefault();act(async()=>{await apiPost(`/concerns/${id}/replies`,{message:reply});setReply('');setRefresh(v=>v+1);});};
  const staff=user.role!=='student';
+ const inboxAction=async(item,action)=>{
+  await apiPatch(`/concerns/${item.id}/inbox`,{action});
+  setList(current=>{
+   if(['archive','unarchive','delete'].includes(action)) return {...current,items:current.items.filter(row=>row.id!==item.id),total:Math.max(0,current.total-1)};
+   return {...current,items:current.items.map(row=>row.id===item.id?{...row,pinned:action==='pin'}:row).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||new Date(b.updated_at)-new Date(a.updated_at)||String(a.id).localeCompare(String(b.id)))};
+  });
+ };
  return <>
   <PageHeader title="Concerns" icon={MessageSquare} description="Send a concern and follow replies in one place.">
    {!compose&&<div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-   {!compose&&!id&&<Button icon={Plus} onClick={()=>{setCompose(true);setRecipient('');setError('');setSearch('');}}>New concern</Button>}
-   {!compose&&<Button icon={RefreshCw} variant="secondary" disabled={loading||busy} onClick={()=>setRefresh(v=>v+1)}>Refresh</Button>}
+   {!compose&&!id&&<Button data-tutorial="new-concern" icon={Plus} onClick={()=>{setCompose(true);setRecipient('');setError('');setSearch('');}}>New concern</Button>}
    </div>}
   </PageHeader>
   {(id||compose)&&<Button icon={ArrowLeft} variant="secondary" className="mb-4" disabled={busy} onClick={()=>{setParams({});setCompose(false);setError('');setRefresh(v=>v+1);}}>All concerns</Button>}
@@ -86,11 +107,12 @@ export default function ConcernsPage(){
     </form>}
    </Card>
   </>:!id?<>
+   <div className="mb-4 flex gap-2" aria-label="Inbox views">{[false,true].map(value=><button key={String(value)} type="button" aria-pressed={archived===value} onClick={()=>{setArchived(value);setPage(1);}} className={`rounded-full px-4 py-2 text-sm ${archived===value?'bg-teal text-white':'bg-surface text-muted'}`}>{value?'Archive':'Inbox'}</button>)}</div>
    <label className="mb-4 block w-48 max-w-full text-sm">Status<select className={field} value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">All concerns</option>{Object.entries(labels).map(([v,label])=><option key={v} value={v}>{label}</option>)}</select></label>
-   <Card>{list.items.length===0?<p className="text-sm text-muted">No concerns to show. Use New concern to start a conversation.</p>:<ul className="divide-y divide-line">{list.items.map(item=><li key={item.id}><button type="button" onClick={()=>open(item.id)} className="block w-full rounded-lg p-3 text-left hover:bg-canvas focus-visible:ring-2 focus-visible:ring-teal">
-    <div className="flex flex-wrap items-start justify-between gap-2"><span className="min-w-0 break-words font-medium text-teal [overflow-wrap:anywhere]">{item.subject}</span><Status value={item.status}/></div>
+   <Card>{list.items.length===0?<p className="text-sm text-muted">{archived?'No archived concerns.':'No concerns to show. Use New concern to start a conversation.'}</p>:<ul className="divide-y divide-line">{list.items.map(item=><SwipeableInboxRow key={item.id} label={item.subject} pinned={item.pinned} archived={archived} onAction={action=>inboxAction(item,action)}><button type="button" onClick={()=>open(item.id)} className="block w-full rounded-lg p-3 text-left hover:bg-canvas focus-visible:ring-2 focus-visible:ring-teal">
+    <div className="flex flex-wrap items-start justify-between gap-2"><span className="min-w-0 break-words font-medium text-teal [overflow-wrap:anywhere]">{item.pinned&&<Pin size={13} className="mr-1 inline" aria-label="Pinned"/>}{item.subject}</span><Status value={item.status}/></div>
     <p className="mt-1 break-words text-xs text-muted">{item.sender_name} → {item.recipient_name}</p><p className="mt-1 text-xs text-muted">Updated {stamp(item.updated_at)}</p>
-   </button></li>)}</ul>}
+   </button></SwipeableInboxRow>)}</ul>}
     <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3"><span className="text-xs text-muted">Page {page}</span><div className="flex gap-2"><Button variant="secondary" disabled={page===1} onClick={()=>setPage(p=>p-1)}>Previous</Button><Button variant="secondary" disabled={page*20>=list.total} onClick={()=>setPage(p=>p+1)}>Next</Button></div></div>
    </Card>
   </>:null}

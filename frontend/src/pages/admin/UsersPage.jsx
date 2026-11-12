@@ -7,9 +7,12 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
-import Badge from '../../components/ui/Badge.jsx';
 import Button from '../../components/ui/Button.jsx';
-import { ChevronDown, Eye, EyeOff, Search, UserRound, ArrowUpRight, GraduationCap, Briefcase, ShieldCheck, Archive, RotateCcw, Trash2 } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Search, UserRound, ArrowUpRight, GraduationCap, Briefcase, ShieldCheck, Pencil, Check, X } from 'lucide-react';
+import AccountRowActions from '../../components/ui/AccountRowActions.jsx';
+import { DirectoryIdentity, DirectoryStatus, OfficeAssignmentSelect } from '../../components/ui/UserDirectoryCells.jsx';
+import UserAvatar from '../../components/ui/UserAvatar.jsx';
+import './users-directory.css';
 import DataTable from '../../components/ui/DataTable.jsx';
 import Pagination from '../../components/ui/Pagination.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
@@ -33,8 +36,8 @@ function StudentHoursInput({ user, onUpdate }) {
     e?.preventDefault();
     setSaving(true);
     try {
-      await onUpdate(val.trim() === '' ? null : Number(val));
-      setEditing(false);
+      const saved = await onUpdate(val.trim() === '' ? null : Number(val));
+      if (saved !== false) setEditing(false);
     } finally {
       setSaving(false);
     }
@@ -46,7 +49,7 @@ function StudentHoursInput({ user, onUpdate }) {
       <button
         type="button"
         onClick={() => { setVal(user.requiredHours != null ? String(user.requiredHours) : ''); setEditing(true); }}
-        className="group flex items-center gap-1.5 text-left text-sm text-ink hover:text-teal focus:outline-none"
+        className="directory-hours-button"
         title="Edit this student's requirement for the selected semester"
       >
         {user.requiredHours != null ? (
@@ -54,13 +57,13 @@ function StudentHoursInput({ user, onUpdate }) {
         ) : (
           <span className="text-xs text-muted italic">Not assigned</span>
         )}
-        <span className="text-xs text-teal opacity-0 group-hover:opacity-100 underline">Edit</span>
+        <Pencil size={12} aria-hidden="true" />
       </button>
     );
   }
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-1">
+    <form onSubmit={submit} className="directory-hours-editor">
       <input
         aria-label={'Semester duty-hour target for '+user.fullName}
         type="number"
@@ -71,21 +74,21 @@ function StudentHoursInput({ user, onUpdate }) {
         value={val}
         autoFocus
         onChange={(e) => setVal(e.target.value)}
-        className="w-20 rounded border border-line bg-surface px-1.5 py-0.5 text-xs text-ink focus:border-teal focus:outline-none"
+        disabled={saving} className="directory-hours-input"
       />
       <button
         type="submit"
         disabled={saving}
-        className="rounded bg-teal px-1.5 py-0.5 text-[11px] font-medium text-white hover:bg-teal/90 disabled:opacity-50"
+        aria-label="Save semester target" className="directory-hours-save"
       >
-        {saving ? '…' : 'Save'}
+        {saving ? '…' : <Check size={14} aria-hidden="true" />}
       </button>
       <button
         type="button"
         onClick={() => setEditing(false)}
-        className="rounded border border-line px-1 py-0.5 text-[11px] text-muted hover:text-ink"
+        disabled={saving} aria-label="Cancel target edit" className="directory-hours-cancel"
       >
-        ✕
+        <X size={13} aria-hidden="true" />
       </button>
     </form>
   );
@@ -152,7 +155,7 @@ export default function UsersPage() {
 
   async function act(fn) {
     setRowError('');
-    try { await fn(); reload(); } catch (err) { setRowError(err.message); }
+    try { await fn(); reload(); return true; } catch (err) { setRowError(err.message); return false; }
   }
 
   async function openAccountAction(type,user){
@@ -171,13 +174,7 @@ export default function UsersPage() {
       setAccountAction(null);setExpandedUserId(null);reload();
     }catch(err){setAccountError(err.message);}finally{setAccountBusy(false);}
   }
-  const accountActions=u=>u.id===currentUser.id?<span className="text-xs text-muted">Your account</span>:<div className="flex flex-wrap items-center gap-2">
-    {u.archivedAt?<Button variant="secondary" icon={RotateCcw} onClick={()=>openAccountAction('restore',u)}>Restore</Button>:<>
-      <button type="button" className="min-h-11 px-2 text-sm font-medium text-teal underline" onClick={()=>act(()=>apiPatch('/users/'+u.id,{status:u.status==='active'?'disabled':'active'}))}>{u.status==='active'?'Disable':'Enable'}</button>
-      <Button variant="secondary" icon={Archive} onClick={()=>openAccountAction('archive',u)}>Archive</Button>
-    </>}
-    <button type="button" onClick={()=>openAccountAction('delete',u)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-bad-fg hover:bg-bad-bg"><Trash2 aria-hidden="true" className="h-4 w-4"/>Delete unused</button>
-  </div>;
+  const accountActions=u=><AccountRowActions user={u} self={u.id===currentUser.id} onToggle={()=>act(()=>apiPatch('/users/'+u.id,{status:u.status==='active'?'disabled':'active'}))} onAction={type=>openAccountAction(type,u)}/>;
 
   const semesterHours=u=>{
     if(currentTermQuery.loading||semesterRequirements.loading)return <span className="text-xs text-muted">Loading requirement?</span>;
@@ -193,23 +190,14 @@ export default function UsersPage() {
   };
 
   const columns = [
-    { key: 'fullName', header: 'Name', render:u=>u.role==='student'?<Link to={`/admin/users/${u.id}`} className="inline-flex items-center gap-2 font-medium text-teal underline"><UserRound aria-hidden="true" className="h-4 w-4 shrink-0"/>{u.fullName}<ArrowUpRight aria-hidden="true" className="h-4 w-4 shrink-0"/></Link>:u.fullName },
-    { key: 'email', header: 'Email' },
+    { key: 'fullName', header: 'Name & email', render:u=><DirectoryIdentity user={u}/> },
     { key: 'role', header: 'Role', render: (u) => ROLE_CONFIG[u.role].label },
     {
       key: 'office', header: 'Office',
-      render: (u) => (u.role === 'admin' ? '—' : (
-        <select
-          disabled={Boolean(u.archivedAt)} aria-label={`Office for ${u.fullName}`} value={u.office?.id ?? ''} className="rounded-lg border border-line bg-surface px-2 py-1 text-sm"
-          onChange={(e) => act(() => apiPut(`/users/${u.id}/assignment`, { officeId: e.target.value || null }))}
-        >
-          <option value="">Not assigned</option>
-          {officeList.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-      )),
+      render: (u) => <OfficeAssignmentSelect user={u} offices={officeList} onChange={officeId=>act(()=>apiPut(`/users/${u.id}/assignment`,{officeId}))}/>,
     },
-    {key:'semesterRequiredHours',header:'Semester duty-hour target',render:u=>semesterHours(u)},
-    { key: 'status', header: 'Status', render: (u) => <Badge tone={u.status === 'active' ? 'approved' : 'rejected'}>{u.archivedAt?'Archived':u.status}</Badge> },
+    {key:'semesterRequiredHours',header:'Semester target',render:u=>semesterHours(u)},
+    { key: 'status', header: 'Status', render: (u) => <DirectoryStatus user={u}/> },
     {key:'action',header:'Actions',render:u=>accountActions(u)},
   ].filter(column=>column.key!=='role' && (column.key!=='office'||selectedRole!=='admin') && (column.key!=='semesterRequiredHours'||selectedRole==='student'));
 
@@ -306,10 +294,10 @@ export default function UsersPage() {
             </div>
             {!showArchived && selectedRole==='student' && visibleUsers.length>0 && <StudentPortraitCarousel students={visibleUsers} />}
             {!showArchived && selectedRole==='supervisor' && <OfficeSupervisorSpotlight supervisors={visibleUsers} />}
-            <div className="hidden sm:block">
+            <div className={`users-directory-table is-${selectedRole} hidden sm:block`}>
               <DataTable columns={columns} rows={visibleUsers} caption={groupLabel} empty={userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`} />
             </div>
-            <div className="divide-y divide-line sm:hidden">
+            <div className="users-directory-mobile divide-y divide-line sm:hidden">
               {filteredUsers.length === 0 ? (
                 <p className="py-5 text-center text-sm text-muted">{userSearch ? `No matching ${groupLabel.toLowerCase()}.` : `No ${groupLabel.toLowerCase()} yet.`}</p>
               ) : visibleUsers.map((user) => (
@@ -321,12 +309,13 @@ export default function UsersPage() {
                     onClick={() => setExpandedUserId((current) => current === user.id ? null : user.id)}
                     className="flex min-h-12 w-full items-center gap-2 rounded-md py-1 text-left hover:bg-canvas/60 focus-visible:outline-offset-2"
                   >
+                    <UserAvatar user={user} className="h-11 w-11 text-xs" />
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-sm font-medium text-ink">{user.fullName}</span>
                       <span className="block break-all text-xs text-muted">{user.email}</span>
                       <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                         <span className="text-ink">{ROLE_CONFIG[user.role].label}</span>
-                        <Badge tone={user.status === 'active' ? 'approved' : 'rejected'}>{user.archivedAt?'Archived':user.status}</Badge>
+                        <DirectoryStatus user={user}/>
                       </span>
                     </span>
                     <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform ${expandedUserId === user.id ? 'rotate-180' : ''}`} aria-hidden="true" />
@@ -335,15 +324,7 @@ export default function UsersPage() {
                     {user.role==='student'&&<Link to={`/admin/users/${user.id}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-teal"><UserRound aria-hidden="true" className="h-4 w-4"/>View student overview<ArrowUpRight aria-hidden="true" className="h-4 w-4"/></Link>}
                     {user.role!=='admin'&&<div className="col-span-2 min-w-0">
                       <p className="mb-1 text-xs text-muted">Office</p>
-                      {user.role === 'admin' ? <span className="text-muted">—</span> : (
-                        <select
-                          disabled={Boolean(user.archivedAt)} aria-label={`Office for ${user.fullName}`} value={user.office?.id ?? ''} className={`${field} min-w-0`}
-                          onChange={(event) => act(() => apiPut(`/users/${user.id}/assignment`, { officeId: event.target.value || null }))}
-                        >
-                          <option value="">Not assigned</option>
-                          {officeList.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
-                        </select>
-                      )}
+                      <OfficeAssignmentSelect user={user} offices={officeList} onChange={officeId=>act(()=>apiPut(`/users/${user.id}/assignment`,{officeId}))}/>
                     </div>}
                     {user.role === 'student' && (
                       <div>

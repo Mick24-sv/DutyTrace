@@ -42,6 +42,25 @@ test('recipient scope, private replies, forwarding, statuses and notifications',
  assert.equal((await api.get(`/concerns/${supervisorConcern.body.data.id}`,as('studentA'))).status,403);
 });
 
+test('inbox actions are private to each participant and survive reloads',async()=>{
+ const created=await post('/concerns','studentA',{recipientId:fx.ids.supervisorA,subject:'Inbox actions check',message:'Testing personal inbox organization.'});
+ const id=created.body.data.id;
+ const action=(who,value)=>api.request('PATCH',`/concerns/${id}/inbox`,{...as(who),body:{action:value}});
+ assert.equal((await action('studentA2','delete')).status,403);
+ assert.equal((await action('studentA','invalid')).status,400);
+ assert.equal((await action('studentA','pin')).status,200);
+ assert.equal((await api.get('/concerns',as('studentA'))).body.data.items[0].id,id);
+ assert.equal((await api.get('/concerns',as('studentA'))).body.data.items[0].pinned,true);
+ assert.equal((await action('studentA','archive')).status,200);
+ assert.ok(!(await api.get('/concerns',as('studentA'))).body.data.items.some(row=>row.id===id));
+ assert.ok((await api.get('/concerns?archived=true',as('studentA'))).body.data.items.some(row=>row.id===id));
+ assert.equal((await action('studentA','unarchive')).status,200);
+ assert.equal((await action('studentA','delete')).status,200);
+ assert.ok(!(await api.get('/concerns',as('studentA'))).body.data.items.some(row=>row.id===id));
+ assert.ok((await api.get('/concerns',as('supervisorA'))).body.data.items.some(row=>row.id===id));
+ assert.equal((await api.get(`/concerns/${id}`,as('supervisorA'))).status,200);
+});
+
 test('message pagination keeps all messages even with identical timestamps',async()=>{
  const created=await post('/concerns','admin',{recipientId:fx.ids.studentA,subject:'Pagination check',message:'Initial message for checking pagination.'});
  const id=created.body.data.id;

@@ -221,7 +221,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
   }
 
   const { rows: students } = await query(
-    `SELECT u.id, u.full_name, u.email, u.required_hours, o.id AS office_id, o.code AS office_code, o.name AS office_name
+    `SELECT u.id, u.full_name, u.email, u.required_hours, u.profile_photo_updated_at, o.id AS office_id, o.code AS office_code, o.name AS office_name
      FROM users u
      LEFT JOIN duty_assignments d ON d.user_id = u.id AND d.ends_on IS NULL
      LEFT JOIN offices o ON o.id = d.office_id
@@ -297,6 +297,7 @@ export async function hoursReport({ user, officeId, month, page, limit }) {
     return {
       id: s.id,
       studentName: s.full_name,
+      photoUrl: s.profile_photo_updated_at ? `/users/${s.id}/photo?v=${new Date(s.profile_photo_updated_at).getTime()}` : null,
       studentEmail: s.email,
       officeId: s.office_id,
       officeName: s.office_name || '—',
@@ -977,6 +978,7 @@ export async function getDashboardStats(user) {
       .map((student) => ({
         ...student,
         studentName: student.fullName,
+        photoUrl: monthlyById.get(student.id)?.photoUrl ?? null,
         semesterRequirementAssigned: student.requirementAssigned,
         semesterVerifiedHours: student.verifiedHours,
         semesterRequiredHours: student.requiredHours,

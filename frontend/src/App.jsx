@@ -1,4 +1,6 @@
 import TeammatesPage from './pages/student/TeammatesPage.jsx';
+import AdminProfilePage from './pages/admin/AdminProfilePage.jsx';
+import { ProjectSettingsPreview } from './components/ui/DeleteProjectDialog.jsx';
 import ConcernsPage from './pages/shared/ConcernsPage.jsx';
 import DtrPreviewPage from './pages/student/DtrPreviewPage.jsx';
 import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
@@ -59,6 +61,7 @@ const EXTRA_ROUTES = {
   student: [
     { path: 'profile', Page: ProfilePage },
     { path: 'teammates', Page: TeammatesPage },
+    { path: 'co-workers', Page: TeammatesPage },
     { path: 'dtr/preview/:month', Page: DtrPreviewPage },
     { path: 'dtr/:id', Page: DtrDetailPage },
     { path: 'absences/:id', Page: AbsenceDetailPage },
@@ -72,6 +75,7 @@ const EXTRA_ROUTES = {
     { path: 'cases/:id', Page: CaseDetailPage },
   ],
   admin: [
+    { path: 'profile', Page: AdminProfilePage },
     { path: 'users/:userId', Page: StudentOverviewPage },
     { path: 'dtrs/:id', Page: DtrDetailPage },
     { path: 'cases/:id', Page: CaseDetailPage },
@@ -89,6 +93,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
+      <Route path="/project-settings" element={<ProjectSettingsPreview />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />

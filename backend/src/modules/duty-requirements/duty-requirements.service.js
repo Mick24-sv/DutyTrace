@@ -50,6 +50,7 @@ function publicSchedule(row, days = []) {
     termId: row.term_id,
     studentId: row.student_id,
     studentName: row.student_name,
+    photoUrl: row.profile_photo_updated_at ? `/users/${row.student_id}/photo?v=${new Date(row.profile_photo_updated_at).getTime()}` : null,
     studentEmail: row.student_email,
     officeId: row.office_id,
     officeName: row.office_name,
@@ -346,7 +347,7 @@ async function daysFor(scheduleId, db = { query }) {
 
 async function scheduleRow(scheduleId, db = { query }, lock = false) {
   const { rows } = await db.query(
-    `SELECT s.*, u.full_name AS student_name, u.email AS student_email, o.name AS office_name
+    `SELECT s.*, u.full_name AS student_name, u.email AS student_email, u.profile_photo_updated_at, o.name AS office_name
      FROM student_duty_schedules s JOIN users u ON u.id = s.student_id
      JOIN offices o ON o.id = s.office_id WHERE s.id = $1 ${lock ? 'FOR UPDATE OF s' : ''}`,
     [scheduleId],
@@ -719,7 +720,7 @@ export async function reviewQueue({ actor, termId }) {
     where.push(`s.term_id = $${params.length}`);
   }
   const { rows } = await query(
-    `SELECT s.*, u.full_name AS student_name, u.email AS student_email, o.name AS office_name
+    `SELECT s.*, u.full_name AS student_name, u.email AS student_email, u.profile_photo_updated_at, o.name AS office_name
      FROM student_duty_schedules s JOIN users u ON u.id=s.student_id JOIN offices o ON o.id=s.office_id
      WHERE ${where.join(' AND ')} ORDER BY s.submitted_at, s.created_at`, params,
   );
@@ -759,7 +760,7 @@ export async function supervisorScheduleOverview({ actor }) {
   const params = [actor.institutionId, term.id];
   const officeFilter = actor.role === 'supervisor' ? `AND s.office_id = $${params.push(actor.office.id)}` : '';
   const { rows } = await query(
-    `SELECT DISTINCT ON (s.student_id) s.*, u.full_name AS student_name, u.email AS student_email, o.name AS office_name
+    `SELECT DISTINCT ON (s.student_id) s.*, u.full_name AS student_name, u.email AS student_email, u.profile_photo_updated_at, o.name AS office_name
      FROM student_duty_schedules s
      JOIN users u ON u.id = s.student_id
      JOIN offices o ON o.id = s.office_id

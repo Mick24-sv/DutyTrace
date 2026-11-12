@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, ChevronDown, LogOut, Mail, Menu, UserRound } from 'lucide-react';
+import { Building2, ChevronDown, CircleHelp, LogOut, Mail, Menu, UserRound } from 'lucide-react';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 import UserAvatar from '../ui/UserAvatar.jsx';
 
-export default function Topbar({ role, title, onMenu }) {
+export default function Topbar({ role, title, onMenu, onTutorial }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const wrapRef = useRef(null);
   const { user, logout } = useAuth();
@@ -44,6 +44,7 @@ export default function Topbar({ role, title, onMenu }) {
 
       <p className="flex-1 truncate text-base font-semibold text-navy">{title}</p>
 
+      {onTutorial && <button data-tutorial="quick-start" type="button" onClick={onTutorial} aria-label="Open quick-start tutorial" title="Quick start" className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-medium text-teal hover:bg-canvas"><CircleHelp size={18} aria-hidden="true" /><span className="hidden sm:inline">Quick start</span></button>}
       <NotificationCenter role={role} />
 
       <div className="relative" ref={wrapRef}>
@@ -91,7 +92,7 @@ export default function Topbar({ role, title, onMenu }) {
                 </div>
               </div>}
               <div className="border-t border-line pt-4">
-                {['student','supervisor'].includes(role)&&<Link to={`/${role}/profile`} role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>Edit my profile</Link>}
+                <Link to={`/${role}/profile`} role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>{role==='admin'?'Profile settings':'Edit my profile'}</Link>
                 <button
                   type="button"
                   role="menuitem"

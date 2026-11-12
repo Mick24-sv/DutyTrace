@@ -24,6 +24,8 @@
   --color-bad-bg: #FEE2E2;
   --color-info-fg: #1D4ED8;   /* Informational */
   --color-info-bg: #DBEAFE;
+  --color-shift-pm-bg: #F2EDFF;
+  --color-shift-pm-fg: #6D46B8;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 

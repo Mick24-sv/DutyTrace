@@ -1,49 +1,34 @@
 import { Link } from 'react-router-dom';
+import { ArrowUpRight, CheckCircle2, Clock3, ClipboardList, TrendingUp } from 'lucide-react';
+import { semesterCompletion } from '../../utils/semesterCompletion.js';
+import './semester-completion.css';
 
-const groups=[
-  {key:'completed',label:'Completed',color:'text-ok-fg'},
-  {key:'remaining',label:'Still completing',color:'text-teal'},
-  {key:'unassigned',label:'No requirement assigned',color:'text-muted'},
-];
+const ICONS = { completed: CheckCircle2, remaining: Clock3, unassigned: ClipboardList };
 
-export default function SemesterCompletionDonut({summary,reportPath,includeUnassigned=false}) {
-  const counts={completed:summary.studentsMetRequirement??0,remaining:summary.studentsBelowRequirement??0,unassigned:summary.unassignedRequirements??0};
-  const displayed=groups.filter(g=>includeUnassigned||g.key!=='unassigned');
-  const total=displayed.reduce((sum,g)=>sum+counts[g.key],0);
-  const destination=group=>`${reportPath}?tab=semester-hours&termId=${encodeURIComponent(summary.term.id)}&completion=${group}`;
-  let start=0;let elapsed=0;
-  const slices=displayed.map(group=>{
-    const count=counts[group.key];const fraction=total?count/total*100:0;
-    const duration=count?600:0;
-    const item={...group,count,fraction,start,delay:elapsed,duration,land:elapsed+duration};
-    start+=fraction;elapsed+=duration;
-    return item;
+export default function SemesterCompletionDonut({ summary, reportPath, includeUnassigned = false }) {
+  const { groups, counts, assigned, total, completionPercentage } = semesterCompletion(summary, includeUnassigned);
+  const destination = group => `${reportPath}?tab=semester-hours&termId=${encodeURIComponent(summary.term.id)}&completion=${group}`;
+  let offset = 0;
+  const segmentCount = groups.filter(group => group.inChart && group.count > 0).length;
+  const slices = groups.filter(group => group.inChart).map(group => {
+    const slice = { ...group, offset, arc: Math.max(0, group.fraction - (segmentCount > 1 ? 1.3 : 0)) };
+    offset += group.fraction;
+    return slice;
   });
-  const animationKey=`${summary.term.id}:${includeUnassigned}:${Object.values(counts).join(':')}`;
-  return <div key={animationKey} className="mx-auto w-full max-w-2xl">
-    <div className="grid min-w-0 justify-items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:justify-items-stretch sm:gap-8">
-      <div className="relative h-44 w-44 shrink-0 sm:h-48 sm:w-48">
-        <svg viewBox="0 0 120 120" className="h-full w-full overflow-visible" role="group" aria-label="Student semester completion chart">
-          <circle cx="60" cy="60" r="48" fill="none" strokeWidth="13" className="stroke-line/60" />
-          {slices.filter(s=>s.count>0).map(slice=><Link key={slice.key} to={destination(slice.key)} aria-label={`${slice.label}: ${slice.count} students, ${Math.round(slice.fraction)} percent. View students.`} className={`${slice.color} outline-none [&:focus-visible_circle]:stroke-[17]`}>
-            <title>{slice.label}: {slice.count}</title>
-            <circle cx="60" cy="60" r="48" pathLength="100" fill="none" stroke="currentColor" strokeWidth="13" transform={`rotate(${slice.start*3.6-90} 60 60)`} className="semester-donut-arc transition-[stroke-width] hover:stroke-[16]" style={{'--arc':slice.fraction,'--rest':100-slice.fraction,animationDelay:`${slice.delay}ms`,animationDuration:`${slice.duration}ms`}} />
-          </Link>)}
-        </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-8 text-center" aria-hidden="true"><span className="text-3xl font-semibold tabular-nums tracking-tight text-navy">{total.toLocaleString()}</span><span className="mt-1 text-xs text-muted">{includeUnassigned?'Assigned students':'With requirements'}</span></div>
-      </div>
-      <ul className="w-full min-w-0 space-y-2" aria-label="Semester completion groups">
-        {slices.map(slice=><li key={slice.key} className="semester-donut-legend" style={{animationDelay:`${slice.land}ms`}}>
-          <Link to={destination(slice.key)} className="flex min-h-11 min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-canvas focus-visible:ring-2 focus-visible:ring-teal">
-            <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full bg-current ${slice.color}`}/>
-            <span className="min-w-0 flex-1 text-sm text-ink">{slice.label}</span>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-navy">{slice.count.toLocaleString()}</span>
-            <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted">{Math.round(slice.fraction)}%</span>
-          </Link>
-        </li>)}
-      </ul>
+  const chartKey = `${summary.term.id}:${includeUnassigned}:${Object.values(counts).join(':')}`;
+  return <div className="semester-completion-layout">
+    <div className="semester-completion-chart-wrap"><div className="semester-completion-chart" key={chartKey}>
+      <svg viewBox="0 0 140 140" role="group" aria-label="Student semester completion chart"><circle className="semester-completion-track" cx="70" cy="70" r="55" fill="none" strokeWidth="12" />{slices.filter(slice => slice.count > 0).map(slice => <Link key={slice.key} className={`semester-completion-slice completion-${slice.tone}`} to={destination(slice.key)} aria-label={`${slice.label}: ${slice.count} students, ${Math.round(slice.fraction)} percent. View filtered report.`}>
+        <title>{slice.label}: {slice.count}</title><circle className="semester-donut-arc" cx="70" cy="70" r="55" fill="none" stroke="currentColor" strokeWidth="12" pathLength="100" transform={`rotate(${slice.offset * 3.6 - 90} 70 70)`} style={{ '--arc': slice.arc, '--rest': 100 - slice.arc, animationDuration: '750ms' }} />
+      </Link>)}</svg>
+      <div className="semester-completion-center" aria-hidden="true"><span>STUDENT OVERVIEW</span><strong>{total.toLocaleString()}</strong><p>{includeUnassigned ? 'Assigned students' : 'With semester targets'}</p></div>
+    </div><span className="semester-completion-chart-caption">{includeUnassigned ? 'All students assigned to your office' : 'Students with assigned requirements'}</span></div>
+    <div className="semester-completion-details"><div className="semester-completion-intro"><div><span>SEMESTER SNAPSHOT</span><h3>{includeUnassigned ? 'Progress across your office' : 'Progress across your institution'}</h3><p>{assigned ? <><strong>{counts.completed.toLocaleString()} of {assigned.toLocaleString()}</strong> students with a target have completed their requirement.</> : 'Assign semester targets to start tracking student completion.'}</p></div>{assigned > 0 && <span className="semester-completion-rate"><TrendingUp size={13} aria-hidden="true" />{completionPercentage}% complete</span>}</div>
+      <ul className="semester-completion-tiles" aria-label="Semester completion groups">{groups.map(group => {
+        const Icon = ICONS[group.key];
+        return <li key={group.key}><Link className={`semester-completion-tile completion-${group.tone}`} to={destination(group.key)}><span className="semester-completion-tile-top"><span className="semester-completion-tile-icon"><Icon size={18} aria-hidden="true" /></span><ArrowUpRight size={14} aria-hidden="true" /></span><div className="semester-completion-tile-content"><span className="semester-completion-tile-label">{group.label}</span><div><strong>{group.count.toLocaleString()}</strong>{group.inChart ? <span>{Math.round(group.fraction)}%</span> : <span className="semester-completion-outside">Outside chart</span>}</div><p>{group.description}</p></div></Link></li>;
+      })}</ul>
+      {total === 0 && <p className="semester-completion-no-data">{includeUnassigned ? 'No Student Assistants are assigned to this office yet.' : 'No students have a semester requirement assigned yet.'}</p>}
     </div>
-    {!total&&<p className="mt-3 text-center text-sm text-muted">{includeUnassigned?'No student assistants assigned to this office.':'No students have a requirement assigned for this semester.'}</p>}
-    {!includeUnassigned&&<Link to={destination('unassigned')} className="mt-4 flex min-h-11 flex-wrap items-center justify-between gap-2 border-t border-line pt-3 text-sm text-muted hover:text-teal"><span>No requirement assigned</span><span className="font-semibold tabular-nums">{counts.unassigned.toLocaleString()}</span></Link>}
   </div>;
 }

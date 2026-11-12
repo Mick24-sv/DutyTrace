@@ -5,7 +5,7 @@ import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import StatCard from '../../components/ui/StatCard.jsx';
 import { useApiData } from '../../hooks/useApiData.js';
-import SemesterCompletionDonut from '../../components/dashboard/SemesterCompletionDonut.jsx';
+import SemesterProgressOverview from '../../components/dashboard/SemesterProgressOverview.jsx';
 
 export default function AdminDashboard() {
   const {data, loading, error} = useApiData('/reports/dashboard-stats');
@@ -18,12 +18,7 @@ export default function AdminDashboard() {
       <StatCard label="Student assistants" value={data?.users?.students ?? '—'} icon={Users} />
       <StatCard label="DTRs awaiting review" value={data?.dtrs?.pendingReview ?? '—'} icon={FileText} />
     </div>
-    <Card className="mt-5" title="Current semester" action={<Link to="/admin/reports?tab=semester-hours" className="text-sm text-teal underline">View progress report</Link>}>
-      {term?.term ? <>
-        <p className="mb-4 text-sm font-medium">{term.term.academicYear} · {({first:'First semester',second:'Second semester',summer:'Summer term'})[term.term.semester]}</p>
-        <SemesterCompletionDonut summary={term} reportPath="/admin/reports" />
-      </> : <p className="text-sm text-muted">{loading ? 'Loading current term…' : 'No current academic term. Set up dates and student hour requirements under Academic Terms.'}</p>}
-    </Card>
+    <SemesterProgressOverview summary={term} role="admin" loading={loading} error={error} />
     <Card className="mt-5" title="Manage your institution">
       <div className="grid gap-3 sm:grid-cols-2">
         {[

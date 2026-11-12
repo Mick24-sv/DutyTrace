@@ -32,7 +32,7 @@ export default function SupervisorQrPage() {
           action={<Badge tone={active ? 'approved' : 'rejected'}>{active ? 'Active' : 'No active code'}</Badge>}
         >
           {active ? (
-            <div className="flex flex-col items-center text-center">
+            <div data-tutorial="office-qr-display" className="flex flex-col items-center text-center">
               <QrCodeImage text={active.payload} label={`Attendance QR code for ${data.office.name}`} />
               <p className="mt-3 text-sm text-muted">Current office attendance code</p>
               <p className="mt-1 text-xs text-muted">Issued {formatDateTime(active.createdAt)}</p>

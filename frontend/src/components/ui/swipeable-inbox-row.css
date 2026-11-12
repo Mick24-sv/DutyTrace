@@ -1,0 +1,17 @@
+.swipe-inbox-row { position: relative; overflow: hidden; isolation: isolate; touch-action: pan-y pinch-zoom; background: var(--color-bad-fg); }
+.swipe-inbox-content { position: relative; background: var(--color-surface); transition: transform 300ms cubic-bezier(.2,.85,.25,1); padding-right: 36px; min-height: 100px; }
+.is-dragging .swipe-inbox-content { transition: none; user-select: none; }
+.swipe-inbox-actions { position: absolute; inset-block: 0; display: flex; align-items: stretch; }
+.swipe-inbox-left { left: 0; width: 100%; background: var(--color-teal); }
+.swipe-inbox-right { right: 0; width: 152px; background: var(--color-bad-fg); }
+.swipe-inbox-actions button { width: 76px; min-height: 48px; border: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--color-surface); background: var(--color-teal); cursor: pointer; font-size: 11px; }
+.swipe-inbox-actions .swipe-inbox-archive { background: var(--color-navy); }
+.swipe-inbox-actions .swipe-inbox-delete { background: var(--color-bad-fg); }
+.is-delete-armed .swipe-inbox-right { width: 100%; justify-content: flex-end; }
+.is-delete-armed .swipe-inbox-archive { visibility: hidden; }
+.swipe-inbox-more, .swipe-inbox-pin-access { position: absolute; right: 4px; width: 32px; height: 44px; display: grid; place-items: center; background: none; border: 0; color: var(--color-muted); border-radius: 6px; cursor: pointer; }
+.swipe-inbox-more { top: 5px; }.swipe-inbox-pin-access { bottom: 5px; }
+.swipe-inbox-error { position: relative; background: var(--color-bad-bg); color: var(--color-bad-fg); padding: 10px; font-size: 12px; }
+.swipe-inbox-row[aria-busy="true"] button { pointer-events: none; opacity: .6; }
+@media (min-width: 1024px) { .swipe-inbox-actions, .swipe-inbox-more, .swipe-inbox-pin-access { display: none; }.swipe-inbox-content { transform: none !important; padding-right: 0; min-height: 0; } }
+@media (prefers-reduced-motion: reduce) { .swipe-inbox-content { transition: none; } }

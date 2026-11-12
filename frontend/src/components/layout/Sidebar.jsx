@@ -1,10 +1,29 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { ROLE_CONFIG, matchesSection } from '../../routes/navConfig.js';
+import SidebarCalendar from './SidebarCalendar.jsx';
+import './sidebar-rail.css';
 
 export default function Sidebar({ role, open, onClose }) {
   const config = ROLE_CONFIG[role];
   const { pathname } = useLocation();
+  const [railHovered, setRailHovered] = useState(false);
+  const [railDismissed, setRailDismissed] = useState(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const saved = { position: body.style.position, top: body.style.top, width: body.style.width, overflow: body.style.overflow };
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    return () => {
+      Object.assign(body.style, saved);
+      window.scrollTo({ top: scrollY, behavior: 'instant' });
+    };
+  }, [open]);
   const sections = config.nav.reduce((result, item) => {
     const title = item.section ?? '';
     const current = result[result.length - 1];
@@ -14,7 +33,7 @@ export default function Sidebar({ role, open, onClose }) {
   }, []);
 
   const nav = (
-    <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4">
+    <nav aria-label="Main navigation" className="sidebar-navigation min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
       <ul className="space-y-4">
         {sections.map(({ title, items }) => (
           <li key={title || 'main-navigation'}>
@@ -25,8 +44,15 @@ export default function Sidebar({ role, open, onClose }) {
                   <NavLink
                     to={to ? `${config.base}/${to}` : config.base}
                     end={!to}
+                    aria-label={label}
+                    title={label}
                     aria-current={matchesSection(config, {to, related}, pathname) ? 'page' : undefined}
-                    onClick={onClose}
+                    onClick={event => {
+                      if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+                        setRailDismissed(true);
+                        onClose();
+                      }
+                    }}
                     className={() =>
                       `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                         matchesSection(config, {to, related}, pathname)
@@ -36,7 +62,7 @@ export default function Sidebar({ role, open, onClose }) {
                     }
                   >
                     <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {label}
+                    <span className="sidebar-link-label">{label}</span>
                   </NavLink>
                 </li>
               ))}
@@ -44,17 +70,18 @@ export default function Sidebar({ role, open, onClose }) {
           </li>
         ))}
       </ul>
+      <SidebarCalendar role={role} onNavigate={onClose} />
     </nav>
   );
 
   const brand = (
-    <div className="flex h-16 items-center gap-3 border-b border-white/10 px-4">
+    <div className="sidebar-brand flex h-16 shrink-0 items-center gap-3 border-b border-white/10 px-4">
       <img
         src="/logo.png"
         alt="DutyTrace Logo"
         className="h-9 w-9 shrink-0 rounded-lg bg-white object-contain shadow-sm"
       />
-      <div className="min-w-0 leading-tight">
+      <div className="sidebar-brand-label min-w-0 leading-tight">
         <p className="truncate text-base font-semibold text-white">DutyTrace</p>
         <p className="truncate text-[11px] text-white/60">{config.label}</p>
       </div>
@@ -64,7 +91,10 @@ export default function Sidebar({ role, open, onClose }) {
   return (
     <>
       {/* Desktop: fixed sidebar */}
-      <aside className="no-print fixed inset-y-0 left-0 hidden w-64 flex-col bg-navy lg:flex">
+      <aside className="desktop-sidebar-rail no-print fixed inset-y-0 left-0 hidden flex-col bg-navy lg:flex" aria-label="Sidebar"
+        data-hover-open={railHovered && !railDismissed ? 'true' : undefined}
+        onPointerEnter={event => { if (event.pointerType === 'mouse' || event.pointerType === 'pen') setRailHovered(true); }}
+        onPointerLeave={() => { setRailHovered(false); setRailDismissed(false); }}>
         {brand}
         {nav}
       </aside>
@@ -78,7 +108,7 @@ export default function Sidebar({ role, open, onClose }) {
             className="absolute inset-0 bg-ink/50"
             onClick={onClose}
           />
-          <aside className="relative flex h-full w-72 max-w-[85%] flex-col bg-navy">
+          <aside className="relative flex h-dvh w-72 max-w-[85%] flex-col overflow-hidden bg-navy">
             <button
               type="button"
               onClick={onClose}
