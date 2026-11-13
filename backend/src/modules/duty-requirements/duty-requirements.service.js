@@ -2,10 +2,13 @@ import { query, withTransaction } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
 import { verifiedSecondsForTerm } from '../semesters/semester.rules.js';
-import { effectiveEvents } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
+import { sessionVerifiedSeconds } from '../attendance/session-verification.service.js';
+import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-duty-hours.service.js';
 import { localDateKey } from '../attendance/calc.js';
 import { createNotification, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { resolveEffectivePolicy } from '../policy-templates/policy-templates.service.js';
+import { catchUpCapacity, catchUpCandidates } from './catch-up.rules.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const notFound = () => new AppError(404, 'NOT_FOUND', 'Duty schedule or requirement not found.');
@@ -20,6 +23,48 @@ const dayPeriods = (day) => [
 ];
 const dayHours = (day) => dayPeriods(day).reduce((total, period) =>
   total + (timeMinutes(period.endsAt) - timeMinutes(period.startsAt)) / 60, 0);
+
+export async function catchUpContext({ student, term, progress, today }) {
+  const versions = await latestForStudent(term.id, student.id);
+  const approved = versions.find(row => row.status === 'approved');
+  const open = versions.find(row => ['draft','pending_review','change_requested'].includes(row.status));
+  const days = approved ? await daysFor(approved.id) : [];
+  const startsOn = [today, term.starts_on, open?.effective_starts_on??approved?.effective_starts_on].filter(Boolean).sort().at(-1);
+  const endsOn = [term.ends_on, term.completion_deadline, open?.effective_ends_on??approved?.effective_ends_on].filter(Boolean).sort()[0];
+  const requirement = await requirementFor({user:student,term,officeId:student.office.id,startsOn,endsOn});
+  const {rows: pendingDtrs} = await query(`SELECT month,status FROM monthly_dtrs WHERE user_id=$1
+    AND month BETWEEN $2 AND $3 AND status IN ('submitted','under_review','needs_correction','draft') ORDER BY month DESC`,
+  [student.id,term.starts_on.slice(0,7),term.ends_on.slice(0,7)]);
+  const capacity = progress.scheduledHoursRemaining;
+  const shortfall = capacity == null || progress.remainingHours == null ? null : Math.max(0,Math.round((progress.remainingHours-capacity)*100)/100);
+  const basis = {startsOn,endsOn,today,recordedHoursToday:progress.recordedHoursToday};
+  const suggestions = [];
+  if(progress.semesterStatus === 'at_risk' && approved && !term.finalized_at && startsOn <= endsOn) {
+    const candidates = catchUpCandidates({days,requirement})
+      .filter(candidate => !scheduleIssues(candidate.days,requirement).length)
+      .map(candidate => ({...candidate,capacityHours:catchUpCapacity({...basis,days:candidate.days})}))
+      .filter(candidate => candidate.capacityHours > capacity)
+      .sort((a,b) => {
+        const gapA = Math.max(0,progress.remainingHours-a.capacityHours);
+        const gapB = Math.max(0,progress.remainingHours-b.capacityHours);
+        return gapA-gapB || a.extraHoursPerWeek-b.extraHoursPerWeek;
+      });
+    const seen = new Set();
+    // Limit lookups; all proposals are checked again during submission and approval.
+    for (const candidate of candidates.slice(0,24)) {
+      const key = `${candidate.kind}-${candidate.weekday}`;
+      if (seen.has(key)) continue;
+      const conflicts = await confirmedAssignmentConflicts({...approved,effective_starts_on:startsOn,effective_ends_on:endsOn},candidate.days);
+      if(conflicts.length) continue;
+      seen.add(key);
+      suggestions.push({...candidate,id:`${candidate.kind}-${candidate.weekday}`,shortfallHours:Math.max(0,Math.round((progress.remainingHours-candidate.capacityHours)*100)/100)});
+      if(suggestions.length===3) break;
+    }
+  }
+  return {today,startsOn,endsOn,requirement,shortfallHours:shortfall,pendingDtrs,suggestions,
+    approvedSchedule:approved?publicSchedule(approved,days):null,
+    proposal:open?publicSchedule(open,await daysFor(open.id)):null};
+}
 
 function publicPolicy(row) {
   if (!row) return null;
@@ -438,7 +483,16 @@ async function verifiedTermHours(studentId, term, db = { query }) {
        AND d.month >= to_char($2::date, 'YYYY-MM') AND d.month <= to_char($3::date, 'YYYY-MM')`,
     [studentId, term.starts_on, term.ends_on],
   );
-  return Math.round(verifiedSecondsForTerm(rows, term.starts_on, term.ends_on, term.timezone) / 36) / 100;
+  const ids=[studentId];
+  const [sessions,adjustments,historical]=await Promise.all([
+    sessionVerifiedSeconds(ids,term.starts_on,term.ends_on,term.timezone,db),
+    verifiedAdjustmentSeconds(ids,term.starts_on.slice(0,7),term.ends_on.slice(0,7),db,
+      {fromDate:term.starts_on,toDate:term.ends_on,timezone:term.timezone}),
+    verifiedHistoricalSeconds(ids,term.id,db),
+  ]);
+  const seconds=verifiedSecondsForTerm(rows,term.starts_on,term.ends_on,term.timezone)
+    +(sessions.get(studentId)??0)+(adjustments.get(studentId)??0)+(historical.get(studentId)??0);
+  return Math.round(seconds/36)/100;
 }
 
 function estimateFeasibility({ days, schedule, requirement, verifiedHours, validationIssues, today }) {

@@ -1,6 +1,7 @@
 import {CalendarDays as UIActionCalendarDays,CheckCircle2 as UIActionCheckCircle2,Undo2 as UIActionUndo2,XCircle as UIActionXCircle} from 'lucide-react';
 import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageHeader from '../../components/ui/PageHeader.jsx';
 import Card from '../../components/ui/Card.jsx';
 import Button from '../../components/ui/Button.jsx';
@@ -15,15 +16,18 @@ const field = 'min-h-11 w-full min-w-0 max-w-full rounded-lg border border-line 
 const formatDutyPeriods = (day) => `Morning ${formatDutyTime(day.startsAt)}–${formatDutyTime(day.endsAt)}${day.afternoonStartsAt && day.afternoonEndsAt ? ` · afternoon ${formatDutyTime(day.afternoonStartsAt)}–${formatDutyTime(day.afternoonEndsAt)}` : ''}`;
 
 export default function DutyScheduleReviewPage() {
+  const [params] = useSearchParams();
+  const studentId = params.get('studentId');
+  const termId = params.get('termId');
   const [page, setPage] = useState(1);
   const [tick, setTick] = useState(0);
-  const { data, loading, error } = useApiData(`/duty-schedules/review?_=${tick}`);
+  const { data, loading, error } = useApiData(`/duty-schedules/review?_=${tick}${termId?`&termId=${encodeURIComponent(termId)}`:''}`);
   const [reasons, setReasons] = useState({});
   const [suggestions, setSuggestions] = useState({});
   const [busyId, setBusyId] = useState('');
   const [message, setMessage] = useState('');
   const [actionError, setActionError] = useState('');
-  const schedules = data?.schedules ?? [];
+  const schedules = (data?.schedules ?? []).filter(schedule=>!studentId||schedule.studentId===studentId);
   const currentPage = Math.min(page, Math.max(1, Math.ceil(schedules.length / PAGE_SIZE)));
   const visibleSchedules = schedules.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   useEffect(() => {
@@ -44,13 +48,14 @@ export default function DutyScheduleReviewPage() {
   }
   return <>
     <SectionLinks links={[['/supervisor', 'Back to home'], ['/supervisor/schedule-review', 'Review preferences']]} />
+    {studentId&&<p className="mb-4 text-sm text-muted">Showing this student’s pending preferences. <Link className="text-teal underline" to="/supervisor/schedule-review">View all requests</Link></p>}
     <PageHeader icon={UIActionCalendarDays} title="Duty Schedule Review" description="Review requested duty times against verified hours and office staffing capacity. Approval confirms the recurring duty schedule; attendance continues to be recorded through the office QR workflow." />
     {loading && <p role="status" className="text-sm text-muted">Loading review queue…</p>}{error && <p role="alert" className="text-bad-fg">{error}</p>}{actionError && <p role="alert" className="mb-3 text-bad-fg">{actionError}</p>}{message && <p role="status" className="mb-3 text-teal">{message}</p>}
     {data?.schedules?.length > 0 && <Card className="mb-4 hidden sm:block" title="Weekly preference overview">
       <div className="overflow-x-auto"><table className="min-w-full border-collapse text-left text-sm"><thead><tr><th className="border border-line bg-canvas p-2">Student Assistant</th>{week.slice(0, 6).map((day) => <th key={day} className="border border-line bg-canvas p-2">{day.slice(0, 3)}</th>)}</tr></thead><tbody>{visibleSchedules.map((schedule) => <tr key={schedule.id}><th className="border border-line p-2 font-medium">{schedule.studentName}<span className="block text-xs font-normal text-muted">{schedule.status.replaceAll('_', ' ')}</span></th>{week.slice(0, 6).map((_, index) => { const day = schedule.days.find((entry) => entry.weekday === index + 1); return <td key={index} className="min-w-28 border border-line p-2 align-top">{day ? <>{day.startsAt.slice(0, 5)}–{day.endsAt.slice(0, 5)}{day.afternoonStartsAt && <span className="block">{day.afternoonStartsAt.slice(0, 5)}–{day.afternoonEndsAt.slice(0, 5)}</span>}</> : <span className="text-muted">Unavailable</span>}</td>; })}</tr>)}</tbody></table></div>
       <p className="mt-2 text-xs text-muted">This matrix shows submitted preferences awaiting your review. Approval still checks existing assignments and office capacity on the server.</p>
     </Card>}
-    {data && (data.schedules.length ? <div className="space-y-4">{visibleSchedules.map((schedule) => <Card key={schedule.id}>
+    {data && (schedules.length ? <div className="space-y-4">{visibleSchedules.map((schedule) => <Card key={schedule.id}>
       <div className="flex min-w-0 flex-wrap justify-between gap-2"><div className="min-w-0"><h2 className="break-words font-semibold">{schedule.studentName}</h2><p className="break-words text-sm text-muted [overflow-wrap:anywhere]">{schedule.studentEmail} · {schedule.officeName} · {schedule.requestKind === 'change' ? 'Change request' : 'Initial proposal'} · version {schedule.version}</p></div><span className="text-sm font-medium text-teal">{schedule.status.replaceAll('_', ' ')}</span></div>
       <p className="mt-3 text-sm">{schedule.effectiveStartsOn} through {schedule.effectiveEndsOn}</p>
       <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">{schedule.days.map((day) => <li key={day.weekday}>{week[day.weekday - 1]}: {formatDutyPeriods(day)}</li>)}</ul>

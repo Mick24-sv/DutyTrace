@@ -2,6 +2,7 @@ import { Fragment, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, BarChart3, CheckCheck, ChevronDown, Search, ShieldCheck, Users } from 'lucide-react';
 import SemesterStatusBadge from '../attendance/SemesterStatusBadge.jsx';
+import CatchUpPlanLink from './CatchUpPlanLink.jsx';
 import UserAvatar from '../ui/UserAvatar.jsx';
 import { formatHours, formatMonth } from '../../utils/format.js';
 import { dutyProgress, monthlyVerification } from '../../utils/dutyOverview.js';
@@ -36,7 +37,7 @@ export default function DutyProgressOverview({ assistants, months, term, loading
         <th scope="row"><div className="duty-student"><UserAvatar user={{fullName:student.studentName,photoUrl:student.photoUrl}} className="h-9 w-9 text-xs" /><div><Link to={`/supervisor/assistants/${student.id}`}>{student.studentName}</Link><span>{progress.assigned ? `${formatHours(Math.max(0, progress.required - progress.verified))} remaining` : 'No semester target'}</span></div></div></th>
         <td><span className="duty-mobile-label">Verified / Required</span><div className="duty-hours-value"><strong>{formatHours(progress.verified)}</strong><span>/ {progress.assigned ? formatHours(progress.required) : 'Not assigned'}</span></div></td>
         <td className="duty-progress-meter-cell"><span className="duty-mobile-label">Semester progress</span>{progress.assigned ? <div className={`duty-progress-meter ${student.semesterStatus === 'completed' ? 'is-complete' : ['at_risk','overdue'].includes(student.semesterStatus) ? 'needs-attention' : ''}`}><div role="progressbar" aria-label={`${student.studentName}: semester duty progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percentage}><span style={{width:`${progress.percentage}%`}} /></div><span>{progress.percentage}%</span></div> : <span className="duty-no-target">No target assigned</span>}</td>
-        <td className="duty-standing-cell"><span className="duty-mobile-label">Standing</span><SemesterStatusBadge status={student.semesterStatus} /></td>
+        <td className="duty-standing-cell"><span className="duty-mobile-label">Standing</span><SemesterStatusBadge status={student.semesterStatus} /><div className="mt-2"><CatchUpPlanLink role="supervisor" studentId={student.id} termId={term?.id} status={student.semesterStatus}/></div></td>
         <td className="duty-expand-cell"><button type="button" aria-expanded={isExpanded} aria-controls={isExpanded ? detailId : undefined} onClick={() => toggle(student.id)}><span>Monthly details</span><ChevronDown size={17} aria-hidden="true" /></button></td>
       </tr>{isExpanded && <tr className="duty-progress-detail-row"><td colSpan={5}><div id={detailId}><MonthlyBreakdown student={student} months={months} /></div></td></tr>}</Fragment>;
     })}</tbody></table>}

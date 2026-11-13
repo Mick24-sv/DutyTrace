@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight, CheckCircle2, CircleHelp, ClipboardList, Clock3, Info, TriangleAlert } from 'lucide-react';
 import SemesterStatusBadge from '../attendance/SemesterStatusBadge.jsx';
+import CatchUpPlanLink from './CatchUpPlanLink.jsx';
 import DtrStatusBadge from '../dtr/DtrStatusBadge.jsx';
 import Badge from '../ui/Badge.jsx';
 import UserAvatar from '../ui/UserAvatar.jsx';
@@ -25,7 +26,7 @@ export default function DutyFollowUpOverview({ students, loading, error }) {
         <td className="duty-follow-up-progress"><span className="duty-follow-up-mobile-label">Semester progress</span><div className="duty-follow-up-ratio"><span><strong>{formatHours(progress.verified)}</strong><span> / {progress.assigned ? formatHours(progress.required) : 'Not assigned'}</span></span>{progress.assigned && <b>{progress.percentage}%</b>}</div>{progress.assigned ? <div className="duty-follow-up-track" role="progressbar" aria-label={`${student.studentName}: verified semester hours`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percentage}><span style={{width:`${progress.percentage}%`}} /></div> : <p className="duty-follow-up-no-target">No semester target assigned</p>}<p className="duty-follow-up-recorded"><Clock3 size={11} aria-hidden="true" />{formatHours(student.recordedHours ?? 0)} QR recorded this month</p></td>
         <td className="duty-follow-up-remaining-cell"><span className="duty-follow-up-mobile-label">Hours remaining</span><div className="duty-follow-up-remaining"><strong>{progress.remaining == null ? '—' : formatHours(progress.remaining)}</strong><span>{progress.tone === 'overdue' ? 'Past deadline' : progress.tone === 'attention' ? 'Needs attention' : progress.tone === 'on-track' ? 'To complete' : 'Remaining target'}</span></div></td>
         <td className="duty-follow-up-dtr"><span className="duty-follow-up-mobile-label">DTR status</span>{!student.dtrStatus || student.dtrStatus === 'none' ? <Badge tone="neutral">Not submitted</Badge> : <DtrStatusBadge status={student.dtrStatus} />}</td>
-        <td className="duty-follow-up-action"><Link to={`/supervisor/assistants/${student.id}`} aria-label={`View student: ${student.studentName}`}>View student<ArrowRight size={13} aria-hidden="true" /></Link></td>
+        <td className="duty-follow-up-action"><CatchUpPlanLink role="supervisor" studentId={student.id} termId={student.termId} status={student.semesterStatus}/><Link to={`/supervisor/assistants/${student.id}`} aria-label={`View student: ${student.studentName}`}>View student<ArrowRight size={13} aria-hidden="true" /></Link></td>
       </tr>;
     })}</tbody></table>}
     <footer className="duty-follow-up-footer"><Info size={13} aria-hidden="true" /><span>Hours remaining are based on verified semester totals. Students can still be on track while completing their target.</span></footer>

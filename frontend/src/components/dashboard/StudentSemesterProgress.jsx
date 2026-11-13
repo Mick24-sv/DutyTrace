@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Flag, Info, QrCode, TrendingUp } from 'lucide-react';
 import SemesterStatusBadge from '../attendance/SemesterStatusBadge.jsx';
+import CatchUpPlanLink from './CatchUpPlanLink.jsx';
 import { formatHours } from '../../utils/format.js';
 import './student-semester-progress.css';
 
@@ -27,6 +28,7 @@ export default function StudentSemesterProgress({ terms, selectedTerm, selectedT
   return <section className={`student-semester-card semester-tone-${tone}`} aria-labelledby={`${id}-heading`}>
     <header className="student-semester-header"><div><span className="student-semester-icon"><TrendingUp size={20} aria-hidden="true" /></span><div><h2 id={`${id}-heading`}>Semester progress</h2><p>Your duty hours, one step at a time.</p></div></div>{terms.length > 0 && <label className="student-semester-picker"><CalendarDays size={14} aria-hidden="true" /><span className="sr-only">Academic term</span><select value={selectedTermId} onChange={event => onSelect(event.target.value)}><option value="" disabled>Select academic term</option>{terms.map(term => <option key={term.id} value={term.id}>{term.academicYear} · {TERM_LABELS[term.semester] ?? term.semester}{term.isCurrent ? ' (Current)' : ''}</option>)}</select></label>}</header>
     {loading && !selectedTerm ? <p role="status" className="student-semester-empty">Loading semester progress…</p> : error ? <p role="alert" className="student-semester-error">Unable to load semester progress. {error}</p> : !selectedTerm || !assigned ? <div className="student-semester-empty"><CalendarDays size={30} aria-hidden="true" /><h3>{selectedTerm ? 'Your duty-hour target is not assigned yet' : 'Your semester progress will appear here'}</h3><p>{selectedTerm ? `${selectedTerm.academicYear} · ${TERM_LABELS[selectedTerm.semester] ?? selectedTerm.semester}. Contact your administrator to set your semester requirement.` : 'An academic term and assigned duty-hour target are needed to track your progress.'}</p><Link to="/student/attendance">View attendance<ArrowUpRight size={14} aria-hidden="true" /></Link></div> : <>
+      {selectedTerm.semesterStatus==='at_risk'&&<div className="px-5 pt-4"><CatchUpPlanLink role="student" studentId={selectedTerm.studentId} termId={selectedTerm.id} status={selectedTerm.semesterStatus}/></div>}
       <div className="student-semester-body">
         <div className="student-semester-ring" role="progressbar" aria-label="Verified semester duty-hour progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage} aria-valuetext={`${formatHours(verified)} verified of ${formatHours(required)} required, ${percentage}% complete`}>
           <svg viewBox="0 0 140 140" aria-hidden="true"><circle className="semester-ring-track" cx="70" cy="70" r="58" /><circle className="semester-ring-value" cx="70" cy="70" r="58" pathLength="100" strokeDasharray={`${percentage} 100`} /></svg>

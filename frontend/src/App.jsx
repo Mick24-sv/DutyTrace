@@ -1,4 +1,5 @@
 import TeammatesPage from './pages/student/TeammatesPage.jsx';
+import CatchUpPlanPage from './pages/shared/CatchUpPlanPage.jsx';
 import AdminProfilePage from './pages/admin/AdminProfilePage.jsx';
 import { ProjectSettingsPreview } from './components/ui/DeleteProjectDialog.jsx';
 import ConcernsPage from './pages/shared/ConcernsPage.jsx';
@@ -104,6 +105,7 @@ export default function App() {
           <Route key={role} element={<RequireRole role={role} />}>
             <Route path={config.base} element={<AppShell role={role} />}>
               <Route index element={<Dashboard />} />
+              <Route path="catch-up/:termId/:studentId" element={<CatchUpPlanPage />} />
               {Object.entries(BUILT_PAGES[role]).map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
               {['schedule', 'recovery-review', 'duty-alerts', 'policies', 'effective-policies', 'policy-templates', 'semester-transitions', 'duty-requirements'].map(path =>
                 <Route key={path} path={path} element={<Navigate to={role === 'admin' ? '/admin/settings' : role === 'supervisor' ? '/supervisor/assistants' : '/student/attendance'} replace />} />)}

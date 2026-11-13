@@ -30,6 +30,10 @@ semestersRouter.get('/mine', requireRole('student'), asyncHandler(async (req, re
   ok(res, { terms: await semesters.myTerms(req.user) });
 }));
 
+semestersRouter.get('/:termId/catch-up/:studentId', requireRole('student','supervisor','admin'), asyncHandler(async (req,res) => {
+  ok(res,await semesters.catchUpPlan({actor:req.user,termId:parseId(req.params.termId),studentId:parseId(req.params.studentId)}));
+}));
+
 semestersRouter.get('/mine/:termId/monthly-summary', requireRole('student'), asyncHandler(async (req, res) => {
   ok(res, await semesters.myMonthlySummary(req.user, parseId(req.params.termId)));
 }));

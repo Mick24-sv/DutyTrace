@@ -8,7 +8,8 @@ import { buildSessions, localDateKey } from '../attendance/calc.js';
 import { calculateSemesterProgress, verifiedSecondsForTerm } from './semester.rules.js';
 import { effectiveEvents, verifiedAdjustmentSeconds } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 import { verifiedHistoricalSeconds } from '../historical-duty-hours/historical-duty-hours.service.js';
-import { semesterStatus } from './semester-status.js';
+import { semesterStatus, scheduledCapacity } from './semester-status.js';
+import { catchUpContext } from '../duty-requirements/duty-requirements.service.js';
 
 const forbidden = () => new AppError(403, 'FORBIDDEN', 'You do not have permission to do that.');
 const roundHours = (seconds) => Math.round((seconds / 3600) * 100) / 100;
@@ -312,6 +313,10 @@ async function progressForStudents(term, students, now) {
       officeId: requirement?.office_id ?? student.office_id,
       officeName: student.office_name,
       recordedHours: roundHours(recordedSeconds),
+      termId: term.id,
+      recordedHoursToday: roundHours(sessionSeconds(sessions, localDateKey(now,term.timezone), localDateKey(now,term.timezone))),
+      scheduledHoursRemaining: scheduledCapacity({today:localDateKey(now,term.timezone), deadline:term.completion_deadline||term.ends_on,
+        termEnd:term.ends_on,schedule:schedules.get(student.id),sessions}),
       historicalHours: roundHours(historicalVerified.get(student.id) ?? 0),
       semesterStatus:semesterStatus({...progress,deadline:term.completion_deadline,termEnd:term.ends_on,today:localDateKey(now,term.timezone),
         schedule:schedules.get(student.id),
@@ -320,6 +325,21 @@ async function progressForStudents(term, students, now) {
       requirementAssignedAt: requirement?.assigned_at ?? null,
     };
   });
+}
+
+export async function catchUpPlan({actor,termId,studentId}) {
+  if (!['student','supervisor','admin'].includes(actor.role) || (actor.role==='student' && actor.id!==studentId)) throw forbidden();
+  const term = await requireTerm(termId,actor.institutionId);
+  const {rows:[student]} = await query(`SELECT u.id,u.full_name,u.email,o.id AS office_id,o.name AS office_name
+    FROM users u JOIN duty_assignments da ON da.user_id=u.id AND da.ends_on IS NULL
+    JOIN offices o ON o.id=da.office_id
+    WHERE u.id=$1 AND u.institution_id=$2 AND u.role='student' AND u.status='active'`,[studentId,actor.institutionId]);
+  if(!student || (actor.role==='supervisor' && actor.office?.id!==student.office_id)) throw forbidden();
+  const {rows:[clock]} = await query('SELECT now() AS now');
+  const [progress] = await progressForStudents(term,[student],clock.now);
+  const today = localDateKey(clock.now,term.timezone);
+  const context = await catchUpContext({student:{id:student.id,institutionId:actor.institutionId,office:{id:student.office_id}},term,progress,today});
+  return {term:mapTerm(term),student:progress,...context};
 }
 
 export async function myTerms(user) {

@@ -1,4 +1,5 @@
 import SemesterStatusBadge from '../../components/attendance/SemesterStatusBadge.jsx';
+import CatchUpPlanLink from '../../components/dashboard/CatchUpPlanLink.jsx';
 import {BarChart3 as UIActionBarChart3} from 'lucide-react';
 import SectionLinks from '../../components/layout/SectionLinks.jsx';
 import { useSearchParams } from 'react-router-dom';
@@ -153,7 +154,7 @@ export default function ReportsPage() {
         return [
           { key: 'fullName', header: 'Student Assistant' },
           { key: 'officeName', header: 'Assigned Office' },
-          {key:'semesterStatus',header:'Semester status',render:r=><SemesterStatusBadge status={r.semesterStatus}/>},
+          {key:'semesterStatus',header:'Semester status',render:r=><div className="grid justify-items-start gap-2"><SemesterStatusBadge status={r.semesterStatus}/><CatchUpPlanLink role={user.role} studentId={r.id} termId={r.termId} status={r.semesterStatus}/></div>},
           { key: 'requiredHours', header: 'Required', render: (r) => r.requirementAssigned ? `${formatHours(r.requiredHours)} h` : 'No requirement assigned' },
           { key: 'recordedHours', header: 'Recorded', render: (r) => formatHours(r.recordedHours) },
           { key: 'verifiedHours', header: 'Verified', render: (r) => formatHours(r.verifiedHours) },
