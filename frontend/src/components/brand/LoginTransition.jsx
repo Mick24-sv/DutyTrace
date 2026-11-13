@@ -21,7 +21,7 @@ export default function LoginTransition({ onComplete }) {
       callback.current();
     };
     // Covers slow or unavailable chunks and suspended/failed animation frames.
-    const fallback = window.setTimeout(finish, 7500);
+    const fallback = window.setTimeout(finish, 3500);
     const reducedTimer = motion.matches ? window.setTimeout(finish, 150) : null;
     if (motion.matches) {
       root.current.classList.add('is-reduced-motion');
