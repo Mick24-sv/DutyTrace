@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Building2, ChevronDown, CircleHelp, LogOut, Mail, Menu, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, ChevronDown, CircleHelp, Mail, Menu } from 'lucide-react';
+import ProblemReportDialog from '../support/ProblemReportDialog.jsx';
+import AccountMenuActions from './AccountMenuActions.jsx';
 import { ROLE_CONFIG } from '../../routes/navConfig.js';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
@@ -8,6 +10,7 @@ import UserAvatar from '../ui/UserAvatar.jsx';
 
 export default function Topbar({ role, title, onMenu, onTutorial }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen,setReportOpen]=useState(false);
   const wrapRef = useRef(null);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -91,22 +94,12 @@ export default function Topbar({ role, title, onMenu, onTutorial }) {
                   <p className="mt-1 break-words text-sm text-navy">{user.office.name}</p>
                 </div>
               </div>}
-              <div className="border-t border-line pt-4">
-                <Link to={`/${role}/profile`} role="menuitem" onClick={()=>setMenuOpen(false)} className="mb-2 flex min-h-11 w-full items-center gap-3 rounded-xl border border-line px-4 py-3 text-sm font-medium text-teal hover:bg-canvas"><UserRound aria-hidden="true" className="h-5 w-5"/>{role==='admin'?'Profile settings':'Edit my profile'}</Link>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={signOut}
-                  className="flex w-full items-center gap-3 rounded-xl bg-bad-bg px-4 py-3 text-left text-sm font-medium text-bad-fg transition hover:bg-bad-bg/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bad-fg"
-                >
-                  <LogOut className="h-5 w-5 flex-shrink-0" aria-hidden="true" />
-                  Sign out
-                </button>
-              </div>
+              <AccountMenuActions role={role} onClose={()=>setMenuOpen(false)} onReport={()=>{setMenuOpen(false);setReportOpen(true);}} onSignOut={signOut}/>
             </div>
           </div>
         )}
       </div>
+      {reportOpen&&<ProblemReportDialog onClose={()=>{setReportOpen(false);requestAnimationFrame(()=>wrapRef.current?.querySelector('button[aria-haspopup="menu"]')?.focus());}}/>}
     </header>
   );
 }

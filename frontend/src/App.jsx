@@ -1,48 +1,56 @@
-import TeammatesPage from './pages/student/TeammatesPage.jsx';
-import CatchUpPlanPage from './pages/shared/CatchUpPlanPage.jsx';
-import AdminProfilePage from './pages/admin/AdminProfilePage.jsx';
-import { ProjectSettingsPreview } from './components/ui/DeleteProjectDialog.jsx';
-import ConcernsPage from './pages/shared/ConcernsPage.jsx';
-import DtrPreviewPage from './pages/student/DtrPreviewPage.jsx';
-import DutyScheduleReviewPage from './pages/supervisor/DutyScheduleReviewPage.jsx';
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import StudentOverviewPage from './pages/admin/StudentOverviewPage.jsx';
-import ProfilePage from './pages/student/ProfilePage.jsx';
-import AppShell from './components/layout/AppShell.jsx';
 import FullPageMessage from './components/layout/FullPageMessage.jsx';
-import LoginPage from './pages/auth/LoginPage.jsx';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage.jsx';
-import ResetPasswordPage from './pages/auth/ResetPasswordPage.jsx';
-import NotFound from './pages/NotFound.jsx';
-import StudentDashboard from './pages/student/StudentDashboard.jsx';
-import SupervisorDashboard from './pages/supervisor/SupervisorDashboard.jsx';
-import AdminDashboard from './pages/admin/AdminDashboard.jsx';
-import UsersPage from './pages/admin/UsersPage.jsx';
-import OfficesPage from './pages/admin/OfficesPage.jsx';
-import QrCodesPage from './pages/admin/QrCodesPage.jsx';
-import ScanPage from './pages/shared/ScanPage.jsx';
-import MyAttendancePage from './pages/shared/MyAttendancePage.jsx';
-import AssistantsPage from './pages/supervisor/AssistantsPage.jsx';
-import AssistantDetailPage from './pages/supervisor/AssistantDetailPage.jsx';
-import MyDtrPage from './pages/student/MyDtrPage.jsx';
-import DtrReviewPage from './pages/supervisor/DtrReviewPage.jsx';
-import DtrOverviewPage from './pages/admin/DtrOverviewPage.jsx';
-import PolicySettingsPage from './pages/admin/PolicySettingsPage.jsx';
-import AcademicTermsPage from './pages/admin/AcademicTermsPage.jsx';
-import AuditTrailPage from './pages/admin/AuditTrailPage.jsx';
-import SupervisorQrPage from './pages/supervisor/SupervisorQrPage.jsx';
-import DtrDetailPage from './pages/shared/DtrDetailPage.jsx';
-import MyAbsencesPage from './pages/student/MyAbsencesPage.jsx';
-import AbsenceQueuePage from './pages/supervisor/AbsenceQueuePage.jsx';
-import AbsenceDetailPage from './pages/shared/AbsenceDetailPage.jsx';
-import CasesListPage from './pages/shared/CasesListPage.jsx';
-import CaseDetailPage from './pages/shared/CaseDetailPage.jsx';
-import ReportsPage from './pages/shared/ReportsPage.jsx';
-import AttendanceDiscrepanciesPage from './pages/shared/AttendanceDiscrepanciesPage.jsx';
-import HistoricalHoursPage from './pages/shared/HistoricalHoursPage.jsx';
 import RequireRole from './routes/RequireRole.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import { ROLE_CONFIG } from './routes/navConfig.js';
+
+// Fetch page code on demand instead of downloading every role before sign-in.
+const TeammatesPage = lazy(() => import('./pages/student/TeammatesPage.jsx'));
+const CatchUpPlanPage = lazy(() => import('./pages/shared/CatchUpPlanPage.jsx'));
+const AppearancePage = lazy(() => import('./pages/shared/AppearancePage.jsx'));
+const InstitutionsPage = lazy(() => import('./pages/superadmin/InstitutionsPage.jsx'));
+const AccountSettingsPage = lazy(() => import('./pages/superadmin/AccountSettingsPage.jsx'));
+const ProblemReportsPage = lazy(() => import('./pages/superadmin/ProblemReportsPage.jsx'));
+const AcceptInvitationPage = lazy(() => import('./pages/auth/AcceptInvitationPage.jsx'));
+const AdminProfilePage = lazy(() => import('./pages/admin/AdminProfilePage.jsx'));
+const ProjectSettingsPreview = lazy(() => import('./components/ui/DeleteProjectDialog.jsx').then(module => ({default: module.ProjectSettingsPreview})));
+const ConcernsPage = lazy(() => import('./pages/shared/ConcernsPage.jsx'));
+const DtrPreviewPage = lazy(() => import('./pages/student/DtrPreviewPage.jsx'));
+const DutyScheduleReviewPage = lazy(() => import('./pages/supervisor/DutyScheduleReviewPage.jsx'));
+const StudentOverviewPage = lazy(() => import('./pages/admin/StudentOverviewPage.jsx'));
+const ProfilePage = lazy(() => import('./pages/student/ProfilePage.jsx'));
+const AppShell = lazy(() => import('./components/layout/AppShell.jsx'));
+const LoginPage = lazy(() => import('./pages/auth/LoginPage.jsx'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage.jsx'));
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage.jsx'));
+const NotFound = lazy(() => import('./pages/NotFound.jsx'));
+const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard.jsx'));
+const SupervisorDashboard = lazy(() => import('./pages/supervisor/SupervisorDashboard.jsx'));
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard.jsx'));
+const UsersPage = lazy(() => import('./pages/admin/UsersPage.jsx'));
+const OfficesPage = lazy(() => import('./pages/admin/OfficesPage.jsx'));
+const QrCodesPage = lazy(() => import('./pages/admin/QrCodesPage.jsx'));
+const ScanPage = lazy(() => import('./pages/shared/ScanPage.jsx'));
+const MyAttendancePage = lazy(() => import('./pages/shared/MyAttendancePage.jsx'));
+const AssistantsPage = lazy(() => import('./pages/supervisor/AssistantsPage.jsx'));
+const AssistantDetailPage = lazy(() => import('./pages/supervisor/AssistantDetailPage.jsx'));
+const MyDtrPage = lazy(() => import('./pages/student/MyDtrPage.jsx'));
+const DtrReviewPage = lazy(() => import('./pages/supervisor/DtrReviewPage.jsx'));
+const DtrOverviewPage = lazy(() => import('./pages/admin/DtrOverviewPage.jsx'));
+const PolicySettingsPage = lazy(() => import('./pages/admin/PolicySettingsPage.jsx'));
+const AcademicTermsPage = lazy(() => import('./pages/admin/AcademicTermsPage.jsx'));
+const AuditTrailPage = lazy(() => import('./pages/admin/AuditTrailPage.jsx'));
+const SupervisorQrPage = lazy(() => import('./pages/supervisor/SupervisorQrPage.jsx'));
+const DtrDetailPage = lazy(() => import('./pages/shared/DtrDetailPage.jsx'));
+const MyAbsencesPage = lazy(() => import('./pages/student/MyAbsencesPage.jsx'));
+const AbsenceQueuePage = lazy(() => import('./pages/supervisor/AbsenceQueuePage.jsx'));
+const AbsenceDetailPage = lazy(() => import('./pages/shared/AbsenceDetailPage.jsx'));
+const CasesListPage = lazy(() => import('./pages/shared/CasesListPage.jsx'));
+const CaseDetailPage = lazy(() => import('./pages/shared/CaseDetailPage.jsx'));
+const ReportsPage = lazy(() => import('./pages/shared/ReportsPage.jsx'));
+const AttendanceDiscrepanciesPage = lazy(() => import('./pages/shared/AttendanceDiscrepanciesPage.jsx'));
+const HistoricalHoursPage = lazy(() => import('./pages/shared/HistoricalHoursPage.jsx'));
 
 const DASHBOARDS = {
   student: StudentDashboard,
@@ -92,20 +100,30 @@ function HomeRedirect() {
 
 export default function App() {
   return (
+    <Suspense fallback={<FullPageMessage>Loading workspace...</FullPageMessage>}>
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/project-settings" element={<ProjectSettingsPreview />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+      <Route element={<RequireRole role="superadmin"/>}>
+        <Route path="/superadmin" element={<InstitutionsPage/>}/>
+        <Route path="/superadmin/account" element={<AccountSettingsPage/>}/>
+        <Route path="/superadmin/appearance" element={<AppearancePage/>}/>
+        <Route path="/superadmin/problem-reports" element={<ProblemReportsPage/>}/>
+        <Route path="/superadmin/*" element={<Navigate to="/superadmin" replace/>}/>
+      </Route>
 
-      {Object.entries(ROLE_CONFIG).map(([role, config]) => {
+      {Object.entries(ROLE_CONFIG).filter(([role])=>role!=='superadmin').map(([role, config]) => {
         const Dashboard = DASHBOARDS[role];
         return (
           <Route key={role} element={<RequireRole role={role} />}>
             <Route path={config.base} element={<AppShell role={role} />}>
               <Route index element={<Dashboard />} />
               <Route path="catch-up/:termId/:studentId" element={<CatchUpPlanPage />} />
+              <Route path="appearance" element={<AppearancePage/>}/>
               {Object.entries(BUILT_PAGES[role]).map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
               {['schedule', 'recovery-review', 'duty-alerts', 'policies', 'effective-policies', 'policy-templates', 'semester-transitions', 'duty-requirements'].map(path =>
                 <Route key={path} path={path} element={<Navigate to={role === 'admin' ? '/admin/settings' : role === 'supervisor' ? '/supervisor/assistants' : '/student/attendance'} replace />} />)}
@@ -120,5 +138,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

@@ -1,5 +1,8 @@
 import { concernsRouter } from '../modules/concerns/concerns.routes.js';
 import { Router } from 'express';
+import {problemReportsRouter} from '../modules/problem-reports/problem-reports.routes.js';
+import {AppError} from '../utils/response.js';
+import {platformRouter,invitationsRouter} from '../modules/platform/platform.routes.js';
 import health from './health.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { usersRouter } from '../modules/users/users.routes.js';
@@ -28,6 +31,12 @@ export function buildRoutes(options = {}) {
   const router = Router();
   router.use('/health', health);
   router.use('/auth', authRoutes(options));
+  router.use('/invitations',invitationsRouter);
+  router.use('/platform',platformRouter);
+  router.use('/problem-reports',problemReportsRouter);
+  // Platform access does not imply access to private school operational records.
+  router.use((req,_res,next)=>req.user?.role==='superadmin'
+    ?next(new AppError(403,'INSTITUTION_ACCESS_REQUIRED','Use the platform workspace to manage institution onboarding.')):next());
   router.use('/users', usersRouter);
   router.use('/offices/:officeId/qr', qrRouter); // before /offices so it matches first
   router.use('/supervisor/office-qr', supervisorQrRouter);

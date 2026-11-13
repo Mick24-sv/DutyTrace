@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { rateLimit } from 'express-rate-limit';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { env } from '../../config/env.js';
+import {secureSecretEquals} from '../../utils/security.js';
 import { asyncHandler, AppError, ok } from '../../utils/response.js';
 import { parse, parseId } from '../../utils/validate.js';
 import * as discrepancies from './attendance-discrepancies.service.js';
@@ -12,7 +13,7 @@ export const attendanceDiscrepanciesRouter=Router();
 // dedicated server secret. It reconciles every institution and accepts no scope from the caller.
 attendanceDiscrepanciesRouter.post('/reconcile',asyncHandler(async(req,res)=>{
   const secret=env.attendanceReconcileSecret;
-  if(!secret||req.get('x-attendance-reconcile-secret')!==secret) throw new AppError(403,'FORBIDDEN','A valid reconciliation credential is required.');
+  if(!secureSecretEquals(secret,req.get('x-attendance-reconcile-secret'))) throw new AppError(403,'FORBIDDEN','A valid reconciliation credential is required.');
   ok(res,await discrepancies.reconcile());
 }));
 attendanceDiscrepanciesRouter.use(requireAuth);

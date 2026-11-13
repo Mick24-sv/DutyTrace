@@ -12,7 +12,7 @@ export default function RequireRole({ role }) {
   if (status === 'loading') return <FullPageMessage>Loading…</FullPageMessage>;
   if (!user) {
     if (loadError) return <FullPageMessage tone="error">{loadError}. Is the API running?</FullPageMessage>;
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search + location.hash }} />;
   }
   if (user.role !== role) return <Navigate to={ROLE_CONFIG[user.role].base} replace />;
   return <Outlet />;

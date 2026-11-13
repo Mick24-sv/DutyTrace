@@ -755,9 +755,11 @@ export const casesCsvColumns = [
 // 7. Comprehensive Dashboard Stats (Admin & Supervisor)
 // -----------------------------------------------------------------------------------------
 export async function getDashboardStats(user) {
-  const monthRange = await resolveMonthRange();
-  const requiredHours = await getRequiredHours(user.institutionId);
-  const term = await currentTerm(user.institutionId);
+  const [monthRange, requiredHours, term] = await Promise.all([
+    resolveMonthRange(),
+    getRequiredHours(user.institutionId),
+    currentTerm(user.institutionId),
+  ]);
   const semesterProgress = !term
     ? { term: null, students: [] }
     : user.role === 'admin'

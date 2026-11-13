@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ApiError, apiGet, apiPost } from '../services/api.js';
 
@@ -10,6 +10,8 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const { pathname } = useLocation();
+  const publicRecoveryPage = ['/forgot-password', '/reset-password', '/accept-invitation'].includes(pathname);
+  const revision = useRef(0);
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('loading'); // 'loading' | 'ready'
   const [loadError, setLoadError] = useState(null);
@@ -17,7 +19,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Password recovery pages are public and do not need session state. Avoid
     // issuing an expected 401 from /auth/me while a user follows a reset link.
-    if (pathname === '/forgot-password' || pathname === '/reset-password') {
+    if (publicRecoveryPage) {
       setUser(null);
       setLoadError(null);
       setStatus('ready');
@@ -25,10 +27,16 @@ export function AuthProvider({ children }) {
     }
 
     const controller = new AbortController();
+    const requestRevision = revision.current;
     apiGet('/auth/me', { signal: controller.signal })
-      .then((data) => setUser(data.user))
+      .then((data) => {
+        if (controller.signal.aborted || revision.current !== requestRevision) return;
+        setUser(data.user);
+        setLoadError(null);
+      })
       .catch((err) => {
-        if (err.name === 'AbortError') return;
+        if (err.name === 'AbortError' || controller.signal.aborted || revision.current !== requestRevision) return;
+        setUser(null);
         // 401 just means "not signed in". Anything else (server down) is worth showing.
         if (!(err instanceof ApiError && err.status === 401)) setLoadError(err.message);
       })
@@ -36,16 +44,20 @@ export function AuthProvider({ children }) {
         if (!controller.signal.aborted) setStatus('ready');
       });
     return () => controller.abort();
-  }, [pathname]);
+    // Navigation within the workspace reuses this session. Protected APIs still
+    // authorize every request; profile changes explicitly call refreshUser().
+  }, [publicRecoveryPage]);
 
   const login = useCallback(async (email, password) => {
     const data = await apiPost('/auth/login', { email, password });
+    revision.current += 1;
     setUser(data.user);
     setLoadError(null);
     return data.user;
   }, []);
 
   const logout = useCallback(async () => {
+    revision.current += 1;
     try {
       await apiPost('/auth/logout');
     } finally {
@@ -54,8 +66,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
+    const requestRevision = ++revision.current;
     const data = await apiGet('/auth/me');
-    setUser(data.user);
+    if (revision.current === requestRevision) setUser(data.user);
     return data.user;
   }, []);
   const value = useMemo(

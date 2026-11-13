@@ -6,6 +6,7 @@ import { parse, parseId } from '../../utils/validate.js';
 import * as notifications from './notifications.service.js';
 import * as riskAlerts from './risk-alerts.service.js';
 import { env } from '../../config/env.js';
+import {secureSecretEquals} from '../../utils/security.js';
 import { runReminderSweep } from './reminders.service.js';
 import { reconcile as reconcileDiscrepancies } from '../attendance-discrepancies/attendance-discrepancies.service.js';
 
@@ -14,7 +15,7 @@ export const notificationsRouter = Router();
 // External Render cron endpoint: no session cookie, only a dedicated deployment secret.
 notificationsRouter.post('/sweep',asyncHandler(async(req,res)=>{
   const secret=env.attendanceReconcileSecret;
-  if(!secret||req.get('x-attendance-reconcile-secret')!==secret) throw new AppError(403,'FORBIDDEN','A valid scheduler credential is required.');
+  if(!secureSecretEquals(secret,req.get('x-attendance-reconcile-secret'))) throw new AppError(403,'FORBIDDEN','A valid scheduler credential is required.');
   const [emails,reminders,attendanceReconciliation]=await Promise.all([
     riskAlerts.deliverPendingEmailAlerts(),runReminderSweep(),reconcileDiscrepancies(),
   ]);

@@ -1,6 +1,8 @@
-# Database Schema (migrations 0001 onward)
+# Database schema (through migration 0046)
 
 Source of truth: `database/migrations/*.sql`.
+
+See [database review](database-review.md) for the current read-only inventory and cleanup findings. The diagram below summarizes core institutional records; platform accounts, corrections, support, and other later features are described below.
 
 ```
 offices 1───* duty_assignments *───1 users 1───* sessions
@@ -28,13 +30,13 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 
 | Table | Purpose | Key rules |
 | --- | --- | --- |
-| `users` | Accounts for all three roles | Unique lowercase email (CHECK enforces lowercase); `role` and `status` are enums; bcrypt `password_hash`; lockout columns |
+| `users` | Accounts for four roles | Unique lowercase email; enum role/status; bcrypt password hash and lockout columns. School roles require an institution; `superadmin` requires a null institution and uses separate platform APIs |
 | `offices` | Offices where SAs and supervisors are assigned | Unique lowercase `code` per institution; `is_active` |
 | `duty_assignments` | Which office a user currently belongs to, with history | Partial unique index: **at most one open (`ends_on IS NULL`) assignment per user**; `ends_on >= starts_on`; ending an assignment sets `ends_on`, never deletes |
 | `sessions` | Server-side login sessions | Stores SHA-256 **hash** of the cookie token; `expires_at`, `revoked_at` |
 | `audit_logs` | Append-only record of important actions | Triggers block `UPDATE`, `DELETE` and `TRUNCATE`; before/after stored as JSON (never passwords) |
 | `office_qr_codes` | One row per issued QR code (0002) | Partial unique index: **one non-revoked code per office**. The printable payload is *not stored*; it is an HMAC of the row id (see architecture.md). Rows are never deleted |
-| `attendance_events` | Every time-in / time-out (0002 adds `seq`, `qr_code_id`, `ip_address`, `user_agent`) | `recorded_at` defaults to the database clock; the API accepts no timestamp. **Append-only:** a trigger blocks UPDATE and DELETE. `seq` orders events with equal timestamps. Traceable to the QR code scanned |
+| `attendance_events` | Original time-in / time-out events | QR scanning uses the database clock rather than a client-supplied event timestamp. Append-only original events; correction workflows retain separate overlays. `seq` orders equal timestamps; QR references preserve provenance |
 | `policy_settings` | Legacy single-row monthly target source (0003) used to initialize per-institution monthly DTR policies | Retained for migration compatibility; new policy updates use `institution_dtr_policies` |
 | `institutions` | Tenant boundary, display name and default IANA timezone (0008) | Users, offices, academic terms, case types and monthly DTR policies are institution-scoped; administrator APIs are scoped to the signed-in administrator's institution |
 | `academic_terms` | Institution-specific academic year, semester, date range, deadline and timezone (0008) | Term ranges cannot overlap within an institution; finalization freezes the calendar and prevents later requirement changes |
@@ -62,16 +64,45 @@ documents *───1 absence_notices  XOR  compliance_cases   (+ optional case_
 
 ## Conventions
 
-- Primary keys are UUIDs (`gen_random_uuid()`), except `audit_logs` (bigserial, naturally ordered).
+### Later workflow and platform tables
+
+| Table | Purpose and preservation rule |
+| --- | --- |
+| `password_reset_tokens` | Hashed, single-use, expiring account recovery requests; potential retention cleanup after expiry/use |
+| `attendance_discrepancies` | Attendance issues, explanations, and supervisor decisions |
+| `attendance_discrepancy_history` | Immutable history of discrepancy decisions |
+| `attendance_adjustments` | Approved attendance correction overlays; preserve original scan events |
+| `attendance_adjustment_sources` | Links correction overlays to their source records |
+| `attendance_adjustment_replacements` | Replacement event details associated with approved overlays |
+| `attendance_session_verifications` | Supervisor-approved session verification, separate from raw QR-recorded hours |
+| `historical_duty_credits` | Approved prior duty-hour credits scoped to institution/student/term |
+| `historical_duty_credit_history` | Immutable historical-credit workflow history |
+| `duty_recovery_plans` | Dated missed-hours recovery requests, separate from recurring preferences |
+| `duty_recovery_shifts` | Individual dated recovery shifts and decisions |
+| `semester_transitions` | Semester transition preview/finalization workflow |
+| `semester_transition_students` | Source-term outcomes captured for each student in a transition |
+| `concerns` | Institution-scoped duty/office concerns |
+| `concern_messages` | Messages belonging to a concern; governed by participant access |
+| `concern_participants` | Concern membership and per-user pin/archive/inbox deletion state |
+| `personal_agenda_events` | Private account-owned agenda items; not shared office calendars |
+| `user_tutorial_progress` | Per-user, role, and tutorial-version onboarding progress |
+| `institution_admin_invitations` | First-school-admin invitations with hashed, expiring, single-use tokens |
+| `account_email_changes` | Pending verified maintainer email changes; hashed token and credential fingerprint |
+| `problem_reports` | Technical support submissions and replies; private optional screenshot bytes; scoped reporter access plus superadmin inbox |
+| `user_appearance_preferences` | Private per-account theme, accent, and density settings; only the authenticated owner can read or save through the backend |
+
+### General rules
+
+- Most business record primary keys are UUIDs. Audit logs use a naturally ordered bigint; singleton/settings and migration tables use their appropriate natural keys. `schema_migrations` is keyed by filename.
 - Timestamps are `timestamptz` (stored in UTC). Semester ranges use the IANA timezone stored on each academic term. Monthly DTR boundaries use the existing configured timezone (`APP_TIMEZONE`). `monthly_dtrs.month` is a text `YYYY-MM` in that timezone.
 - Foreign keys use `ON DELETE RESTRICT` for records that must stay traceable (assignments, attendance) so a user or office with history can't be deleted by accident.
-- Derived totals (hours) are intentionally **not stored** for attendance; they are calculated from `attendance_events` on every request (`backend/src/modules/attendance/calc.js`). Events are the single source of truth. A DTR is different on purpose: it is a **frozen snapshot** (what the supervisor actually reviewed), stored in `dtr_revisions`, so later changes to attendance or policy never rewrite what was approved. `monthly_dtrs.verified_seconds` is the only stored verified figure and approval is the only thing that writes it.
+- Derived totals (hours) are intentionally **not stored** for attendance; they are calculated from `attendance_events` on every request (`backend/src/modules/attendance/calc.js`). Events are the single source of truth. A DTR is different on purpose: it is a **frozen snapshot** (what the supervisor actually reviewed), stored in `dtr_revisions`, so later changes to attendance or policy never rewrite what was approved. Semester verified totals combine the applicable approved DTR snapshots, approved session verifications/correction credits, and historical credits through the canonical semester service. These sources are intentionally separate; do not manually merge or erase them.
 - Never edit an applied migration; add the next numbered file (e.g. `0003_….sql`). The runner stores a checksum and refuses edited files.
 
 Duty requirement precedence is student exception, office policy, then institution policy. An existing per-student `semester_requirement_assignments` total remains authoritative unless an explicit student exception overrides it. Approved preferences are for monitoring only and do not authorize or block attendance scans. Monthly DTR revisions and finalized academic terms remain unchanged by later policy edits.
 
 Migration 0024 adds institution-owned `institution_policy_templates`, immutable published rows in `institution_policy_template_versions`, and append-only dated `institution_policy_assignments` with JSON configuration snapshots. The resolver merges institution, office, and student scopes. Template versions, assignments, attendance-event snapshots, and submitted schedule snapshots retain the policy context used when those records were created. `duty_requirement_policies.maximum_weekly_hours` enforces a configured weekly cap in submitted schedule validation.
 
-## Not yet in the schema
+## Deferred schema ideas
 
-`attendance_corrections` (the append-only trigger means fixes must be new records, not edits), `office_calendar_events`.
+There is no separate `office_calendar_events` table. Personal agenda events are implemented separately. Attendance corrections already exist through discrepancy and adjustment tables; a second correction table should not be added merely because an older plan named `attendance_corrections`.

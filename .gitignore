@@ -24,3 +24,6 @@ backend/generated/
 
 # Test output
 coverage/
+
+# Generated database metadata review (regenerate locally; not a schema source)
+database/schema-review.json

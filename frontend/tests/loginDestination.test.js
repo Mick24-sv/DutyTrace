@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { loginDestination } from '../src/utils/loginDestination.js';
 
 test('successful login returns each role to its dashboard by default', () => {
-  for (const role of ['admin', 'supervisor', 'student']) assert.equal(loginDestination(role), `/${role}`);
+  for (const role of ['admin', 'supervisor', 'student', 'superadmin']) assert.equal(loginDestination(role), `/${role}`);
+});
+
+test('superadmin verification links survive sign-in only within the platform workspace',()=>{
+  const path='/superadmin/account#verify=one-time-token';
+  assert.equal(loginDestination('superadmin',path),path);
+  assert.equal(loginDestination('student',path),'/student');
 });
 test('the transition preserves the intended page within the signed-in role', () => {
   assert.equal(loginDestination('admin', '/admin/concerns?id=123'), '/admin/concerns?id=123');

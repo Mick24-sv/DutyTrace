@@ -1,10 +1,12 @@
 import { env } from '../config/env.js';
 import { getUserForToken } from '../modules/auth/auth.service.js';
 import { AppError, asyncHandler } from '../utils/response.js';
+import {SESSION_TOKEN} from '../utils/security.js';
 
 // 1) Runs on every request: if a valid session cookie exists, attach req.user.
 export const loadSession = asyncHandler(async (req, _res, next) => {
-  const token = req.cookies?.[env.sessionCookieName];
+  const cookie = req.cookies?.[env.sessionCookieName];
+  const token = typeof cookie==='string'&&SESSION_TOKEN.test(cookie)?cookie:undefined;
   req.sessionToken = token;
   req.user = (await getUserForToken(token)) ?? null;
   next();
@@ -33,6 +35,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export const originCheck = (req, _res, next) => {
   const origin = req.headers.origin;
   if (!SAFE_METHODS.has(req.method)) {
+    if(req.get('sec-fetch-site')==='cross-site') return next(new AppError(403,'BAD_ORIGIN','Cross-site requests are not allowed.'));
     const hasSessionCookie = Boolean(req.cookies?.[env.sessionCookieName]);
     const originMissingForSession = env.nodeEnv === 'production' && hasSessionCookie && !origin;
     if (originMissingForSession || (origin && origin !== env.clientOrigin)) {

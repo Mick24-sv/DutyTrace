@@ -8,6 +8,7 @@ import { parse } from '../../utils/validate.js';
 import { MIN_PASSWORD_LENGTH } from '../../utils/password.js';
 import * as auth from './auth.service.js';
 import { getTutorialProgress, saveTutorialProgress, tutorialProgressSchema } from './tutorial.service.js';
+import {getAppearance,saveAppearance,appearanceSchema} from './appearance.service.js';
 import {
   requestReset,
   verifyResetToken,
@@ -89,6 +90,8 @@ export function authRoutes({ loginRateLimitMax = env.loginRateLimitMax } = {}) {
   }));
 
   router.get('/me', requireAuth, (req, res) => ok(res, { user: req.user }));
+  router.get('/appearance',requireAuth,asyncHandler(async(req,res)=>{res.set('Cache-Control','private, no-store');ok(res,await getAppearance(req.user));}));
+  router.put('/appearance',requireAuth,asyncHandler(async(req,res)=>ok(res,await saveAppearance(req.user,parse(appearanceSchema,req.body)))));
   router.get('/tutorial', requireAuth, asyncHandler(async (req, res) => ok(res, await getTutorialProgress(req.user))));
   router.put('/tutorial', requireAuth, asyncHandler(async (req, res) => {
     const input = parse(tutorialProgressSchema, req.body);

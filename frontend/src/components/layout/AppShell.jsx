@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
@@ -22,10 +22,11 @@ export default function AppShell({ role }) {
 
   // Page title = the nav item whose path matches the current URL.
   const current = config.nav.find(item => matchesSection(config, item, pathname));
+  const pageTitle=pathname.endsWith('/appearance')?'Appearance':current?.label??'DutyTrace';
 
   useEffect(() => {
-    document.title = `${current?.label ?? 'Page'} · DutyTrace`;
-  }, [current]);
+    document.title = `${pageTitle} · DutyTrace`;
+  }, [pageTitle]);
 
   // Escape closes the mobile drawer.
   useEffect(() => {
@@ -45,9 +46,9 @@ export default function AppShell({ role }) {
       </a>
       <Sidebar role={role} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <div className="app-shell-content flex min-w-0 flex-1 flex-col">
-        <Topbar role={role} title={current?.label ?? 'DutyTrace'} onMenu={() => setDrawerOpen(true)} onTutorial={() => { setDrawerOpen(false); tutorial.replay(); }} />
+        <Topbar role={role} title={pageTitle} onMenu={() => setDrawerOpen(true)} onTutorial={() => { setDrawerOpen(false); tutorial.replay(); }} />
         <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6">
-          <PullToRefresh><Outlet /></PullToRefresh>
+          <PullToRefresh><Suspense fallback={<p role="status" className="py-8 text-sm text-muted">Loading page...</p>}><Outlet /></Suspense></PullToRefresh>
         </main>
         <AppFooter context={config.label} />
       </div>

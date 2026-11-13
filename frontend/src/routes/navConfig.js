@@ -2,6 +2,7 @@ import { MessageSquare, LayoutDashboard, Clock, FileText, CalendarOff, Users, Cl
 
 // Everyday tasks only. Secondary tools belong inside their section.
 export const ROLE_CONFIG = {
+  superadmin: {label:'Platform Superadmin',base:'/superadmin',nav:[]},
   student: { label: 'Student Assistant', base: '/student', nav: [
     { to: '', label: 'Home', icon: LayoutDashboard, related: ['profile','teammates','co-workers'] },
     { to: 'attendance', label: 'Attendance', icon: Clock, related: ['scan', 'discrepancies'] },

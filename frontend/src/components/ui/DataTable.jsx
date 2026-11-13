@@ -3,7 +3,7 @@
 export default function DataTable({ columns, rows, caption, empty = 'Nothing to show yet.' }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="dt-data-table w-full text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">

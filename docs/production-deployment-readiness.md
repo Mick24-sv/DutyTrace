@@ -1,5 +1,7 @@
 # DutyTrace production deployment readiness
 
+> Historical deployment snapshot through migration 0025. Its migration counts, hosting status, and provider-plan notes are not a current inventory. Use the [database review](database-review.md), [database catalog](../database/README.md), and [security deployment notes](security-hardening.md) for the newer implementation and verified database state.
+
 Prepared for the existing Supabase PostgreSQL database, Render backend, and Vercel frontend. Migration 0025 was applied and verified on 2026-10-22; nothing was pushed or deployed.
 
 ## Verified repository facts

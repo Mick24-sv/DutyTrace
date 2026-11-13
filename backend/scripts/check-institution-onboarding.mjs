@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+// Non-destructive database smoke check: every test record is rolled back and email delivery is mocked.
+import {getPool,closePool} from '../src/db/pool.js';
+import {createInstitution,inviteInstitutionAdmin,inspectInvitation,acceptInvitation,revokeInvitation,listInstitutions} from '../src/modules/platform/platform.service.js';
+import {USER_WITH_OFFICE_SQL,toPublicUser} from '../src/modules/auth/auth.service.js';
+import {hashPassword,verifyPassword} from '../src/utils/password.js';
+const db=await getPool().connect();let sequence=0;
+const transaction=async fn=>{const name=`onboarding_${++sequence}`;await db.query(`SAVEPOINT ${name}`);try{const value=await fn(db);await db.query(`RELEASE SAVEPOINT ${name}`);return value;}catch(error){await db.query(`ROLLBACK TO SAVEPOINT ${name}`);await db.query(`RELEASE SAVEPOINT ${name}`);throw error;}};
+const uid=crypto.randomUUID();const suffix=uid.slice(0,8);const password=crypto.randomBytes(24).toString('base64url');
+const input={name:`DutyTrace rollback verification ${suffix}`,shortName:'CHECK',type:'college',address:'Verification only',city:'Naga City',contactEmail:`contact-${suffix}@example.invalid`,admin:{fullName:'Verification administrator',email:`admin-${suffix}@example.invalid`}};
+let checks=0;
+try {
+ await db.query('BEGIN');
+ await db.query(`INSERT INTO users(id,email,password_hash,full_name,role,institution_id) VALUES($1,$2,$3,'Rollback maintainer','superadmin',NULL)`,[uid,`maintainer-${suffix}@example.invalid`,await hashPassword(password)]);
+ const {rows:[row]}=await db.query(`${USER_WITH_OFFICE_SQL} WHERE u.id=$1`,[uid]);
+ const actor=toPublicUser(row);assert.equal(actor.role,'superadmin');assert.equal(actor.institutionId,null);checks++;
+ let link;const send=async value=>{link=value.inviteUrl;return {sent:false};};
+ const options={transaction,send,db};
+ const created=await createInstitution({actor,input},options);assert.equal(created.deliveryStatus,'manual');assert.ok(created.inviteUrl);checks++;
+ const token=new URLSearchParams(new URL(link).hash.slice(1)).get('token');
+ const inspected=await inspectInvitation(token,db);assert.equal(inspected.institutionName,input.name);checks++;
+ const {rows:[stored]}=await db.query('SELECT token_hash FROM institution_admin_invitations WHERE id=$1',[created.invitation.id]);
+ assert.notEqual(stored.token_hash,token);assert.equal(stored.token_hash.length,64);checks++;
+ await acceptInvitation({input:{token,password}},{transaction});
+ const {rows:[admin]}=await db.query('SELECT role,institution_id,password_hash FROM users WHERE email=$1',[input.admin.email]);
+ assert.equal(admin.role,'admin');assert.equal(admin.institution_id,created.institutionId);assert.equal(await verifyPassword(password,admin.password_hash),true);checks++;
+ await assert.rejects(()=>acceptInvitation({input:{token,password}},{transaction}),{code:'INVALID_INVITATION'});checks++;
+ await assert.rejects(()=>inviteInstitutionAdmin({actor,institutionId:created.institutionId,input:input.admin},options),{status:409});checks++;
+ const all=await listInstitutions(actor,db);assert.equal(all.institutions.find(row=>row.id===created.institutionId).status,'active');checks++;
+ await assert.rejects(()=>listInstitutions({...actor,role:'admin'},db),{status:403});checks++;
+ await assert.rejects(()=>createInstitution({actor,input},options),{status:409});checks++;
+ const input2={...input,name:`${input.name} second`,admin:{...input.admin,email:`second-${suffix}@example.invalid`}};
+ const first=await createInstitution({actor,input:input2},options);
+ const oldToken=new URLSearchParams(new URL(link).hash.slice(1)).get('token');
+ await inviteInstitutionAdmin({actor,institutionId:first.institutionId,input:input2.admin},options);
+ await assert.rejects(()=>inspectInvitation(oldToken,db),{code:'INVALID_INVITATION'});checks++;
+ const rotatedToken=new URLSearchParams(new URL(link).hash.slice(1)).get('token');
+ const current=(await listInstitutions(actor,db)).institutions.find(row=>row.id===first.institutionId);
+ await revokeInvitation({actor,invitationId:current.invitation.id},{transaction});
+ await assert.rejects(()=>inspectInvitation(rotatedToken,db),{code:'INVALID_INVITATION'});checks++;
+ const failed=await inviteInstitutionAdmin({actor,institutionId:first.institutionId,input:input2.admin},{...options,send:async()=>{throw new Error('simulated delivery failure');}});
+ assert.equal(failed.deliveryStatus,'failed');assert.equal(failed.inviteUrl,undefined);
+ assert.equal((await listInstitutions(actor,db)).institutions.find(row=>row.id===first.institutionId).status,'delivery_failed');checks++;
+ const {rows:[audit]}=await db.query('SELECT count(*)::int AS count FROM audit_logs WHERE actor_id=$1 AND (before_data::text LIKE $2 OR after_data::text LIKE $2)',[uid,`%${token}%`]);assert.equal(audit.count,0);checks++;
+ await assert.rejects(()=>transaction(client=>client.query(`INSERT INTO users(email,password_hash,full_name,role,institution_id) VALUES($1,$2,'Invalid scope','admin',NULL)`,[`bad-${suffix}@example.invalid`,admin.password_hash])),{code:'23514'});checks++;
+ console.log(JSON.stringify({checks,realEmailSent:false,temporaryData:'rolled back',flows:['create','accept','single-use','duplicate','rotate','revoke','delivery-failure','tenant-scope']}));
+} finally {await db.query('ROLLBACK');db.release();await closePool();}

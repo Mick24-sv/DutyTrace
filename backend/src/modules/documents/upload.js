@@ -5,7 +5,7 @@ import { AppError } from '../../utils/response.js';
 // Raw-body upload: the request body IS the file (no multipart parser to attack). Mount it AFTER the
 // auth/role guards so anonymous callers never reach the body parser. Reads the limit on every request.
 export const rawUpload = (req, res, next) =>
-  express.raw({ type: () => true, limit: env.maxUploadBytes })(req, res, next);
+  express.raw({ type: () => true, limit: env.maxUploadBytes,inflate:false })(req, res, next);
 
 // File name travels in ?filename= (display only; never used as a path).
 export function uploadedFile(req) {

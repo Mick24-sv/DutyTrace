@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button.jsx';
 import FullPageMessage from '../../components/layout/FullPageMessage.jsx';
 import LoginTransition, { loadLoginAnimation } from '../../components/brand/LoginTransition.jsx';
 import { loginDestination } from '../../utils/loginDestination.js';
+import { preloadWorkspace } from '../../utils/preloadWorkspace.js';
 import './login.css';
 
 export default function LoginPage() {
@@ -37,6 +38,7 @@ export default function LoginPage() {
     if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) void loadLoginAnimation().catch(() => {});
     try {
       const signedIn = await login(email, password);
+      void preloadWorkspace(signedIn.role);
       setDestination(loginDestination(signedIn.role, location.state?.from));
     } catch (err) {
       setFieldErrors(err.details ?? {});

@@ -33,6 +33,7 @@ export const errorHandler = (err, _req, res, _next) => {
   }
 
   // Upload larger than the configured limit (body-parser).
+  if(err.type==='encoding.unsupported') return res.status(415).json({success:false,error:{code:'UNSUPPORTED_ENCODING',message:'Compressed request bodies are not accepted.'}});
   if (err.type === 'entity.too.large') {
     return res.status(413).json({
       success: false,

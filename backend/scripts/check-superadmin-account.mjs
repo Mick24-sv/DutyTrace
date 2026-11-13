@@ -1,0 +1,45 @@
+// All records are rolled back. Email handoff is simulated; no real account is changed.
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import {getPool,closePool} from '../src/db/pool.js';
+import {hashPassword,verifyPassword} from '../src/utils/password.js';
+import {tokenHash} from '../src/modules/platform/platform.rules.js';
+import {changePassword,requestEmailChange,confirmEmailChange,cancelEmailChange,accountSettings} from '../src/modules/platform/account.service.js';
+const db=await getPool().connect();let count=0;let checks=0;
+const transaction=async fn=>{const name=`account_check_${++count}`;await db.query(`SAVEPOINT ${name}`);try{const result=await fn(db);await db.query(`RELEASE SAVEPOINT ${name}`);return result;}catch(error){await db.query(`ROLLBACK TO SAVEPOINT ${name}`);await db.query(`RELEASE SAVEPOINT ${name}`);throw error;}};
+const id=crypto.randomUUID(),password=crypto.randomBytes(24).toString('base64url'),newPassword=crypto.randomBytes(24).toString('base64url');
+const email=`account-${id}@example.invalid`,newEmail=`new-${id}@example.invalid`,sessionToken=crypto.randomBytes(32).toString('base64url');
+const actor={id,role:'superadmin',email,fullName:'Rollback account check'};let token;
+const options={transaction,db,configured:true,send:async({verifyUrl})=>{token=new URLSearchParams(new URL(verifyUrl).hash.slice(1)).get('verify');}};
+try {
+ await db.query('BEGIN');
+ await db.query(`INSERT INTO users(id,email,password_hash,full_name,role,institution_id) VALUES($1,$2,$3,$4,'superadmin',NULL)`,[id,email,await hashPassword(password),actor.fullName]);
+ await db.query(`INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '1 hour'),($1,$3,now()+interval '1 hour')`,[id,tokenHash(sessionToken),tokenHash('other-session')]);
+ await assert.rejects(()=>changePassword({actor,input:{currentPassword:'wrong',newPassword},sessionToken},{transaction}),{code:'INCORRECT_PASSWORD'});checks++;
+ await assert.rejects(()=>changePassword({actor,input:{currentPassword:password,newPassword:password},sessionToken},{transaction}),{code:'SAME_PASSWORD'});checks++;
+ await requestEmailChange({actor,input:{currentPassword:password,newEmail}},options);
+ assert.equal((await db.query('SELECT email FROM users WHERE id=$1',[id])).rows[0].email,email);checks++;
+ assert.equal((await accountSettings(actor,db)).pendingEmail.newEmail,newEmail);checks++;
+ const firstToken=token;
+ await requestEmailChange({actor,input:{currentPassword:password,newEmail}},options);
+ await assert.rejects(()=>confirmEmailChange({actor,input:{token:firstToken,currentPassword:password},sessionToken},{transaction}),{code:'INVALID_VERIFICATION'});checks++;
+ await confirmEmailChange({actor,input:{token,currentPassword:password},sessionToken},{transaction});
+ assert.equal((await db.query('SELECT email FROM users WHERE id=$1',[id])).rows[0].email,newEmail);checks++;
+ const sessions=(await db.query('SELECT token_hash,revoked_at FROM sessions WHERE user_id=$1',[id])).rows;
+ assert.equal(sessions.find(row=>row.token_hash===tokenHash(sessionToken)).revoked_at,null);assert.ok(sessions.find(row=>row.token_hash!==tokenHash(sessionToken)).revoked_at);checks++;
+ await assert.rejects(()=>confirmEmailChange({actor,input:{token,currentPassword:password},sessionToken},{transaction}),{code:'INVALID_VERIFICATION'});checks++;
+ await requestEmailChange({actor,input:{currentPassword:password,newEmail:email}},options);
+ await changePassword({actor,input:{currentPassword:password,newPassword},sessionToken},{transaction});
+ assert.equal(await verifyPassword(newPassword,(await db.query('SELECT password_hash FROM users WHERE id=$1',[id])).rows[0].password_hash),true);checks++;
+ await assert.rejects(()=>confirmEmailChange({actor,input:{token,currentPassword:newPassword},sessionToken},{transaction}),{code:'INVALID_VERIFICATION'});checks++;
+ await requestEmailChange({actor,input:{currentPassword:newPassword,newEmail:email}},options);
+ await cancelEmailChange(actor,{transaction});
+ await assert.rejects(()=>confirmEmailChange({actor,input:{token,currentPassword:newPassword},sessionToken},{transaction}),{code:'INVALID_VERIFICATION'});checks++;
+ await requestEmailChange({actor,input:{currentPassword:newPassword,newEmail:email}},options);
+ await db.query("UPDATE account_email_changes SET expires_at=now()-interval '1 minute' WHERE user_id=$1 AND revoked_at IS NULL AND used_at IS NULL",[id]);
+ await assert.rejects(()=>confirmEmailChange({actor,input:{token,currentPassword:newPassword},sessionToken},{transaction}),{code:'INVALID_VERIFICATION'});checks++;
+ await assert.rejects(()=>requestEmailChange({actor,input:{currentPassword:newPassword,newEmail:email}},{...options,send:async()=>{throw new Error('simulated failure');}}),{code:'EMAIL_DELIVERY_FAILED'});checks++;
+ assert.equal((await accountSettings(actor,db)).pendingEmail,null);checks++;
+ const {rows:[audit]}=await db.query('SELECT count(*)::int AS count FROM audit_logs WHERE actor_id=$1 AND (after_data::text LIKE $2 OR before_data::text LIKE $2)',[id,`%${password}%`]);assert.equal(audit.count,0);checks++;
+ console.log(JSON.stringify({checks,realEmailSent:false,records:'rolled back',currentSession:'preserved',otherSessions:'revoked'}));
+}finally{await db.query('ROLLBACK');db.release();await closePool();}

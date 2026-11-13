@@ -1,10 +1,16 @@
 import bcrypt from 'bcryptjs';
+import {AppError} from './response.js';
 
 // bcrypt with cost 12 (~250 ms): slow on purpose, so guessing is expensive.
 const COST = 12;
 export const MIN_PASSWORD_LENGTH = 10;
 
-export const hashPassword = (plain) => bcrypt.hash(plain, COST);
+export const hashPassword = (plain) => {
+  // bcrypt truncates beyond 72 bytes. Reject new credentials rather than silently
+  // treating different long passwords as the same password.
+  if(typeof plain!=='string'||Buffer.byteLength(plain,'utf8')>72) throw new AppError(400,'PASSWORD_TOO_LONG','Use a shorter password (maximum 72 UTF-8 bytes).');
+  return bcrypt.hash(plain, COST);
+};
 export const verifyPassword = (plain, hash) => bcrypt.compare(plain, hash);
 
 // A real hash of a throwaway string. Login compares against this when the

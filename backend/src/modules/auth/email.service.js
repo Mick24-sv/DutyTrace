@@ -76,6 +76,26 @@ async function sendEmail({ to, subject, text, html, messageId }) {
   await getTransporter().sendMail({ from: smtp.from, to, subject, text, ...(html ? { html } : {}), ...(messageId ? { messageId } : {}) });
 }
 
+export async function sendInstitutionInvitation({to,institutionName,fullName,inviteUrl}) {
+  if(!emailConfigured()) return {sent:false,manual:true};
+  await sendEmail({to,subject:'Your DutyTrace institution administrator invitation',text:[
+    `Hello ${fullName},`,'',`You have been invited to administer ${institutionName} on DutyTrace.`,
+    'Use the link below within 48 hours to set your password and activate your administrator account:',
+    '',inviteUrl,'','This link works once. If you did not expect this invitation, contact the DutyTrace maintainer.','','DutyTrace',
+  ].join('\n')});
+  return {sent:true};
+}
+
+export async function sendAccountEmailVerification({to,verifyUrl}) {
+  if(!emailConfigured()) throw new Error('Email delivery is not configured.');
+  await sendEmail({to,subject:'Verify your new DutyTrace email address',text:[
+    'A change to your DutyTrace superadmin email was requested.',
+    'Open this link within 30 minutes, sign in to the same account if needed, and confirm your current password:',
+    '',verifyUrl,'','Your current email stays active until verification is complete.',
+    'If you did not request this change, ignore this message.','DutyTrace',
+  ].join('\n')});
+}
+
 /**
  * Sends the password-reset email.
  * Returns { sent: true } on success.

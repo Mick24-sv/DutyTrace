@@ -1,0 +1,67 @@
+:root{--color-brand:#153b50;--color-action:#153b50;--color-accent-solid:#007f86;--color-accent-contrast:#fff}
+.platform-appearance-nav-link{display:flex;align-items:center;gap:10px;padding:12px 13px;min-height:47px;border-radius:10px;border:1px solid var(--color-line);font-size:12px;color:var(--color-muted);background:var(--color-surface)}.platform-appearance-nav-link>svg:last-child{margin-left:auto}.platform-appearance-nav-link:hover{color:var(--color-teal)}
+:root[data-accent=teal]{--color-teal:#007f86;--color-accent-solid:#007f86}
+:root[data-accent=blue]{--color-teal:#255ed0;--color-accent-solid:#255ed0}
+:root[data-accent=violet]{--color-teal:#7047c9;--color-accent-solid:#7047c9}
+:root[data-accent=rose]{--color-teal:#b83268;--color-accent-solid:#b83268}
+:root[data-accent=amber]{--color-teal:#956300;--color-accent-solid:#956300}
+:root[data-theme=dark]{color-scheme:dark;--color-canvas:#0d1520;--color-surface:#172230;--color-ink:#d3dfeb;--color-navy:#e2edf7;--color-line:#354558;--color-muted:#a3b3c5;--color-brand:#102939;--color-action:#235168;--shadow-card:0 2px 8px #00000026;--color-ok-fg:#99e2b3;--color-ok-bg:#163d2c;--color-warn-fg:#f4d08b;--color-warn-bg:#46361c;--color-bad-fg:#ffb9b1;--color-bad-bg:#47252d;--color-info-fg:#b5cdff;--color-info-bg:#20375c;--color-shift-pm-fg:#d1baff;--color-shift-pm-bg:#34274e}
+:root[data-theme=dark][data-accent=teal]{--color-teal:#85dcda}
+:root[data-theme=dark][data-accent=blue]{--color-teal:#adc9ff}
+:root[data-theme=dark][data-accent=violet]{--color-teal:#d1baff}
+:root[data-theme=dark][data-accent=rose]{--color-teal:#ffb6d2}
+:root[data-theme=dark][data-accent=amber]{--color-teal:#f5d289}
+.bg-navy{background-color:var(--color-brand)}.bg-teal{background-color:var(--color-accent-solid)}
+:is(.catch-up-primary-link,.platform-primary-link,.platform-login-link,.swipe-inbox-left){background:var(--color-accent-solid);color:white}
+.sidebar-calendar-popup{background:var(--color-brand);color:#e2edf4}.login-site-header{background:var(--color-brand)}
+.desktop-sidebar-rail .sidebar-navigation a[aria-current=page]::before,.desktop-sidebar-rail .sidebar-navigation a[aria-current=page]:hover::before{background:var(--color-accent-solid)}
+:is(.guided-tour-next,.directory-hours-save,.admin-profile-photo>span:last-child,.admin-profile-savebar button[type=submit],.agenda-event-editor footer button[type=submit],.duty-day-selector button[aria-pressed=true]){background:var(--color-accent-solid);color:white;border-color:var(--color-accent-solid)}
+.sidebar-calendar,.sidebar-calendar-add{color:#e2edf4}.mobile-bottom-tabs-updating{background:var(--color-brand);color:white}
+.swipe-inbox-actions button{color:white;background:var(--color-accent-solid)}.swipe-inbox-actions .swipe-inbox-archive{background:var(--color-action)}.swipe-inbox-row,.swipe-inbox-right,.swipe-inbox-actions .swipe-inbox-delete{background:#991b1b;color:white}
+.appearance-theme-mini strong{background:var(--color-accent-solid)}
+:root[data-theme=dark] :is(.login-page,.login-transition){background:var(--color-canvas)}
+:root[data-theme=dark] .login-card{background:var(--color-surface);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.login-brand span,.login-heading h1,.login-form-panel label){color:var(--color-navy)}
+:root[data-theme=dark] :is(.login-heading>p:last-child,.login-brand p,.login-help,.login-help span,.login-footer){color:var(--color-muted);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.login-form-eyebrow,.login-forgot){color:var(--color-teal)}
+:root[data-theme=dark] .login-form-panel input{background:var(--color-canvas);color:var(--color-ink);border-color:var(--color-line)}
+:root[data-theme=dark] [role=tooltip]{background:var(--color-surface);color:var(--color-ink);border-color:var(--color-line)}
+:is(button,a).bg-navy{background-color:var(--color-action);color:#fff}:is(button,a).bg-navy:hover{background-color:color-mix(in srgb,var(--color-action) 90%,black)}
+:is(button,a).bg-teal{background-color:var(--color-accent-solid);color:#fff}:is(button,a).bg-teal:hover{background-color:color-mix(in srgb,var(--color-accent-solid) 90%,black)}
+:root[data-theme=dark] :is(.text-teal,.text-navy){color:var(--color-teal)}
+:root[data-theme=dark] :is(h1,h2,h3,h4,.text-navy){color:var(--color-navy)}
+:root[data-theme=dark] :is(.platform-school,.platform-guide,.platform-account-identity,.catch-up-hero,.catch-up-option){background:var(--color-surface);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-dialog footer,.platform-steps,.platform-account-card>footer,.platform-accept-shell,.problem-detail form,.problem-meta,.problem-upload,.catch-up-day.enabled){background:var(--color-canvas);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-dialog,.problem-dialog,.problem-detail,.platform-directory,.platform-stat,.platform-account-card,.catch-up-card){border-color:var(--color-line);background-color:var(--color-surface)}
+:root[data-theme=dark] :is(.platform-institution-preview,.platform-account-current,.catch-up-verification,.problem-context){background:var(--color-info-bg);color:var(--color-info-fg);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-access-note,.platform-account-success,.catch-up-notice.success,.problem-reply){background:var(--color-ok-bg);color:var(--color-ok-fg);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-account-pending,.catch-up-link,.catch-up-option-partial,.catch-up-preview-message,.catch-up-hero .catch-up-disclaimer){background:var(--color-warn-bg);color:var(--color-warn-fg);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-error,.problem-error,.catch-up-errors){background:var(--color-bad-bg);color:var(--color-bad-fg);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-status.green,.problem-status.resolved,.catch-up-option-fit,.catch-up-preview-message.covered){background:var(--color-ok-bg);color:var(--color-ok-fg)}
+:root[data-theme=dark] :is(.platform-status.amber,.problem-status.new,.problem-inbox-counts>span:first-child){background:var(--color-warn-bg);color:var(--color-warn-fg);border-color:var(--color-line)}
+:root[data-theme=dark] .platform-status.red{background:var(--color-bad-bg);color:var(--color-bad-fg)}
+:root[data-theme=dark] :is(.platform-status.blue,.platform-icon.blue,.platform-school-monogram.blue){background:var(--color-info-bg);color:var(--color-info-fg)}
+:root[data-theme=dark] :is(.platform-status.violet,.platform-icon.violet,.platform-school-monogram.violet,.problem-icon,.problem-status.investigating,.problem-inbox-counts>span:nth-child(2),.problem-dashboard-alert){background:var(--color-shift-pm-bg);color:var(--color-shift-pm-fg);border-color:var(--color-line)}
+:root[data-theme=dark] :is(.platform-icon.teal,.platform-active-note,.problem-inbox-counts>span:last-child){background:var(--color-ok-bg);color:var(--color-ok-fg);border-color:var(--color-line)}
+:root[data-theme=dark] .platform-status.slate{background:var(--color-canvas);color:var(--color-muted)}
+:root[data-theme=dark] :is(.platform-guide b,.problem-history article>header,.catch-up-option>strong,.catch-up-option-number){color:var(--color-shift-pm-fg)}
+:root[data-theme=dark] :is(.problem-dashboard-alert>a,.problem-context strong,.platform-account-current>span){color:var(--color-teal);background:transparent}
+:root[data-theme=dark] :is(.platform-account-nav button[aria-current=page],.catch-up-option.selected){background:color-mix(in srgb,var(--color-teal) 8%,var(--color-surface));color:var(--color-teal);border-color:var(--color-teal)}
+:root[data-theme=dark] .problem-report-list>button[aria-current=true]{background:color-mix(in srgb,var(--color-teal) 7%,var(--color-surface))}
+:root[data-theme=dark] .catch-up-option button{background:var(--color-canvas);color:var(--color-teal);border-color:var(--color-line)}
+:root[data-theme=dark] .catch-up-option button[aria-pressed=true]{background:var(--color-accent-solid);color:white}
+:root[data-theme=dark] :is(.catch-up-metrics>div,.catch-up-hero .catch-up-disclaimer){border-color:var(--color-line)}
+:root[data-theme=dark] .catch-up-preview-total dd{color:var(--color-warn-fg)}
+:root[data-theme=dark] .catch-up-hero-title>span{background:var(--color-warn-bg);color:var(--color-warn-fg)}
+:root[data-theme=dark] .catch-up-rules>div>span{background:var(--color-info-bg);color:var(--color-info-fg)}
+:root[data-theme=dark] :is(.platform-count,.platform-recipient){background-color:var(--color-canvas);border-color:var(--color-line)}
+@media(min-width:768px){
+ :root[data-density=compact] .dt-card-body{padding:14px 16px}:root[data-density=compact] .dt-card-header{padding-top:9px;padding-bottom:9px}
+ :root[data-density=compact] .dt-data-table :is(td,th){padding-top:7px;padding-bottom:7px}
+ :root[data-density=compact] :is(.duty-progress-row,.duty-follow-up-row)>:is(td,th){padding-top:11px;padding-bottom:11px}
+ :root[data-density=compact] :is(.student-semester-header,.duty-card-header,.semester-overview-header){padding-top:14px;padding-bottom:14px}
+ :root[data-density=compact] :is(.platform-stat,.platform-school){padding:16px}
+ :root[data-density=compact] .app-shell-content>main{padding-top:18px;padding-bottom:18px}
+ :root[data-density=compact] .problem-report-list>button{padding:11px 13px;gap:6px}
+}
+@media print{:root[data-theme=dark]{--color-canvas:white;--color-surface:white;--color-navy:#153b50;--color-ink:#253746;--color-muted:#526277;--color-line:#dce4ea;--color-teal:#007f86;--color-ok-fg:#166534;--color-warn-fg:#92400e;--color-bad-fg:#991b1b;--color-info-fg:#1d4ed8}}

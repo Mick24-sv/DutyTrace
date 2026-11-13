@@ -1,27 +1,53 @@
-# Database
+# DutyTrace database
 
-PostgreSQL schema for DutyTrace (works on Supabase). `migrations/` holds numbered SQL files applied in order by `npm run db:migrate` (runner: `backend/src/db/migrate.js`). Never edit a migration that has been applied; add the next number instead. The runner stores a checksum and refuses edited files.
+The PostgreSQL schema runs on Supabase. The Express backend accesses it through a trusted server connection; browser clients use the authenticated application API.
 
-| File | Adds |
+## Where things belong
+
+| Location | Purpose |
 | --- | --- |
-| `0001_*` | users, offices, duty assignments, sessions, append-only audit log |
-| `0002_*` | office QR codes, attendance events (append-only) |
-| `0003_*` | monthly DTRs, immutable revisions and history, policy settings |
-| `0004_*` | TRUNCATE guards |
-| `0005_*` | absence notices, documents, case types, compliance cases, requirements, history |
-| `0006_*`–`0010_*` | student requirements, password reset, institution/semester support and policies |
-| `0011_*` | recipient-scoped in-app notifications and reminder deduplication |
-| `0012_*` | configurable duty requirement policies and versioned student schedule preferences |
-| `0013_*` | optional maximum daily hours and supervisor-proposed schedule alternatives |
-| `0014_*` | optional afternoon duty period for each selected schedule weekday |
-| `0015_*` | makes individual exception notes optional while retaining admin authorization and audit history |
-| `0016_*` | makes policy total term hours optional; per-student term assignments remain authoritative |
-| `0017_*` | adds configurable office schedule capacity (default one student per overlapping slot) |
-| `0018_*` | adds institution scope to audit logs |
-| `0019_*` | adds configurable forecast historical evaluation window to institution duty requirement settings |
-| `0020_*` | stores dated missed-hours recovery requests separately from attendance |
-| `0021_*` | adds institution-configured semester transition policy, previews and immutable source-term outcomes |
+| `migrations/` | Ordered, immutable schema history; the source of truth |
+| [Schema guide](../docs/database-schema.md) | Table purposes, relationships, and preservation rules |
+| [Review findings](../docs/database-review.md) | Read-only inventory and cleanup recommendations |
+| `../backend/scripts/review-database.mjs` | Regenerates the schema/count/storage review |
+| `schema-review.json` | Generated local metadata; ignored by Git; no record bodies or credentials |
+| `../backend/src/db/migrate.js` | Applies migrations and verifies checksums |
+| `../backend/src/db/createAdmin.js` | Legacy institution-admin bootstrap |
+| `../backend/scripts/setup-superadmin.ps1` | Separate platform maintainer bootstrap |
 
-No seed data is included. Create the first administrator with `npm run db:create-admin`. Table-by-table description: [../docs/database-schema.md](../docs/database-schema.md).
+## Migration catalog
 
-On Supabase, enable Row Level Security on these tables (no policies) so the public Supabase API cannot read them; the backend connects directly and is unaffected.
+| Range | Feature area |
+| --- | --- |
+| 0001–0006 | Accounts, offices, QR attendance, DTRs, absences, cases, documents, initial requirements |
+| 0007–0010 | Password recovery, institutions, terms, semester requirements, institution policies |
+| 0011–0019 | Notifications, duty preferences, time windows, daily limits, office capacity, audit scope, forecasts |
+| 0020–0021 | Dated recovery plans and semester transitions |
+| 0022–0025 | Attendance discrepancies, risk alerts, policy templates, notification access |
+| 0026–0029 | Historical credits, validation fixes, adjustment ranges, supervisor amendments |
+| 0030–0032 | Student profiles, photos, session verification |
+| 0033–0035 | Concerns, access hardening, function search paths |
+| 0036–0038 | Account archiving, absence acknowledgment, per-user concern inbox actions |
+| 0039–0040 | Personal agendas and tutorial progress |
+| 0041–0042 | Superadmin role and institution invitations |
+| 0043–0044 | Verified email changes and private problem reports |
+| 0045 | Backend-only application table, sequence, and trigger-function access |
+| 0046 | Private per-account appearance preferences |
+
+Apply changes from the repository root with `npm.cmd run db:migrate`.
+
+Never rename, merge, delete, or edit an applied migration. Add a new numbered migration for corrections. Old files are required for fresh-database reproduction and checksum verification.
+
+## Review without changing live data
+
+Run `node backend/scripts/review-database.mjs`. It uses a read-only transaction to inspect table counts, backend references, indexes, constraints, trigger attachments, migration checksums, expired authentication rows, test-data naming patterns, and storage metadata. It checks local file existence without opening document contents. Only the generated local JSON report is written.
+
+Empty tables and zero index-scan counts do not establish that objects are safe to remove. Some workflows are optional, and official history is intentionally retained.
+
+## Access and preservation
+
+Application tables use RLS without browser policies, and public Supabase client roles have no direct application-table privileges. Keep storage private and apply future migrations through the trusted database owner.
+
+Do not delete audit trails, attendance events, approved DTR snapshots, requirement versions, historical credits, or document references for cosmetic cleanup. Authentication cleanup needs a retention rule; missing files need investigation or recovery.
+
+See [institution onboarding](../docs/institution-onboarding.md), [problem reports](../docs/problem-reports.md), and [security hardening](../docs/security-hardening.md).
