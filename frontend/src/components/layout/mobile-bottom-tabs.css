@@ -10,7 +10,7 @@
 }
 .mobile-bottom-tabs-scroll { overflow-x: auto; scrollbar-width: none; }
 .mobile-bottom-tabs-feedback { position: absolute; bottom: calc(100% + 16px); inset-inline: 0; display: flex; justify-content: center; pointer-events: none; }
-.mobile-bottom-tabs-updating { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; background: var(--color-navy); color: var(--color-surface); font-size: 12px; font-weight: 600; box-shadow: 0 4px 18px rgb(21 59 80 / .18); animation: mobile-tab-feedback-in 200ms ease-out both; }
+.mobile-bottom-tabs-updating { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; background: var(--color-brand); color: white; font-size: 12px; font-weight: 600; box-shadow: 0 4px 18px rgb(21 59 80 / .18); animation: mobile-tab-feedback-in 200ms ease-out both; }
 .mobile-bottom-tabs-updating svg { animation: mobile-tab-spin 900ms linear infinite; }
 .mobile-bottom-tab-up-arrow { animation: mobile-tab-arrow-in 220ms ease-out both; }
 @keyframes mobile-tab-feedback-in { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }

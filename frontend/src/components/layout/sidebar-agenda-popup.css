@@ -2,7 +2,7 @@
 .sidebar-agenda-toggle { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 10px 12px; border-radius: 8px; color: rgb(255 255 255 / .8); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; }
 .sidebar-agenda-toggle > svg { flex-shrink: 0; }
 .sidebar-agenda-toggle:hover, .sidebar-agenda-toggle[aria-expanded="true"] { background: rgb(255 255 255 / .1); color: white; }
-.sidebar-calendar-popup { position: fixed; z-index: 45; left: 264px; top: 80px; width: 304px; max-height: calc(100dvh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid rgb(255 255 255 / .16); border-radius: 14px; background: var(--color-navy); color: var(--color-surface); box-shadow: 0 12px 45px rgb(21 59 80 / .25); }
+.sidebar-calendar-popup { position: fixed; z-index: 45; left: 264px; top: 80px; width: 304px; max-height: calc(100dvh - 104px); overflow-y: auto; overscroll-behavior: contain; padding: 16px; border: 1px solid rgb(255 255 255 / .16); border-radius: 14px; background: var(--color-brand); color: #e2edf4; box-shadow: 0 12px 45px rgb(21 59 80 / .25); }
 .sidebar-calendar-popup-header { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; }
 .sidebar-calendar-popup-header button { display: grid; place-items: center; width: 44px; min-height: 44px; border-radius: 6px; cursor: pointer; color: rgb(255 255 255 / .7); }
 .sidebar-calendar-popup-header button:hover { background: rgb(255 255 255 / .08); }
