@@ -271,6 +271,25 @@ async function progressForStudents(term, students, now) {
   const sessionVerified=await sessionVerifiedSeconds(ids,term.starts_on,term.ends_on,term.timezone);
 
   const requirements = await currentRequirements(term.id);
+  const { rows: scheduledDays } = await query(
+    `SELECT s.student_id, s.effective_starts_on::text AS starts_on,
+            s.effective_ends_on::text AS ends_on, d.weekday,
+            d.starts_at::text, d.ends_at::text,
+            d.afternoon_starts_at::text, d.afternoon_ends_at::text
+     FROM student_duty_schedules s
+     JOIN student_duty_schedule_days d ON d.schedule_id = s.id
+     WHERE s.term_id = $1 AND s.student_id = ANY($2::uuid[]) AND s.status = 'approved'
+       AND s.version = (SELECT max(active.version) FROM student_duty_schedules active
+         WHERE active.student_id = s.student_id AND active.term_id = s.term_id AND active.status = 'approved')`,
+    [term.id, ids],
+  );
+  const schedules = new Map();
+  for (const day of scheduledDays) {
+    if (!schedules.has(day.student_id)) schedules.set(day.student_id, {
+      startsOn: day.starts_on, endsOn: day.ends_on, days: [],
+    });
+    schedules.get(day.student_id).days.push(day);
+  }
   return students.map((student) => {
     const sessions = buildSessions(eventsByStudent.get(student.id), {
       now,
@@ -295,6 +314,7 @@ async function progressForStudents(term, students, now) {
       recordedHours: roundHours(recordedSeconds),
       historicalHours: roundHours(historicalVerified.get(student.id) ?? 0),
       semesterStatus:semesterStatus({...progress,deadline:term.completion_deadline,termEnd:term.ends_on,today:localDateKey(now,term.timezone),
+        schedule:schedules.get(student.id),
         sessions:sessions.filter(s=>s.date>=term.starts_on&&s.date<=term.ends_on)}),
       ...progress,
       requirementAssignedAt: requirement?.assigned_at ?? null,
