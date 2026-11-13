@@ -89,10 +89,10 @@
 
 .login-help button { color: var(--login-blue); cursor: pointer; border-radius: 2px; }
 .login-help button:hover { text-decoration: underline; }
-.login-account-dialog { position: fixed; inset: 0; margin: auto; width: calc(100% - 40px); max-width: 420px; padding: 0; border: 1px solid #dbe3ee; border-radius: 18px; color: var(--color-ink); background: white; box-shadow: 0 24px 80px #082c6833; }
+.login-account-dialog { position: fixed; inset: 0; margin: auto; width: calc(100% - 40px); max-width: 420px; padding: 0; border: 1px solid var(--color-line); border-radius: 18px; color: var(--color-ink); background: var(--color-surface); box-shadow: 0 24px 80px #082c6833; }
 .login-account-dialog::backdrop { background: #08203980; }
 .login-account-content { padding: 28px; }
-.login-account-content h2 { color: var(--login-deep); font-size: 21px; font-weight: 600; line-height: 1.35; }
+.login-account-content h2 { color: var(--color-navy); font-size: 21px; font-weight: 600; line-height: 1.35; }
 .login-account-content p { margin: 14px 0 24px; color: var(--color-muted); font-size: 14px; line-height: 1.75; }
 .login-account-content form { display: flex; justify-content: flex-end; }
 .login-account-content button { background: var(--login-blue); color: white; min-height: 44px; padding: 10px 24px; }
