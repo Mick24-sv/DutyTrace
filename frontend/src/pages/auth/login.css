@@ -11,7 +11,7 @@
   background: radial-gradient(ellipse at 10% 90%, #dceaff, transparent 65%), #f3f6fb;
 }
 .login-card { display: grid; grid-template-columns: 0.98fr 1.02fr; width: calc(100% - 64px); max-width: 1120px; margin: 32px auto; min-height: 780px; overflow: hidden; border: 1px solid #dde5ef; border-radius: 28px; background: white; box-shadow: 0 24px 70px #153b5010; }
-.login-site-header { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 14px clamp(24px, 4vw, 80px); background: var(--color-navy); color: white; }
+.login-site-header { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 76px; padding: 14px clamp(24px, 4vw, 80px); background: var(--color-brand); color: white; }
 .login-site-header img { width: 44px; height: 44px; flex-shrink: 0; border-radius: 8px; background: white; object-fit: contain; }
 .login-site-header span { font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
 .login-story { position: relative; display: flex; flex-direction: column; overflow: hidden; padding: 46px 42px 0; color: white; background: linear-gradient(145deg, #082c68 0%, #0746a3 60%, #0877ed 100%); }

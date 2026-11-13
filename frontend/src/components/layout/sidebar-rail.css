@@ -36,9 +36,9 @@
     width: 48px;
     border-radius: 8px;
   }
-  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]::before { background: var(--color-teal); }
+  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]::before { background: var(--color-accent-solid); }
   .desktop-sidebar-rail .sidebar-navigation a:hover::before { background: rgb(255 255 255 / .1); }
-  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]:hover::before { background: var(--color-teal); }
+  .desktop-sidebar-rail .sidebar-navigation a[aria-current="page"]:hover::before { background: var(--color-accent-solid); }
   .desktop-sidebar-rail:is([data-hover-open="true"], :has(:focus-visible)) .sidebar-navigation a::before { width: 100%; }
   .desktop-sidebar-rail .sidebar-link-label,
   .desktop-sidebar-rail .sidebar-brand-label,
