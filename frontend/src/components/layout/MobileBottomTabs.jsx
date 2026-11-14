@@ -19,7 +19,34 @@ export default function MobileBottomTabs({ role }) {
   const animationRef = useRef(null);
   const previousRef = useRef(null);
   const [retapPhase, setRetapPhase] = useState('idle');
+  const [scrollHidden, setScrollHidden] = useState(false);
   const retapRef = useRef(null);
+
+  useEffect(() => {
+    setScrollHidden(false);
+    let previous = Math.max(0, window.scrollY);
+    let distance = 0;
+    const onScroll = () => {
+      // Clamp Safari's rubber-band overscroll so it cannot reverse direction.
+      const maximum = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const current = Math.min(maximum, Math.max(0, window.scrollY));
+      const delta = current - previous;
+      previous = current;
+      if (current < 48) {
+        distance = 0;
+        setScrollHidden(false);
+        return;
+      }
+      if (!delta) return;
+      distance = Math.sign(delta) === Math.sign(distance) ? distance + delta : delta;
+      if (Math.abs(distance) >= 12) {
+        setScrollHidden(distance < 0);
+        distance = 0;
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [pathname, role]);
 
   // Cancel pending feedback when navigating away or unmounting.
   useEffect(() => {
@@ -124,7 +151,7 @@ export default function MobileBottomTabs({ role }) {
   useLayoutEffect(() => () => animationRef.current?.cancel(), []);
 
   return (
-    <nav className="mobile-bottom-tabs no-print" aria-label="Mobile navigation">
+    <nav className="mobile-bottom-tabs no-print" data-scroll-hidden={scrollHidden && retapPhase === 'idle'} onFocusCapture={() => setScrollHidden(false)} aria-label="Mobile navigation">
       <div className="mobile-bottom-tabs-feedback" role="status" aria-live="polite" aria-atomic="true">
         {retapPhase === 'updating' && <span className="mobile-bottom-tabs-updating"><LoaderCircle size={14} aria-hidden="true" />Updating</span>}
       </div>

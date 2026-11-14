@@ -1,5 +1,6 @@
 .mobile-bottom-tabs {
   position: fixed;
+  transition: transform 220ms ease;
   z-index: 30;
   bottom: 0;
   inset-inline: 0;
@@ -47,9 +48,11 @@
   border: 1px solid color-mix(in srgb, var(--color-teal) 10%, transparent);
   pointer-events: none;
 }
+.mobile-bottom-tabs[data-scroll-hidden="true"] { transform: translateY(100%); pointer-events: none; }
+.mobile-bottom-tabs:focus-within { transform: translateY(0); pointer-events: auto; }
 @media (min-width: 1024px) { .mobile-bottom-tabs { display: none; } }
 @media (max-width: 1023px) { .app-shell-content { padding-bottom: calc(80px + env(safe-area-inset-bottom)); } }
 @media (prefers-reduced-motion: reduce) {
-  .mobile-bottom-tab { transition: none; }
+  .mobile-bottom-tabs, .mobile-bottom-tab { transition: none; }
   .mobile-bottom-tabs-updating, .mobile-bottom-tabs-updating svg, .mobile-bottom-tab-up-arrow { animation: none; }
 }
