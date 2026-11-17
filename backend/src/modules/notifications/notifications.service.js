@@ -2,6 +2,9 @@ import { query } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { emailConfigured } from '../auth/email.service.js';
 import { CORE_NOTIFICATION_SQL } from './core-notifications.js';
+import { syncAdminAttention } from './admin-attention.js';
+import { syncSupervisorAttention } from './supervisor-attention.js';
+import { syncStudentAttention } from './student-attention.js';
 
 const policyCategories = new Set([
   'completion_risk', 'deadline', 'upcoming_shift', 'attendance', 'missed_shift', 'recovery',
@@ -82,6 +85,9 @@ export async function listNotifications(user, filter = 'all', { limit = 50, curs
   }
   const pageSize=Number(limit);
   if(!Number.isInteger(pageSize)||pageSize<1||pageSize>100)throw new AppError(400,'VALIDATION_ERROR','Notification page size must be between 1 and 100.');
+  await syncAdminAttention(user);
+  await syncSupervisorAttention(user);
+  await syncStudentAttention(user);
   const [list, counts] = await Promise.all([
     query(
       `SELECT id, recipient_id, type, title, message, related_type, related_id, important, created_at, read_at,

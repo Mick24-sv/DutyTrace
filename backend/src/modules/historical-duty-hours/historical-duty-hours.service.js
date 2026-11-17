@@ -1,7 +1,7 @@
 import { query, withTransaction } from '../../db/pool.js';
 import { AppError } from '../../utils/response.js';
 import { recordAudit } from '../audit/audit.service.js';
-import { createNotification } from '../notifications/notifications.service.js';
+import { createNotification, notifyInstitutionAdmins, notifyOfficeSupervisors } from '../notifications/notifications.service.js';
 import { localDateKey } from '../attendance/calc.js';
 
 const fail = (status, code, message) => new AppError(status, code, message);
@@ -185,6 +185,14 @@ export async function create({ actor, input, ip }) {
       action: status === 'approved' ? 'historical_duty_credit.verified' : 'historical_duty_credit.submitted',
       targetType: 'historical_duty_credit', targetId: credit.id,
       after: { studentId: input.studentId, termId: input.termId, month: input.month, hours: input.hours, status, amendsId: input.amendsId ?? null }, ip }, db);
+    if (requiresAdmin) await notifyInstitutionAdmins(db, {
+      institutionId: actor.institutionId, type: 'historical_credit_review_requested',
+      title: 'Historical duty credit needs review',
+      message: `${assignment.student_name} · ${input.hours} hours for ${input.month}. Review the supporting record before approving or rejecting.`,
+      relatedType: 'historical_duty_credit', relatedId: credit.id, important: true,
+      actionUrl: `/admin/historical-hours?creditId=${credit.id}`,
+      dedupeKey: `historical-duty-credit:${credit.id}:review`,
+    });
     if (status === 'approved') await createNotification(db, { recipientId: input.studentId, institutionId: actor.institutionId,
       type: 'historical_duty_credit_verified', title: 'Historical duty hours verified',
       message: `${input.hours} historical duty hours for ${input.month} were verified and added to your semester totals.`,
@@ -197,7 +205,9 @@ export async function create({ actor, input, ip }) {
 async function decide({ actor, id, approve, reason, ip }) {
   if (actor.role !== 'admin') throw forbidden();
   return withTransaction(async (db) => {
-    const { rows: [credit] } = await db.query(`SELECT * FROM historical_duty_credits WHERE id=$1 AND institution_id=$2 FOR UPDATE`, [id, actor.institutionId]);
+    const { rows: [credit] } = await db.query(`SELECT c.*,u.full_name AS student_name
+      FROM historical_duty_credits c JOIN users u ON u.id=c.student_id AND u.institution_id=c.institution_id
+      WHERE c.id=$1 AND c.institution_id=$2 FOR UPDATE OF c`, [id, actor.institutionId]);
     if (!credit || credit.status !== 'pending_admin') throw fail(404, 'CREDIT_NOT_FOUND', 'Pending historical credit not found.');
     if (approve && credit.amends_id) {
       const { rows: [prior] } = await db.query(`SELECT * FROM historical_duty_credits WHERE id=$1 AND status='approved' FOR UPDATE`, [credit.amends_id]);
@@ -207,6 +217,9 @@ async function decide({ actor, id, approve, reason, ip }) {
     }
     const status = approve ? 'approved' : 'rejected';
     await db.query('UPDATE historical_duty_credits SET status=$2,reviewed_by=$3,reviewed_at=now(),review_note=$4 WHERE id=$1', [id, status, actor.id, reason]);
+    await db.query(`UPDATE notifications SET resolved_at=COALESCE(resolved_at,now()),updated_at=now()
+      WHERE institution_id=$1 AND related_type='historical_duty_credit' AND related_id=$2
+        AND type='historical_credit_review_requested'`, [actor.institutionId,id]);
     await addHistory(db, id, actor.id, approve ? 'admin_approved' : 'admin_rejected', { note: reason, hours: Number(credit.hours) });
     await recordAudit({ actorId: actor.id, institutionId: actor.institutionId,
       action: `historical_duty_credit.${status}`, targetType: 'historical_duty_credit', targetId: id,
@@ -215,6 +228,15 @@ async function decide({ actor, id, approve, reason, ip }) {
       type: `historical_duty_credit_${status}`, title: status === 'approved' ? 'Historical duty hours approved' : 'Historical duty hours not approved',
       message: status === 'approved' ? 'Your historical duty hours were approved and added to your semester totals.' : `Your historical duty hour entry was not approved. ${reason}`,
       relatedType: 'historical_duty_credit', relatedId: id, important: true, dedupeKey: `historical-duty-credit:${id}:${status}` });
+    await notifyOfficeSupervisors(db, {
+      officeId:credit.office_id,institutionId:actor.institutionId,
+      type:`historical_duty_credit_admin_${status}`,
+      title:approve?'Historical duty credit approved':'Historical duty credit rejected',
+      message:`${credit.student_name}: the administrator ${status} the ${Number(credit.hours)}-hour entry for ${credit.credit_month}. Review note: ${reason}`,
+      relatedType:'historical_duty_credit',relatedId:id,important:true,
+      actionUrl:'/supervisor/historical-hours',
+      dedupeKey:`historical-duty-credit:${id}:admin-${status}`,
+    });
     return { id, status };
   });
 }

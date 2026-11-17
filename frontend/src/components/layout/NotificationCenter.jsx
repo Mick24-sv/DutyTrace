@@ -7,6 +7,7 @@ import { apiGet, apiPatch, apiPut } from '../../services/api.js';
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'unread', label: 'Unread' },
+  { id: 'important', label: 'Important' },
 ];
 
 

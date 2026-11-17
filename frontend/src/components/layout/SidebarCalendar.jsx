@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Plus, X } from 'lucide-react';
 import { useApiData } from '../../hooks/useApiData.js';
 import { monthDays, shiftDate, agendaItemsForDay, ROLE_AGENDAS } from '../../utils/sidebarCalendar.js';
@@ -16,6 +16,7 @@ const clock = time => { const [hour, minute] = time.split(':').map(Number); retu
 
 export default function SidebarCalendar({ role, onNavigate }) {
   const { user } = useAuth();
+  const location = useLocation();
   const agenda = ROLE_AGENDAS[role];
   const today = todayKey(user?.institution?.timezone || 'Asia/Manila');
   const [selected, setSelected] = useState(today);
@@ -39,6 +40,18 @@ export default function SidebarCalendar({ role, onNavigate }) {
   const index = days.indexOf(selected);
   const events = agendaItemsForDay(schedules, importantItems, selected, role);
   const scopeLabel = role === 'supervisor' ? user?.office?.name || 'No office assigned' : role === 'admin' ? user?.institution?.name || agenda.scope : agenda.scope;
+
+  useEffect(() => {
+    // The permanent rail instance also hosts the portal on mobile; a temporary
+    // drawer copy must not open a second dialog for the same notification.
+    if (!trigger.current?.closest('.desktop-sidebar-rail')) return;
+    const date = new URLSearchParams(location.search).get('agendaDate');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    const parsed = new Date(`${date}T12:00:00Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0,10) !== date) return;
+    setSelected(date); setMonth(date.slice(0,7));
+    setCalendarOpen(true); setAgendaOpen(true);
+  }, [location.key, location.search]);
 
   useEffect(() => {
     const reload = () => setEventRevision(value => value + 1);

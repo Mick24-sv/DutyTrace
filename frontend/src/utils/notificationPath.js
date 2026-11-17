@@ -1,6 +1,9 @@
 export function notificationPath(role, item) {
   if (typeof item.actionUrl === 'string' && item.actionUrl.startsWith('/') && !item.actionUrl.startsWith('//')) return item.actionUrl;
   const { relatedType, relatedId } = item;
+  if (relatedType === 'historical_duty_credit') return role === 'admin'
+    ? `/admin/historical-hours${relatedId ? `?creditId=${encodeURIComponent(relatedId)}` : ''}`
+    : role === 'supervisor' ? '/supervisor/historical-hours' : '/student';
   if (relatedType === 'monthly_dtr') {
     if (role === 'student') return `/student/dtr/${relatedId}`;
     if (role === 'supervisor') return `/supervisor/dtr-review/${relatedId}`;
@@ -11,6 +14,7 @@ export function notificationPath(role, item) {
   if (relatedType === 'academic_term') return role === 'admin' ? '/admin/semesters' : `/${role}`;
   if (relatedType === 'student') return role === 'admin' ? '/admin/users' : `/${role}/assistants/${relatedId}`;
   if (relatedType === 'duty_schedule') return role === 'student' ? '/student/attendance' : `/${role}`;
+  if (relatedType === 'student_duty_schedule') return role === 'supervisor' ? '/supervisor/schedule-review' : role === 'student' ? '/student/attendance' : `/${role}`;
   if (relatedType === 'duty_recovery_plan') return role === 'student' ? '/student/attendance' : '/supervisor/assistants';
   if (relatedType === 'attendance_discrepancy') return `/${role}/discrepancies${relatedId ? `?discrepancyId=${encodeURIComponent(relatedId)}` : ''}`;
   return `/${role}`;
